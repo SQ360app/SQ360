@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Trophy, FileText, Users, Package,
   ScrollText, BarChart2, HardHat, Calendar,
   Calculator, GanttChartSquare, TrendingUp,
-  Wallet, Settings, FileBarChart, Building2, LogOut
+  Wallet, Settings, FileBarChart, Building2, LogOut, Upload
 } from 'lucide-react'
 import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
@@ -24,6 +24,8 @@ const NAV = [
   { href: '/dashboard/pianificazione', label: 'M3 · Pianificazione', icon: GanttChartSquare },
   { label: '── GESTIONE CANTIERE', section: true },
   { href: '/dashboard/commesse', label: 'Commesse', icon: FileText },
+  { href: '/dashboard/import-computo', label: 'Import Computo', icon: Upload },
+  { href: '/dashboard/import-computo', label: 'Import Computo', icon: Upload },
   { href: '/dashboard/cantiere', label: 'M4 · Cantiere', icon: HardHat },
   { href: '/dashboard/dam', label: 'DAM Materiali', icon: Package },
   { label: '── SAL & MARGINI', section: true },
