@@ -144,7 +144,7 @@ export default function SALPage() {
     setSalList(prev => prev.map(s => s.id !== selected ? s : { ...s, stato: 'INVIATO' }))
   }
 
-  const inputStyle = { width: '100%', boxSizing: 'border-box' as const, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 7, padding: '8px 11px', color: 'var(--t1)', fontSize: 13 }
+  const inputStyle = { width: '100%', boxSizing: 'border-box' as const, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 7, padding: '8px 11px', color: '#1e293b', fontSize: 13 }
 
   return (
     <div style={{ padding: '24px 32px', background: 'var(--bg)', minHeight: '100vh' }}>
@@ -378,14 +378,14 @@ export default function SALPage() {
       {/* MODAL APPROVAZIONE */}
       {showApprovaModal && salSelezionato && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 16, width: '100%', maxWidth: 480, padding: '28px 32px' }}>
+          <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 16, width: '100%', maxWidth: 480, padding: '28px 32px' }}>
             <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--t1)', margin: '0 0 6px' }}>Gestione SAL</h2>
             <p style={{ fontSize: 12, color: 'var(--t3)', margin: '0 0 20px' }}>{salSelezionato.codice} · {salSelezionato.committente_subappaltatore} · € {fmt(salSelezionato.importo_lordo)}</p>
 
             <div style={{ marginBottom: 14 }}>
               <label style={{ fontSize: 10, color: 'var(--t3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 4 }}>Approvatore / Responsabile *</label>
               <input value={approvatore} onChange={e => setApprovatore(e.target.value)} placeholder="Es. Ing. Rossi DL"
-                style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 7, padding: '9px 12px', color: 'var(--t1)', fontSize: 13 }} />
+                style={{ width: '100%', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 7, padding: '9px 12px', color: '#1e293b', fontSize: 13 }} />
             </div>
 
             <div style={{ marginBottom: 20 }}>
