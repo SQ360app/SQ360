@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Header } from '@/components/layout/Header'
+
 import { Plus, Trash2, Copy, ChevronDown, ChevronRight, Calculator, Download, Upload, AlertCircle, TrendingUp, TrendingDown } from 'lucide-react'
 
 // ─── Tipi ────────────────────────────────────────────────────────────────────
@@ -149,7 +149,7 @@ export default function PreventivazioneePage() {
 
   return (
     <>
-      <Header title="M2 — Preventivazione Costi Propri" breadcrumb={['Dashboard', 'Preventivazione']} />
+      
       <div style={{ padding: '24px 32px', background: 'var(--bg)', minHeight: '100vh' }}>
 
         {/* Barra commessa + parametri */}
