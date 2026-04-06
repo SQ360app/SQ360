@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { Header } from '@/components/layout/Header'
+
 import { Plus, ChevronDown, ChevronRight, Calendar, Users, AlertTriangle, Flag, Download } from 'lucide-react'
 
 // ─── Tipi ────────────────────────────────────────────────────────────────────
@@ -164,7 +164,7 @@ export default function PianificazionePage() {
 
   return (
     <>
-      <Header title="M3 — Pianificazione Lavori" breadcrumb={['Dashboard', 'Pianificazione']} />
+      
       <div style={{ padding: '24px 32px', background: 'var(--bg)', minHeight: '100vh' }}>
 
         {/* Toolbar */}
