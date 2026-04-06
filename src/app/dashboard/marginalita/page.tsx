@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Header } from '@/components/layout/Header'
+
 import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle, BarChart3, ChevronDown, ChevronRight, Info } from 'lucide-react'
 
 // ─── Tipi ────────────────────────────────────────────────────────────────────
@@ -107,7 +107,7 @@ export default function MarginalitaPage() {
 
   return (
     <>
-      <Header title="M5C — Controllo Marginalità" breadcrumb={['Dashboard', 'Marginalità']} />
+      
       <div style={{ padding: '24px 32px', background: 'var(--bg)', minHeight: '100vh' }}>
 
         {/* Alert voci in scostamento */}
