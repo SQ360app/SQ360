@@ -215,8 +215,8 @@ export default function DAMPage() {
     setSelected(nuovoDAM.id)
   }
 
-  const inputStyle = { width: '100%', boxSizing: 'border-box' as const, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 7, padding: '8px 11px', color: 'var(--t1)', fontSize: 13 }
-  const labelStyle = { fontSize: 10, color: 'var(--t3)', fontWeight: 600 as const, textTransform: 'uppercase' as const, letterSpacing: '0.05em', display: 'block', marginBottom: 4 }
+  const inputStyle = { width: '100%', boxSizing: 'border-box' as const, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 7, padding: '8px 11px', color: '#1e293b', fontSize: 13 }
+  const labelStyle = { fontSize: 10, color: '#64748b', fontWeight: 600 as const, textTransform: 'uppercase' as const, letterSpacing: '0.05em', display: 'block', marginBottom: 4 }
 
   const STATO_CERT_META: Record<StatoCertificazione, { color: string; label: string }> = {
     presente: { color: '#10b981', label: 'Presente' },
@@ -525,9 +525,9 @@ export default function DAMPage() {
       {/* MODAL NUOVO DAM */}
       {showForm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 20, overflowY: 'auto' }}>
-          <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 16, width: '100%', maxWidth: 600, padding: '28px 32px', marginTop: 20 }}>
+          <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 16, width: '100%', maxWidth: 600, padding: '28px 32px', marginTop: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--t1)', margin: 0 }}>Nuovo DAM</h2>
+              <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', margin: 0 }}>Nuovo DAM</h2>
               <button onClick={() => setShowForm(false)} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: 8, cursor: 'pointer' }}><X size={15} /></button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -555,7 +555,7 @@ export default function DAMPage() {
                 </div>
                 <div>
                   <label style={labelStyle}>Unità di misura</label>
-                  <select value={form.um} onChange={e => setForm(p => ({ ...p, um: e.target.value }))} style={{ ...inputStyle, width: '100%' }}>
+                  <select value={form.um} onChange={e => setForm(p => ({ ...p, um: e.target.value }))} style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 7, padding: '8px 11px', color: '#1e293b', fontSize: 13, width: '100%' }}>
                     {['mc', 'mq', 'ml', 'kg', 't', 'nr', 'corpo', 'lt', 'h'].map(u => <option key={u} value={u}>{u}</option>)}
                   </select>
                 </div>
