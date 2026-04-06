@@ -199,9 +199,9 @@ export default function CommessePage() {
     setTimeout(() => setSaved(false), 3000)
   }
 
-  const inputStyle = { width: '100%', boxSizing: 'border-box' as const, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 7, padding: '8px 11px', color: 'var(--t1)', fontSize: 13 }
-  const labelStyle = { fontSize: 10, color: 'var(--t3)', fontWeight: 600 as const, textTransform: 'uppercase' as const, letterSpacing: '0.05em', display: 'block', marginBottom: 4 }
-  const sezStyle = { fontSize: 11, fontWeight: 700 as const, color: 'var(--t3)', textTransform: 'uppercase' as const, letterSpacing: '0.07em', marginBottom: 12, marginTop: 4 }
+  const inputStyle = { width: '100%', boxSizing: 'border-box' as const, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 7, padding: '8px 11px', color: '#1e293b', fontSize: 13 }
+  const labelStyle = { fontSize: 10, color: '#64748b', fontWeight: 600 as const, textTransform: 'uppercase' as const, letterSpacing: '0.05em', display: 'block', marginBottom: 4 }
+  const sezStyle = { fontSize: 11, fontWeight: 700 as const, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: '0.07em', marginBottom: 12, marginTop: 4 }
 
   return (
     <div style={{ padding: '24px 32px', background: 'var(--bg)', minHeight: '100vh' }}>
@@ -418,11 +418,11 @@ export default function CommessePage() {
       {/* MODAL NUOVA COMMESSA */}
       {showForm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 20, overflowY: 'auto' }}>
-          <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 16, width: '100%', maxWidth: 820, padding: '28px 32px', marginTop: 20 }}>
+          <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 16, width: '100%', maxWidth: 820, padding: '28px 32px', marginTop: 20 }}>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <div>
-                <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--t1)', margin: 0 }}>Nuova Commessa</h2>
+                <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', margin: 0 }}>Nuova Commessa</h2>
                 <p style={{ fontSize: 12, color: 'var(--t3)', margin: '4px 0 0' }}>Tutti i campi con * sono obbligatori</p>
               </div>
               <button onClick={() => { setShowForm(false); setErrore('') }} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: 8, cursor: 'pointer' }}><X size={15} /></button>
