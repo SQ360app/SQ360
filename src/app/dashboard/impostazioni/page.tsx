@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Header } from '@/components/layout/Header'
+
 import { Building2, Users, Bell, Shield, Key, Plus, Trash2, Save, CheckCircle, Edit2 } from 'lucide-react'
 
 // ─── Tipi ────────────────────────────────────────────────────────────────────
@@ -102,7 +102,7 @@ export default function ImpostazioniPage() {
 
   return (
     <>
-      <Header title="Impostazioni" breadcrumb={['Dashboard', 'Impostazioni']} />
+      
       <div style={{ padding: '24px 32px', background: 'var(--bg)', minHeight: '100vh' }}>
 
         {/* Tabs */}
