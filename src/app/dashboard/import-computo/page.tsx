@@ -650,7 +650,7 @@ export default function ImportComputoPage() {
                   ].map(f => (
                     <div key={f.field}>
                       <label style={{ fontSize: 10, color: 'var(--t3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 4 }}>{f.label}</label>
-                      <input value={String((commessa as unknown as Record<string,unknown>)[f.field] ?? '')} onChange={e => setC(f.field as keyof DatiCommessaEstratti, e.target.value)} placeholder={f.placeholder}
+                      <input value={String((commessa as unknown as Record<string,unknown>)[f.field] ?? '') onChange={e => setC(f.field as keyof DatiCommessaEstratti, e.target.value)} placeholder={f.placeholder}
                         style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 7, padding: '9px 12px', color: 'var(--t1)', fontSize: 13 }} />
                     </div>
                   ))}
@@ -687,7 +687,7 @@ export default function ImportComputoPage() {
                   ].map(f => (
                     <div key={f.field}>
                       <label style={{ fontSize: 10, color: 'var(--t3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 4 }}>{f.label}</label>
-                      <input type={f.type} value={(commessa as Record<string,unknown>)[f.field] as string || ''} onChange={e => setC(f.field as keyof DatiCommessaEstratti, f.type === 'number' ? +e.target.value : e.target.value)}
+                      <input type={f.type} value={String((commessa as unknown as Record<string,unknown>)[f.field] ?? '') onChange={e => setC(f.field as keyof DatiCommessaEstratti, f.type === 'number' ? +e.target.value : e.target.value)}
                         style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 7, padding: '9px 12px', color: 'var(--t1)', fontSize: 13 }} />
                     </div>
                   ))}
