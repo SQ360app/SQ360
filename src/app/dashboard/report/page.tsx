@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Header } from '@/components/layout/Header'
+
 import { FileText, Download, Filter, Calendar, Building2, BarChart3, Clock, FileSpreadsheet, CheckCircle } from 'lucide-react'
 
 interface TipoReport {
@@ -71,7 +71,7 @@ export default function ReportPage() {
 
   return (
     <>
-      <Header title="Report & Esportazioni" breadcrumb={['Dashboard', 'Report']} />
+      
       <div style={{ padding: '24px 32px', background: 'var(--bg)', minHeight: '100vh' }}>
 
         {/* Filtri globali */}
