@@ -40,7 +40,7 @@ const NAV = [
   { href: '/dashboard/impostazioni', label: 'Impostazioni', icon: Settings },
 ]
 
-export function Sidebar() {
+export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
 
