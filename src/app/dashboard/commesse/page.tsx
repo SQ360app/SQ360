@@ -39,7 +39,7 @@ const FORM_VUOTO = {
   stato: 'AGGIUDICATA', note: ''
 }
 
-export default function CommessePage() {
+function CommessePageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [commesse, setCommesse] = useState<Commessa[]>([])
@@ -364,5 +364,15 @@ export default function CommessePage() {
         </div>
       )}
     </div>
+  )
+}
+
+
+import { Suspense } from 'react'
+export default function CommessePage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 48, textAlign: 'center', color: 'var(--t3)' }}><div className="spinner" style={{ margin: '0 auto' }} /></div>}>
+      <CommessePageInner />
+    </Suspense>
   )
 }
