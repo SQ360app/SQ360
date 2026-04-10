@@ -1,187 +1,135 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@supabase/supabase-js'
-import { useRouter } from 'next/navigation'
-import { Eye, EyeOff, Building2, Lock, Mail, AlertCircle } from 'lucide-react'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { supabase } from '@/lib/supabase'
+import { Building2, Eye, EyeOff, AlertCircle } from 'lucide-react'
 
 export default function LoginPage() {
-  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [showPwd, setShowPwd] = useState(false)
+  const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [errore, setErrore] = useState('')
 
-  async function handleLogin(e: React.FormEvent) {
+  async function login(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
-    setError('')
+    if (!email || !password) { setErrore('Inserisci email e password'); return }
+    setLoading(true); setErrore('')
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) {
-      setError('Email o password non corretti. Verifica le credenziali.')
+      setErrore(error.message === 'Invalid login credentials'
+        ? 'Email o password non corretti'
+        : error.message)
       setLoading(false)
     } else {
-      router.push('/dashboard')
+      window.location.href = '/dashboard'
     }
   }
 
-  async function handleReset() {
-    if (!email) { setError('Inserisci la tua email per reimpostare la password.'); return }
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`
-    })
-    if (!error) setError('✅ Email inviata — controlla la tua casella.')
-    else setError('Errore invio email. Riprova.')
+  const inp = {
+    width: '100%', background: '#f8fafc', border: '1px solid #e2e8f0',
+    borderRadius: 10, padding: '12px 14px', color: '#0f172a',
+    fontSize: 14, outline: 'none', transition: 'border-color 0.15s'
   }
 
   return (
     <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%)',
-      padding: 24,
-      fontFamily: 'var(--font-sans, system-ui)'
+      minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)', padding: 20
     }}>
-      {/* Card */}
-      <div style={{
-        width: '100%',
-        maxWidth: 420,
-        background: 'rgba(255,255,255,0.04)',
-        border: '1px solid rgba(255,255,255,0.1)',
-        borderRadius: 20,
-        padding: '48px 40px',
-        boxShadow: '0 32px 64px rgba(0,0,0,0.4)',
-        backdropFilter: 'blur(20px)'
-      }}>
+      <div style={{ width: '100%', maxWidth: 400 }}>
+
         {/* Logo */}
-        <div style={{ textAlign: 'center', marginBottom: 40 }}>
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 64, height: 64,
-            background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
-            borderRadius: 16,
-            marginBottom: 16
+            width: 56, height: 56, borderRadius: 16, background: '#3b82f6',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 14px', boxShadow: '0 8px 24px rgba(59,130,246,0.4)'
           }}>
-            <Building2 size={32} color="white" />
+            <Building2 size={28} color="white" />
           </div>
-          <h1 style={{ color: 'white', fontSize: 28, fontWeight: 700, margin: 0 }}>SQ360</h1>
-          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, margin: '6px 0 0' }}>
-            Gestionale Edile Avanzato
-          </p>
+          <h1 style={{ fontSize: 28, fontWeight: 800, color: 'white', margin: 0, letterSpacing: '-0.02em' }}>SQ360</h1>
+          <p style={{ color: '#94a3b8', fontSize: 14, marginTop: 4 }}>Gestionale Edile · Dal bando al collaudo</p>
         </div>
 
-        {/* Error */}
-        {error && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            background: error.startsWith('✅') ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-            border: `1px solid ${error.startsWith('✅') ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
-            borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13,
-            color: error.startsWith('✅') ? '#86efac' : '#fca5a5'
-          }}>
-            <AlertCircle size={14} />
-            {error}
-          </div>
-        )}
+        {/* Card login */}
+        <div style={{
+          background: 'white', borderRadius: 18, padding: '32px 28px',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.3)'
+        }}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: '0 0 6px' }}>Accedi</h2>
+          <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 24px' }}>Inserisci le credenziali del tuo account</p>
 
-        <form onSubmit={handleLogin}>
-          {/* Email */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, marginBottom: 8, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-              Email aziendale
-            </label>
-            <div style={{ position: 'relative' }}>
-              <Mail size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.3)' }} />
+          {errore && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)',
+              borderRadius: 10, padding: '10px 14px', marginBottom: 18
+            }}>
+              <AlertCircle size={15} color="#ef4444" />
+              <span style={{ fontSize: 13, color: '#ef4444' }}>{errore}</span>
+            </div>
+          )}
+
+          <form onSubmit={login}>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>
+                Email
+              </label>
               <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="nome@azienda.it"
-                required
-                style={{
-                  width: '100%', boxSizing: 'border-box',
-                  padding: '12px 14px 12px 42px',
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  borderRadius: 10, color: 'white', fontSize: 14,
-                  outline: 'none',
-                }}
+                type="email" value={email} onChange={e => setEmail(e.target.value)}
+                placeholder="admin@sq360.it" style={inp} autoComplete="email"
+                onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                onBlur={e => e.target.style.borderColor = '#e2e8f0'}
               />
             </div>
-          </div>
 
-          {/* Password */}
-          <div style={{ marginBottom: 24 }}>
-            <label style={{ display: 'block', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 600, marginBottom: 8, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-              Password
-            </label>
-            <div style={{ position: 'relative' }}>
-              <Lock size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.3)' }} />
-              <input
-                type={showPwd ? 'text' : 'password'}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                style={{
-                  width: '100%', boxSizing: 'border-box',
-                  padding: '12px 42px 12px 42px',
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  borderRadius: 10, color: 'white', fontSize: 14,
-                  outline: 'none',
-                }}
-              />
-              <button type="button" onClick={() => setShowPwd(!showPwd)} style={{
-                position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
-                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                color: 'rgba(255,255,255,0.4)'
-              }}>
-                {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
+            <div style={{ marginBottom: 24 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>
+                Password
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPass ? 'text' : 'password'}
+                  value={password} onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••" style={{ ...inp, paddingRight: 44 }}
+                  autoComplete="current-password"
+                  onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                  onBlur={e => e.target.style.borderColor = '#e2e8f0'}
+                />
+                <button type="button" onClick={() => setShowPass(!showPass)} style={{
+                  position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#94a3b8'
+                }}>
+                  {showPass ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </div>
             </div>
-          </div>
 
-          {/* Submit */}
-          <button type="submit" disabled={loading} style={{
-            width: '100%', padding: '13px',
-            background: loading ? 'rgba(59,130,246,0.5)' : 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
-            border: 'none', borderRadius: 10, color: 'white',
-            fontSize: 15, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
-            transition: 'all 0.2s'
-          }}>
-            {loading ? 'Accesso in corso...' : 'Accedi alla piattaforma'}
-          </button>
-        </form>
-
-        {/* Reset password */}
-        <div style={{ textAlign: 'center', marginTop: 20 }}>
-          <button onClick={handleReset} style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: 'rgba(255,255,255,0.4)', fontSize: 13,
-            textDecoration: 'underline', textDecorationStyle: 'dotted'
-          }}>
-            Password dimenticata?
-          </button>
+            <button type="submit" disabled={loading} style={{
+              width: '100%', padding: '13px', borderRadius: 10,
+              border: 'none', background: loading ? '#93c5fd' : '#3b82f6',
+              color: 'white', fontSize: 15, fontWeight: 700,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'background 0.15s',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+            }}>
+              {loading ? (
+                <>
+                  <div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                  Accesso in corso...
+                </>
+              ) : 'Accedi a SQ360'}
+            </button>
+          </form>
         </div>
 
-        {/* Footer */}
-        <div style={{ marginTop: 40, paddingTop: 24, borderTop: '1px solid rgba(255,255,255,0.07)', textAlign: 'center' }}>
-          <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: 11, margin: 0 }}>
-            SQ360 © {new Date().getFullYear()} — Accesso riservato agli utenti autorizzati
-          </p>
-        </div>
+        <p style={{ textAlign: 'center', color: '#475569', fontSize: 12, marginTop: 20 }}>
+          SQ360 v3.0 · Gestionale Edile Professionale
+        </p>
       </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 }
