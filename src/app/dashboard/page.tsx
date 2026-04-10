@@ -112,7 +112,9 @@ export default function DashboardPage() {
       (mapInstanceRef.current as { remove: () => void }).remove()
     }
     const L = window.L
-    const map = L.map(mapRef.current, { zoomControl: true, scrollWheelZoom: true }).setView([41.9, 12.5], 6)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const map = (L.map(mapRef.current, { zoomControl: true, scrollWheelZoom: true }) as any)
+    map.setView([41.9, 12.5], 6)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors', maxZoom: 18
     }).addTo(map)
@@ -139,7 +141,8 @@ export default function DashboardPage() {
         className: '', iconSize: [32, 32], iconAnchor: [16, 16]
       })
 
-      const marker = L.marker([lat, lng], { icon }).addTo(map)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const marker = (L.marker([lat, lng], { icon }).addTo(map)) as any
       marker.bindTooltip(`
         <div style="min-width:180px;padding:4px 0">
           <div style="font-size:11px;font-weight:700;color:${color};margin-bottom:3px">${c.codice}</div>
@@ -393,19 +396,7 @@ export default function DashboardPage() {
 
 declare global {
   interface Window {
-    L: {
-      map: (el: HTMLElement, opts?: object) => {
-        setView: (coords: [number, number], zoom: number) => unknown
-        remove: () => void
-        fitBounds: (bounds: [number, number][], opts?: object) => void
-      }
-      tileLayer: (url: string, opts?: object) => { addTo: (map: unknown) => void }
-      marker: (coords: [number, number], opts?: object) => {
-        addTo: (map: unknown) => unknown
-        bindTooltip: (html: string, opts?: object) => unknown
-        on: (event: string, fn: () => void) => void
-      }
-      divIcon: (opts: object) => unknown
-    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    L: any
   }
 }
