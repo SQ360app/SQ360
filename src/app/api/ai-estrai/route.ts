@@ -11,11 +11,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, errore: 'Testo troppo breve o vuoto' })
     }
 
-    // Leggi la chiave API — DEVE essere disponibile come env var server-side
-    const apiKey = process.env.ANTHROPIC_API_KEY
+    const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) {
-      console.error('ANTHROPIC_API_KEY mancante nelle env vars')
-      return NextResponse.json({ ok: false, errore: 'Chiave API non configurata sul server' })
+      console.error('GEMINI_API_KEY mancante')
+      return NextResponse.json({ ok: false, errore: 'Chiave AI non configurata' })
     }
 
     const schema = tipo === 'fornitore'
@@ -31,44 +30,51 @@ export async function POST(req: NextRequest) {
       : 'commessa edile'
 
     const prompt = `Sei un esperto di appalti pubblici italiani. Analizza questo documento di ${tipoLabel} ed estrai i dati richiesti.
-Rispondi SOLO con un oggetto JSON valido. Nessun testo prima o dopo. Nessun markdown. Solo il JSON.
+Rispondi SOLO con un oggetto JSON valido. Nessun testo prima o dopo. Nessun markdown. Solo JSON puro.
 Schema: ${schema}
 Regole:
-- Per importi usa solo numeri (es. 500000 non "€ 500.000,00")
+- Per importi usa solo numeri interi (es. 500000 non "€ 500.000,00")
 - Per date usa formato YYYY-MM-DD
+- Per provincia usa sigla 2 lettere (es. NA, RM, MI)
 - Se un campo non è presente lascia il valore default dello schema
-- Per provincia usa la sigla 2 lettere (es. NA, RM, MI)
 
 DOCUMENTO:
-${testo.slice(0, 7000)}`
+${testo.slice(0, 8000)}`
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    // Gemini 2.0 Flash — gratuito e veloce
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
+
+    const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1024,
-        messages: [{ role: 'user', content: prompt }],
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.1,
+          responseMimeType: 'application/json',
+        },
       }),
     })
 
     if (!response.ok) {
       const errBody = await response.text()
-      console.error('Anthropic API error:', response.status, errBody)
-      return NextResponse.json({ ok: false, errore: `API Anthropic errore ${response.status}` })
+      console.error('Gemini API error:', response.status, errBody.slice(0, 200))
+      return NextResponse.json({ ok: false, errore: `Errore AI ${response.status}` })
     }
 
-    const data = await response.json() as { content?: Array<{ type: string; text: string }> }
-    const rawText = data.content?.find((c) => c.type === 'text')?.text ?? ''
+    const data = await response.json() as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+    }
 
-    // Estrai JSON — gestisci casi con testo extra
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+    if (!rawText) {
+      return NextResponse.json({ ok: false, errore: 'Nessuna risposta dal modello AI' })
+    }
+
+    // Estrai JSON — Gemini con responseMimeType json dovrebbe restituire JSON puro
     const jsonMatch = rawText.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
-      return NextResponse.json({ ok: false, errore: 'Nessun JSON trovato nella risposta AI', raw: rawText.slice(0, 200) })
+      return NextResponse.json({ ok: false, errore: 'JSON non trovato nella risposta', raw: rawText.slice(0, 200) })
     }
 
     try {
@@ -77,6 +83,7 @@ ${testo.slice(0, 7000)}`
     } catch {
       return NextResponse.json({ ok: false, errore: 'JSON malformato', raw: jsonMatch[0].slice(0, 200) })
     }
+
   } catch (err) {
     console.error('ai-estrai error:', err)
     return NextResponse.json({ ok: false, errore: String(err) }, { status: 500 })
