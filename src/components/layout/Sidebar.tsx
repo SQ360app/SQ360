@@ -3,84 +3,70 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, FolderOpen, Trophy, Users,
-  CalendarClock, Receipt, Settings, ChevronRight,
-  Building2
+  LayoutDashboard, Search, FolderOpen, Users,
+  Calendar, Settings, CreditCard, Building2
 } from 'lucide-react'
 
 const NAV = [
-  { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', exact: true },
-  { href: '/dashboard/gare', icon: Trophy, label: 'M1 · Analisi Gare' },
-  { href: '/dashboard/commesse', icon: FolderOpen, label: 'Commesse' },
-  { href: '/dashboard/fornitori', icon: Users, label: 'Fornitori' },
-  { href: '/dashboard/scadenzario', icon: CalendarClock, label: 'Scadenzario' },
-  { href: '/dashboard/amministrazione', icon: Receipt, label: 'Amministrazione' },
-  { href: '/dashboard/impostazioni', icon: Settings, label: 'Impostazioni' },
+  { href: '/dashboard',             icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/dashboard/gare',        icon: Search,          label: 'Analisi Gare' },
+  { href: '/dashboard/commesse',    icon: FolderOpen,      label: 'Commesse' },
+  { href: '/dashboard/fornitori',   icon: Users,           label: 'Fornitori' },
+  { href: '/dashboard/scadenzario', icon: Calendar,        label: 'Scadenzario' },
+  { href: '/dashboard/amministrazione', icon: CreditCard,  label: 'Amministrazione' },
+  { href: '/dashboard/impostazioni',icon: Settings,        label: 'Impostazioni' },
 ]
 
 export function Sidebar() {
-  const pathname = usePathname()
-
-  function isActive(href: string, exact?: boolean) {
-    if (exact) return pathname === href
-    // commesse/[id]/... → evidenzia sempre commesse
-    return pathname.startsWith(href)
-  }
+  const path = usePathname()
 
   return (
     <aside style={{
-      width: 220, minWidth: 220, height: '100vh', position: 'sticky', top: 0,
-      background: 'var(--sidebar-bg)', borderRight: '1px solid var(--sidebar-border)',
-      display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 10
+      width: 220, flexShrink: 0, height: '100vh',
+      background: 'var(--sidebar-bg)',
+      borderRight: '1px solid var(--sidebar-border)',
+      display: 'flex', flexDirection: 'column',
+      overflow: 'hidden'
     }}>
       {/* Logo */}
-      <div style={{
-        padding: '20px 20px 16px',
-        borderBottom: '1px solid var(--sidebar-border)',
-        display: 'flex', alignItems: 'center', gap: 10
-      }}>
-        <div style={{
-          width: 32, height: 32, borderRadius: 9,
-          background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <Building2 size={18} color="white" />
-        </div>
-        <div>
-          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--sidebar-text)', letterSpacing: '-0.02em' }}>SQ360</div>
-          <div style={{ fontSize: 9, color: 'var(--sidebar-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Gestionale Edile</div>
+      <div style={{ padding: '20px 18px 16px', borderBottom: '1px solid var(--sidebar-border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Building2 size={18} color="white" />
+          </div>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--sidebar-text)', letterSpacing: '-0.02em' }}>SQ360</div>
+            <div style={{ fontSize: 9, color: 'var(--sidebar-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Gestionale Edile</div>
+          </div>
         </div>
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '12px 10px', overflowY: 'auto' }}>
-        {NAV.map(item => {
-          const active = isActive(item.href, item.exact)
+      <nav style={{ flex: 1, padding: '10px 10px', overflowY: 'auto' }}>
+        {NAV.map(({ href, icon: Icon, label }) => {
+          const active = path === href || (href !== '/dashboard' && path.startsWith(href))
           return (
-            <Link key={item.href} href={item.href} style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '9px 10px', borderRadius: 8, marginBottom: 2,
-              textDecoration: 'none',
-              background: active ? 'var(--sidebar-active-bg)' : 'transparent',
-              color: active ? 'var(--accent)' : 'var(--sidebar-muted)',
-              fontWeight: active ? 600 : 400, fontSize: 13,
-              transition: 'all 0.12s',
-              borderLeft: active ? '3px solid var(--accent)' : '3px solid transparent',
-            }}>
-              <item.icon size={15} />
-              <span style={{ flex: 1 }}>{item.label}</span>
-              {active && <ChevronRight size={12} style={{ opacity: 0.5 }} />}
+            <Link key={href} href={href} style={{ textDecoration: 'none' }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '9px 10px', borderRadius: 9, marginBottom: 2,
+                background: active ? 'var(--sidebar-active-bg)' : 'transparent',
+                color: active ? 'var(--sidebar-text)' : 'var(--sidebar-muted)',
+                cursor: 'pointer', transition: 'all 0.15s',
+                fontSize: 13, fontWeight: active ? 600 : 400,
+                borderLeft: active ? '2px solid #3b82f6' : '2px solid transparent',
+              }}>
+                <Icon size={16} />
+                {label}
+                {active && <div style={{ marginLeft: 'auto', width: 5, height: 5, borderRadius: '50%', background: '#3b82f6' }} />}
+              </div>
             </Link>
           )
         })}
       </nav>
 
       {/* Footer */}
-      <div style={{
-        padding: '12px 16px',
-        borderTop: '1px solid var(--sidebar-border)',
-        fontSize: 10, color: 'var(--sidebar-muted)',
-        textAlign: 'center'
-      }}>
+      <div style={{ padding: '12px 18px', borderTop: '1px solid var(--sidebar-border)', fontSize: 10, color: 'var(--sidebar-muted)', textAlign: 'center' }}>
         SQ360 v3.0 · 2026
       </div>
     </aside>
