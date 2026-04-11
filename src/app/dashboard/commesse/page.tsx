@@ -169,6 +169,15 @@ export default function CommessePage() {
 
   async function handleFileImport(file: File) {
     setStep('AI_LOADING')
+    
+    // Controlla tipo file
+    const isPDF = file.type === 'application/pdf' || file.name.endsWith('.pdf')
+    if (isPDF) {
+      setAiStatus('⚠️ I PDF non possono essere letti direttamente. Usa un file TXT, DOCX o copia il testo nel campo note e usa "Inserisci manualmente".')
+      setTimeout(() => setStep('FORM'), 3000)
+      return
+    }
+    
     setAiStatus('Lettura documento...')
     try {
       const testo = await file.text()
@@ -222,14 +231,16 @@ export default function CommessePage() {
     const userId = ut.user?.id || ''
     const { data: utData } = await supabase.from('utenti').select('azienda_id').eq('id', userId).single()
     const aziendaId = utData?.azienda_id || 'f5ddf460-715a-495e-997a-0246ea73326b'
-    const { data, error: insertError } = await supabase.from('commesse').insert([{
+    const insertPayload = {
       azienda_id: aziendaId,
       codice: form.codice, anno: new Date().getFullYear(),
       nome: form.nome, committente: form.committente,
       cig: form.cig || null, cup: form.cup || null,
-      importo_base: form.importo_base, importo_aggiudicato: form.importo_aggiudicato || form.importo_base,
-      ribasso_pct: form.ribasso_pct, oneri_sicurezza: form.oneri_sicurezza,
-      provincia: form.provincia, categoria: form.categoria,
+      importo_base: form.importo_base || 0,
+      importo_aggiudicato: form.importo_aggiudicato || form.importo_base || 0,
+      ribasso_pct: form.ribasso_pct || 0,
+      oneri_sicurezza: form.oneri_sicurezza || 0,
+      provincia: form.provincia,
       tipo_committente: form.tipo_committente, stato: form.stato,
       indirizzo_cantiere: form.indirizzo_cantiere || null,
       citta_cantiere: form.citta_cantiere || null,
@@ -245,9 +256,15 @@ export default function CommessePage() {
       capocantiere_nome: form.capocantiere_nome || null,
       cse_nome: form.cse_nome || null, cse_email: form.cse_email || null,
       note: form.note || null,
-    }]).select().single()
+    }
+    console.log('Insert payload:', insertPayload)
+    const { data, error: insertError } = await supabase.from('commesse').insert([insertPayload]).select().single()
     setSaving(false)
-    if (insertError) { console.error('Errore creazione commessa:', insertError); return }
+    if (insertError) { 
+      console.error('Errore creazione commessa:', insertError)
+      alert(`Errore: ${insertError.message}`) 
+      return 
+    }
     if (data) { setShowNuova(false); await carica(); router.push(`/dashboard/commesse/${data.id}`) }
   }
 
