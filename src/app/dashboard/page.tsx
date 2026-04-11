@@ -87,8 +87,10 @@ type TabPopup = 'info' | 'ai' | 'rapportino'
 export default function DashboardPage() {
   const router = useRouter()
   const mapRef = useRef<HTMLDivElement>(null)
-  const mapInstance = useRef<unknown>(null)
-  const markersRef = useRef<unknown[]>([])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mapInstance = useRef<any>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const markersRef = useRef<any[]>([])
   const [commesse, setCommesse] = useState<Commessa[]>([])
   const [scadenze, setScadenze] = useState<Scadenza[]>([])
   const [loading, setLoading] = useState(true)
@@ -122,7 +124,8 @@ export default function DashboardPage() {
   // Inizializza mappa satellitare ESRI
   useEffect(() => {
     if (!mapReady || !mapRef.current || mapInstance.current) return
-    const L = window.L
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const L = (window as any).L
     const map = L.map(mapRef.current, {
       center: [42.0, 12.5], zoom: 6,
       zoomControl: true, scrollWheelZoom: true
@@ -148,7 +151,8 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!mapReady || !mapInstance.current || commesse.length === 0) return
     const L = window.L
-    const map = mapInstance.current as { addLayer: (l: unknown) => void; removeLayer: (l: unknown) => void; fitBounds: (b: unknown, o?: unknown) => void; latLngBounds: (pts: unknown[]) => unknown }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const map = mapInstance.current as any
 
     // Rimuovi markers precedenti
     markersRef.current.forEach(m => { try { map.removeLayer(m) } catch {} })
@@ -634,4 +638,4 @@ export default function DashboardPage() {
   )
 }
 
-declare global { interface Window { L: unknown } }
+declare global { interface Window { L: any } }
