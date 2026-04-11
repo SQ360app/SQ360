@@ -1,400 +1,363 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Plus, Search, X, ChevronDown, ChevronRight } from 'lucide-react'
-import { supabase, getAziendaId } from '@/lib/supabase'
-
-type StatoGara = 'IN_PREPARAZIONE' | 'PRESENTATA' | 'IN_ATTESA' | 'AGGIUDICATA' | 'NON_AGGIUDICATA' | 'ESCLUSA'
-type TipoAggiudicazione = 'OEV' | 'PREZZO' | 'QUALITA'
+import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+import { Search, Plus, Upload, Sparkles, X, Save, CheckCircle, AlertCircle, ArrowRight, FileText, TrendingUp } from 'lucide-react'
 
 interface Gara {
-  id: string
-  codice: string
-  nome: string
-  committente: string
-  cig: string
-  cup: string
-  tipo_aggiudicazione: TipoAggiudicazione
-  importo_base: number
-  oneri_sicurezza: number
-  importo_soggetto_ribasso: number
-  ribasso_offerto: number
-  importo_offerto: number
-  scadenza_presentazione: string
-  data_aggiudicazione: string
-  stato: StatoGara
-  provincia: string
-  categoria_opera: string
-  categoria_soa: string
-  costo_interno_stimato: number
-  margine_stimato: number
-  margine_pct: number
-  note: string
-  commessa_collegata: string
+  id: string; codice_gara: string; nome: string; committente: string
+  importo_base: number; data_scadenza: string; stato: string
+  criterio_aggiudicazione: string; provincia: string; categoria_prevalente: string
 }
 
-const STATO_META: Record<StatoGara, { label: string; color: string }> = {
-  IN_PREPARAZIONE: { label: 'In preparazione', color: '#6b7280' },
-  PRESENTATA: { label: 'Presentata', color: '#3b82f6' },
-  IN_ATTESA: { label: 'In attesa esito', color: '#f59e0b' },
-  AGGIUDICATA: { label: 'Aggiudicata ✓', color: '#10b981' },
-  NON_AGGIUDICATA: { label: 'Non aggiudicata', color: '#ef4444' },
-  ESCLUSA: { label: 'Esclusa', color: '#ef4444' },
+interface FormGara {
+  nome: string; committente: string; cig: string; cup: string
+  importo_base: number; categoria_prevalente: string; provincia: string
+  tipo_committente: string; data_scadenza: string; data_pubblicazione: string
+  criterio_aggiudicazione: string; link_bando: string; note: string
+  codice_gara: string
 }
 
-const TIPO_AGG_META: Record<TipoAggiudicazione, string> = {
-  OEV: 'Offerta Economicamente Vantaggiosa',
-  PREZZO: 'Minor Prezzo',
-  QUALITA: 'Qualità',
+const STATI_GARA = ['IN_ANALISI','DA_PRESENTARE','PRESENTATA','AGGIUDICATA','NON_AGGIUDICATA','RINUNCIATA']
+const STATO_COLOR: Record<string,string> = {
+  IN_ANALISI:'#6b7280', DA_PRESENTARE:'#f59e0b', PRESENTATA:'#3b82f6',
+  AGGIUDICATA:'#10b981', NON_AGGIUDICATA:'#ef4444', RINUNCIATA:'#94a3b8'
+}
+const PROVINCE_IT = ['AG','AL','AN','AO','AP','AQ','AR','AT','AV','BA','BG','BI','BL','BN','BO','BR','BS','BT','BZ','CA','CB','CE','CH','CL','CN','CO','CR','CS','CT','CZ','EN','FC','FE','FG','FI','FM','FR','GE','GO','GR','IM','IS','KR','LC','LE','LI','LO','LT','LU','MB','MC','ME','MI','MN','MO','MS','MT','NA','NO','NU','OG','OR','PA','PC','PD','PE','PG','PI','PN','PO','PR','PT','PU','PV','PZ','RA','RC','RE','RG','RI','RM','RN','RO','SA','SI','SO','SP','SR','SS','SU','SV','TA','TE','TN','TO','TP','TR','TS','TV','UD','VA','VB','VC','VE','VI','VR','VT','VV']
+
+function fmt(n: number) { return (n||0).toLocaleString('it-IT',{minimumFractionDigits:0,maximumFractionDigits:0}) }
+
+const FORM_VUOTO: FormGara = {
+  nome:'', committente:'', cig:'', cup:'', importo_base:0,
+  categoria_prevalente:'OG1', provincia:'NA', tipo_committente:'P',
+  data_scadenza:'', data_pubblicazione: new Date().toISOString().slice(0,10),
+  criterio_aggiudicazione:'OEP', link_bando:'', note:'', codice_gara:''
 }
 
-function fmt(n: number) { return n.toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) }
+type Step = 'UPLOAD' | 'AI_LOADING' | 'FORM'
 
-const FORM_VUOTO = {
-  nome: '', committente: '', cig: '', cup: '',
-  tipo_aggiudicazione: 'PREZZO' as TipoAggiudicazione,
-  importo_base: 0, oneri_sicurezza: 0, ribasso_offerto: 0,
-  scadenza_presentazione: '', stato: 'IN_PREPARAZIONE' as StatoGara,
-  provincia: 'NA', categoria_opera: 'NC', categoria_soa: '',
-  costo_interno_stimato: 0, note: '',
+function generaCodiceGara(anno: number, prog: number) {
+  return `G${String(anno).slice(-2)}.${String(prog).padStart(4,'0')}`
 }
 
 export default function GarePage() {
+  const router = useRouter()
   const [gare, setGare] = useState<Gara[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [filtroStato, setFiltroStato] = useState<StatoGara | 'TUTTI'>('TUTTI')
-  const [selected, setSelected] = useState<string | null>(null)
-  const [tabDettaglio, setTabDettaglio] = useState<'riepilogo' | 'simulatore' | 'voci'>('riepilogo')
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ ...FORM_VUOTO })
+  const [filtroStato, setFiltroStato] = useState('TUTTI')
+  const [showNuova, setShowNuova] = useState(false)
+  const [step, setStep] = useState<Step>('UPLOAD')
+  const [aiStatus, setAiStatus] = useState('')
   const [saving, setSaving] = useState(false)
-  const [errore, setErrore] = useState('')
-  // Simulatore ribasso
-  const [simImporto, setSimImporto] = useState(0)
-  const [simOneri, setSimOneri] = useState(0)
-  const [simRibasso, setSimRibasso] = useState(10)
-  const [simCosto, setSimCosto] = useState(0)
+  const [form, setForm] = useState<FormGara>({ ...FORM_VUOTO })
+  const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { carica() }, [])
 
   async function carica() {
     setLoading(true)
-    const { data, error } = await supabase.from('gare').select('*').order('created_at', { ascending: false })
-    if (!error && data) setGare(data)
+    const { data } = await supabase.from('gare')
+      .select('id,codice_gara,nome,committente,importo_base,data_scadenza,stato,criterio_aggiudicazione,provincia,categoria_prevalente')
+      .order('data_scadenza', { ascending: true })
+    if (data) setGare(data as Gara[])
     setLoading(false)
   }
 
-  function setF(field: string, val: unknown) { setForm(prev => ({ ...prev, [field]: val })) }
-
-  const filtered = gare.filter(g => {
-    const matchSearch = !search || g.nome?.toLowerCase().includes(search.toLowerCase()) || g.codice?.toLowerCase().includes(search.toLowerCase()) || g.committente?.toLowerCase().includes(search.toLowerCase())
-    const matchStato = filtroStato === 'TUTTI' || g.stato === filtroStato
-    return matchSearch && matchStato
-  })
-
-  const garaSelezionata = gare.find(g => g.id === selected) ?? null
-
-  // KPI
-  const inCorso = gare.filter(g => ['IN_PREPARAZIONE', 'PRESENTATA', 'IN_ATTESA'].includes(g.stato)).length
-  const aggiudicate = gare.filter(g => g.stato === 'AGGIUDICATA').length
-  const tassoSuccesso = gare.length > 0 ? Math.round((aggiudicate / gare.length) * 100) : 0
-  const portafoglio = gare.filter(g => g.stato === 'AGGIUDICATA').reduce((s, g) => s + (g.importo_offerto || 0), 0)
-
-  // Simulatore
-  const simSoggetto = simImporto - simOneri
-  const simOfferta = simImporto - (simSoggetto * simRibasso / 100)
-  const simMargine = simOfferta - simCosto
-  const simMarginePct = simOfferta > 0 ? (simMargine / simOfferta * 100) : 0
-  const sogliAnom = simRibasso > 13
-
-  useEffect(() => {
-    if (garaSelezionata) {
-      setSimImporto(garaSelezionata.importo_base || 0)
-      setSimOneri(garaSelezionata.oneri_sicurezza || 0)
-      setSimRibasso(garaSelezionata.ribasso_offerto || 10)
-      setSimCosto(garaSelezionata.costo_interno_stimato || 0)
-    }
-  }, [garaSelezionata?.id])
-
-  async function salva() {
-    if (!form.nome.trim()) { setErrore('Nome gara obbligatorio'); return }
-    setSaving(true); setErrore('')
-    const aziendaId = await getAziendaId()
-    const anno = new Date().getFullYear()
-    const prog = gare.filter(g => g.codice?.startsWith(`GARA-${anno}`)).length + 1
-    const codice = `GARA-${anno}-${String(prog).padStart(3, '0')}`
-    const impSoggetto = form.importo_base - form.oneri_sicurezza
-    const impOfferto = form.importo_base - (impSoggetto * form.ribasso_offerto / 100)
-    const margine = impOfferto - form.costo_interno_stimato
-    const marginePct = impOfferto > 0 ? (margine / impOfferto * 100) : 0
-    const { data, error } = await supabase.from('gare').insert([{
-      ...form, codice, azienda_id: aziendaId,
-      importo_soggetto_ribasso: impSoggetto,
-      importo_offerto: impOfferto,
-      margine_stimato: margine,
-      margine_pct: marginePct,
-    }]).select().single()
-    if (error) { setErrore('Errore: ' + error.message); setSaving(false); return }
-    setGare(prev => [data, ...prev])
-    setSaving(false); setShowForm(false); setForm({ ...FORM_VUOTO })
+  function setF(k: keyof FormGara, v: string | number) {
+    setForm(p => ({ ...p, [k]: v }))
   }
 
-  const inp = { width: '100%', boxSizing: 'border-box' as const, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 7, padding: '8px 11px', color: '#1e293b', fontSize: 13 }
-  const lbl = { fontSize: 10, color: '#64748b', fontWeight: 600 as const, textTransform: 'uppercase' as const, letterSpacing: '0.05em', display: 'block', marginBottom: 4 }
+  async function handleFileImport(file: File) {
+    setStep('AI_LOADING')
+    setAiStatus('Lettura bando di gara...')
+    try {
+      const testo = await file.text()
+      setAiStatus('AI estrae i dati dal bando...')
+      const res = await fetch('/api/ai-estrai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ testo: testo.slice(0, 8000), tipo: 'gara' })
+      })
+      const json = await res.json() as { ok: boolean; dati?: Record<string, string> }
+      if (json.ok && json.dati) {
+        const d = json.dati
+        const codice = generaCodiceGara(new Date().getFullYear(), gare.length + 1)
+        setForm(p => ({
+          ...p,
+          codice_gara: codice,
+          nome: d.nome || p.nome,
+          committente: d.committente || p.committente,
+          cig: d.cig || p.cig,
+          cup: d.cup || p.cup,
+          importo_base: parseFloat(d.importo_base || '0') || p.importo_base,
+          categoria_prevalente: d.categoria_prevalente || p.categoria_prevalente,
+          provincia: d.provincia || p.provincia,
+          tipo_committente: d.tipo_committente || p.tipo_committente,
+          data_scadenza: d.data_scadenza || p.data_scadenza,
+          criterio_aggiudicazione: d.criterio_aggiudicazione || p.criterio_aggiudicazione,
+          note: d.note || p.note,
+        }))
+        setAiStatus('✅ Dati estratti — verifica e modifica il codice gara se necessario')
+      } else {
+        setAiStatus('⚠️ Estrazione parziale — integra i dati mancanti')
+      }
+    } catch {
+      setAiStatus('❌ Errore — inserisci i dati manualmente')
+    }
+    setStep('FORM')
+  }
+
+  async function creaGara() {
+    if (!form.nome) return
+    setSaving(true)
+    const { data: ut } = await supabase.auth.getUser()
+    const { data: utData } = await supabase.from('utenti').select('azienda_id').eq('id', ut.user?.id || '').single()
+    const codice = form.codice_gara || generaCodiceGara(new Date().getFullYear(), gare.length + 1)
+    const { data } = await supabase.from('gare').insert([{
+      azienda_id: utData?.azienda_id,
+      codice_gara: codice,
+      nome: form.nome, committente: form.committente,
+      cig: form.cig || null, cup: form.cup || null,
+      importo_base: form.importo_base,
+      categoria_prevalente: form.categoria_prevalente,
+      provincia: form.provincia,
+      tipo_committente: form.tipo_committente,
+      data_scadenza: form.data_scadenza || null,
+      data_pubblicazione: form.data_pubblicazione || null,
+      criterio_aggiudicazione: form.criterio_aggiudicazione,
+      link_bando: form.link_bando || null,
+      note: form.note || null,
+      stato: 'IN_ANALISI',
+    }]).select().single()
+    setSaving(false)
+    if (data) { setShowNuova(false); await carica() }
+  }
+
+  function apriNuova() {
+    setStep('UPLOAD'); setAiStatus('')
+    setForm({ ...FORM_VUOTO, codice_gara: generaCodiceGara(new Date().getFullYear(), gare.length + 1) })
+    setShowNuova(true)
+  }
+
+  const filtrate = gare.filter(g => {
+    const ms = filtroStato === 'TUTTI' || g.stato === filtroStato
+    const mq = !search || [g.nome, g.codice_gara, g.committente].some(x => x?.toLowerCase().includes(search.toLowerCase()))
+    return ms && mq
+  })
+
+  const totale = gare.reduce((s, g) => s + (g.importo_base || 0), 0)
+  const aggiudicate = gare.filter(g => g.stato === 'AGGIUDICATA').length
+  const scadenzaProssima = gare.filter(g => g.stato === 'DA_PRESENTARE' && g.data_scadenza && Math.ceil((new Date(g.data_scadenza).getTime() - Date.now()) / 86400000) <= 14).length
+
+  const inp: React.CSSProperties = { width:'100%', boxSizing:'border-box', background:'#fff', border:'1px solid #e2e8f0', borderRadius:7, padding:'8px 10px', color:'#1e293b', fontSize:13 }
+  const lbl: React.CSSProperties = { fontSize:10, color:'#64748b', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em', display:'block', marginBottom:4 }
 
   return (
-    <div style={{ padding: '24px 32px', background: 'var(--bg)', minHeight: '100vh' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+    <div style={{ padding:'22px 28px', background:'var(--bg)', minHeight:'100%' }}>
+
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--t1)', margin: 0 }}>M1 — Analisi Gare</h1>
-          <p style={{ fontSize: 12, color: 'var(--t3)', margin: '4px 0 0' }}>Gestione offerte, simulatore ribasso, analisi marginalità pre-gara</p>
+          <h1 style={{ fontSize:20, fontWeight:800, color:'var(--t1)', margin:0 }}>Analisi Gare</h1>
+          <p style={{ fontSize:12, color:'var(--t3)', marginTop:3 }}>
+            {gare.length} gare monitorate · € {fmt(totale)} totale importi
+            {scadenzaProssima > 0 && <span style={{ color:'#ef4444', marginLeft:10 }}>⚠ {scadenzaProssima} scadono entro 14gg</span>}
+          </p>
         </div>
-        <button onClick={() => setShowForm(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--accent)', border: 'none', borderRadius: 10, padding: '10px 20px', color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-          <Plus size={16} /> Nuova Gara
+        <button onClick={apriNuova} className="btn-primary" style={{ fontSize:13 }}>
+          <Plus size={14} /> Nuova gara
         </button>
       </div>
 
       {/* KPI */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, marginBottom:18 }}>
         {[
-          { label: 'Gare in corso', val: inCorso, sub: 'Da presentare o in attesa', color: '#f59e0b' },
-          { label: 'Aggiudicate', val: aggiudicate, sub: `Tasso successo: ${tassoSuccesso}%`, color: '#10b981' },
-          { label: 'Portafoglio acquisito', val: `€ ${fmt(portafoglio)}`, sub: 'Da gare aggiudicate', color: '#3b82f6' },
-          { label: 'Totale gare', val: gare.length, sub: 'Nel periodo corrente', color: '#8b5cf6' },
-        ].map((k, i) => (
-          <div key={i} style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px', borderLeft: `3px solid ${k.color}` }}>
-            <div style={{ fontSize: 10, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{k.label}</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: k.color }}>{k.val}</div>
-            <div style={{ fontSize: 10, color: 'var(--t3)', marginTop: 2 }}>{k.sub}</div>
+          { label: 'Totale gare', val: String(gare.length), color:'#6b7280' },
+          { label: 'Da presentare', val: String(gare.filter(g=>g.stato==='DA_PRESENTARE').length), color:'#f59e0b' },
+          { label: 'Aggiudicate', val: String(aggiudicate), color:'#10b981' },
+          { label: 'Tasso successo', val: gare.filter(g=>['AGGIUDICATA','NON_AGGIUDICATA'].includes(g.stato)).length > 0 ? `${Math.round((aggiudicate / gare.filter(g=>['AGGIUDICATA','NON_AGGIUDICATA'].includes(g.stato)).length)*100)}%` : '—', color:'#3b82f6' },
+        ].map((k,i) => (
+          <div key={i} className="kpi-card" style={{ borderLeft:`3px solid ${k.color}`, padding:'10px 14px' }}>
+            <div style={{ fontSize:9, color:'var(--t3)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4 }}>{k.label}</div>
+            <div style={{ fontSize:22, fontWeight:800, color:k.color }}>{k.val}</div>
           </div>
         ))}
       </div>
 
       {/* Filtri */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
-          <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--t3)' }} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca per nome, committente, CIG..." style={{ ...inp, paddingLeft: 30 }} />
+      <div style={{ display:'flex', gap:10, marginBottom:14, flexWrap:'wrap' }}>
+        <div style={{ position:'relative', flex:1, minWidth:240 }}>
+          <Search size={13} style={{ position:'absolute', left:11, top:'50%', transform:'translateY(-50%)', color:'var(--t3)' }} />
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cerca per nome, codice, committente..."
+            style={{ width:'100%', background:'var(--panel)', border:'1px solid var(--border)', borderRadius:9, padding:'9px 12px 9px 34px', fontSize:13, color:'var(--t1)', boxSizing:'border-box' }} />
         </div>
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          <button onClick={() => setFiltroStato('TUTTI')} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 11, fontWeight: 600, cursor: 'pointer', background: filtroStato === 'TUTTI' ? 'var(--accent)' : 'var(--panel)', color: filtroStato === 'TUTTI' ? 'white' : 'var(--t2)' }}>Tutti</button>
-          {(Object.keys(STATO_META) as StatoGara[]).map(s => (
-            <button key={s} onClick={() => setFiltroStato(s)} style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 10, fontWeight: 600, cursor: 'pointer', background: filtroStato === s ? STATO_META[s].color : 'var(--panel)', color: filtroStato === s ? 'white' : 'var(--t2)' }}>{STATO_META[s].label}</button>
+        <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
+          {['TUTTI',...STATI_GARA].map(s => (
+            <button key={s} onClick={()=>setFiltroStato(s)} style={{ padding:'6px 10px', borderRadius:7, border:'1px solid var(--border)', fontSize:10, fontWeight:600, cursor:'pointer', background:filtroStato===s?(STATO_COLOR[s]||'var(--accent)'):'var(--panel)', color:filtroStato===s?'white':'var(--t3)', whiteSpace:'nowrap' }}>
+              {s==='TUTTI'?'Tutte':s.replace('_',' ')}
+            </button>
           ))}
         </div>
       </div>
 
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: 48, color: 'var(--t3)' }}>Caricamento dal database...</div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: garaSelezionata ? '1fr 480px' : '1fr', gap: 16 }}>
-          {/* Tabella gare */}
-          <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 600 }}>
-              <thead>
-                <tr style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>
-                  {['Codice', 'Gara', 'Committente', 'Importo base', 'Ribasso', 'Offerto', 'Scadenza', 'Stato'].map(h => (
-                    <th key={h} style={{ padding: '10px 12px', fontSize: 10, fontWeight: 600, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(g => {
-                  const sm = STATO_META[g.stato]
-                  const isSelected = selected === g.id
-                  const giorni = g.scadenza_presentazione ? Math.ceil((new Date(g.scadenza_presentazione).getTime() - Date.now()) / 86400000) : null
-                  return (
-                    <tr key={g.id} onClick={() => { setSelected(g.id === selected ? null : g.id); setTabDettaglio('riepilogo') }}
-                      style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer', background: isSelected ? 'rgba(59,130,246,0.06)' : 'transparent' }}>
-                      <td style={{ padding: '12px 12px' }}>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: 'var(--accent)', background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 6, padding: '3px 8px', whiteSpace: 'nowrap' }}>{g.codice}</span>
-                      </td>
-                      <td style={{ padding: '12px 12px' }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--t1)' }}>{g.nome}</div>
-                        <div style={{ fontSize: 10, color: 'var(--t3)' }}>{g.categoria_opera} · {TIPO_AGG_META[g.tipo_aggiudicazione]?.split(' ')[0]}</div>
-                      </td>
-                      <td style={{ padding: '12px 12px', fontSize: 12, color: 'var(--t2)', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.committente}</td>
-                      <td style={{ padding: '12px 12px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--t2)', whiteSpace: 'nowrap' }}>€ {fmt(g.importo_base || 0)}</td>
-                      <td style={{ padding: '12px 12px', fontSize: 13, fontWeight: 700, color: (g.ribasso_offerto || 0) > 13 ? '#ef4444' : '#10b981', whiteSpace: 'nowrap' }}>{(g.ribasso_offerto || 0).toFixed(3)}%</td>
-                      <td style={{ padding: '12px 12px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--t1)', whiteSpace: 'nowrap' }}>€ {fmt(g.importo_offerto || 0)}</td>
-                      <td style={{ padding: '12px 12px', fontSize: 11, color: giorni !== null && giorni <= 7 ? '#ef4444' : 'var(--t3)', whiteSpace: 'nowrap' }}>
-                        {g.scadenza_presentazione || '—'}
-                        {giorni !== null && giorni >= 0 && giorni <= 30 && <div style={{ fontSize: 9, fontWeight: 600 }}>{giorni}gg</div>}
-                      </td>
-                      <td style={{ padding: '12px 12px' }}>
-                        <span style={{ fontSize: 10, fontWeight: 600, background: `${sm.color}15`, color: sm.color, border: `1px solid ${sm.color}40`, borderRadius: 6, padding: '3px 8px', whiteSpace: 'nowrap' }}>{sm.label}</span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-            {filtered.length === 0 && !loading && (
-              <div style={{ padding: 48, textAlign: 'center', color: 'var(--t3)', fontSize: 13 }}>
-                {gare.length === 0 ? 'Nessuna gara. Clicca "Nuova Gara" per iniziare.' : 'Nessun risultato per i filtri selezionati.'}
-              </div>
-            )}
+      {/* Lista gare */}
+      <div className="card" style={{ overflow:'hidden' }}>
+        {loading ? (
+          <div style={{ padding:48, textAlign:'center' }}><div className="spinner" style={{ margin:'0 auto' }} /></div>
+        ) : filtrate.length === 0 ? (
+          <div style={{ padding:'60px 32px', textAlign:'center', color:'var(--t3)', fontSize:13 }}>
+            <FileText size={36} color="var(--t4)" style={{ marginBottom:12 }} />
+            <div style={{ marginBottom:16 }}>{gare.length === 0 ? 'Nessuna gara monitorata — importa il primo bando' : 'Nessuna gara con questo filtro'}</div>
           </div>
-
-          {/* Dettaglio */}
-          {garaSelezionata && (
-            <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--accent)', marginBottom: 3 }}>{garaSelezionata.codice}</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--t1)' }}>{garaSelezionata.nome}</div>
-                  <div style={{ fontSize: 11, color: 'var(--t3)' }}>{garaSelezionata.committente} · {garaSelezionata.provincia}</div>
+        ) : filtrate.map((g, i) => {
+          const col = STATO_COLOR[g.stato] || '#6b7280'
+          const gg = g.data_scadenza ? Math.ceil((new Date(g.data_scadenza).getTime() - Date.now()) / 86400000) : null
+          const urgente = gg !== null && gg >= 0 && gg <= 14
+          return (
+            <div key={g.id}
+              style={{ display:'flex', alignItems:'center', gap:14, padding:'13px 20px', borderBottom:i<filtrate.length-1?'1px solid var(--border)':'none', cursor:'pointer', transition:'background 0.12s' }}
+              onMouseEnter={e=>e.currentTarget.style.background='var(--accent-light)'}
+              onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+              <div style={{ width:4, height:44, borderRadius:2, background:col, flexShrink:0 }} />
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:3 }}>
+                  <span style={{ fontFamily:'var(--font-mono)', fontSize:11, fontWeight:700, color:'var(--accent)' }}>{g.codice_gara}</span>
+                  <span style={{ fontSize:10, fontWeight:600, color:col, background:`${col}15`, borderRadius:5, padding:'1px 6px', border:`1px solid ${col}25` }}>{g.stato.replace('_',' ')}</span>
+                  {urgente && <span style={{ fontSize:10, color:'#ef4444', fontWeight:700 }}>⚠ {gg}gg</span>}
                 </div>
-                <button onClick={() => setSelected(null)} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: 7, cursor: 'pointer' }}><X size={14} /></button>
+                <div style={{ fontSize:13, fontWeight:700, color:'var(--t1)' }} className="truncate">{g.nome}</div>
+                <div style={{ fontSize:11, color:'var(--t3)', marginTop:2 }}>{g.committente} · {g.provincia}</div>
               </div>
-
-              {/* Tab */}
-              <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
-                {[
-                  { key: 'riepilogo', label: '📋 Riepilogo' },
-                  { key: 'simulatore', label: '📊 Simulatore ribasso' },
-                ].map(t => (
-                  <button key={t.key} onClick={() => setTabDettaglio(t.key as 'riepilogo' | 'simulatore' | 'voci')} style={{ flex: 1, padding: '10px', border: 'none', borderBottom: tabDettaglio === t.key ? '2px solid var(--accent)' : '2px solid transparent', background: 'transparent', color: tabDettaglio === t.key ? 'var(--accent)' : 'var(--t3)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{t.label}</button>
-                ))}
+              <div style={{ textAlign:'right', flexShrink:0 }}>
+                <div style={{ fontSize:14, fontWeight:800, color:'var(--t1)', fontFamily:'var(--font-mono)' }}>€ {fmt(g.importo_base)}</div>
+                {g.data_scadenza && <div style={{ fontSize:10, color: urgente ? '#ef4444' : 'var(--t3)', fontFamily:'var(--font-mono)', marginTop:2 }}>Scad: {g.data_scadenza}</div>}
               </div>
-
-              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
-                {tabDettaglio === 'riepilogo' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div style={{ background: 'var(--bg)', borderRadius: 10, padding: '12px 14px' }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Quadro Economico</div>
-                      {[
-                        { label: 'Importo base d\'asta', val: `€ ${fmt(garaSelezionata.importo_base || 0)}` },
-                        { label: 'Oneri sicurezza', val: `€ ${fmt(garaSelezionata.oneri_sicurezza || 0)}` },
-                        { label: 'Soggetto a ribasso', val: `€ ${fmt(garaSelezionata.importo_soggetto_ribasso || 0)}` },
-                        { label: `Ribasso offerto (${garaSelezionata.ribasso_offerto || 0}%)`, val: `− € ${fmt((garaSelezionata.importo_soggetto_ribasso || 0) * (garaSelezionata.ribasso_offerto || 0) / 100)}` },
-                        { label: 'IMPORTO OFFERTO', val: `€ ${fmt(garaSelezionata.importo_offerto || 0)}`, bold: true },
-                      ].map(r => (
-                        <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
-                          <span style={{ fontSize: 12, color: 'var(--t2)', fontWeight: (r as { bold?: boolean }).bold ? 700 : 400 }}>{r.label}</span>
-                          <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: (r as { bold?: boolean }).bold ? 800 : 500, color: (r as { bold?: boolean }).bold ? 'var(--accent)' : 'var(--t1)' }}>{r.val}</span>
-                        </div>
-                      ))}
-                    </div>
-                    {garaSelezionata.costo_interno_stimato > 0 && (
-                      <div style={{ background: 'var(--bg)', borderRadius: 10, padding: '12px 14px' }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Analisi marginalità</div>
-                        {[
-                          { label: 'Costo interno stimato', val: `€ ${fmt(garaSelezionata.costo_interno_stimato || 0)}`, color: '#ef4444' },
-                          { label: 'Margine stimato', val: `€ ${fmt(garaSelezionata.margine_stimato || 0)}`, color: '#10b981' },
-                          { label: 'Margine %', val: `${(garaSelezionata.margine_pct || 0).toFixed(2)}%`, color: '#10b981' },
-                        ].map(r => (
-                          <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
-                            <span style={{ fontSize: 12, color: 'var(--t2)' }}>{r.label}</span>
-                            <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 700, color: r.color }}>{r.val}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                      {[
-                        { label: 'CIG', val: garaSelezionata.cig },
-                        { label: 'Scadenza', val: garaSelezionata.scadenza_presentazione },
-                        { label: 'Tipo aggiudicazione', val: TIPO_AGG_META[garaSelezionata.tipo_aggiudicazione] },
-                        { label: 'Categoria SOA', val: garaSelezionata.categoria_soa },
-                      ].map(r => r.val ? (
-                        <div key={r.label} style={{ background: 'var(--bg)', borderRadius: 8, padding: '10px 12px' }}>
-                          <div style={{ fontSize: 10, color: 'var(--t3)', marginBottom: 2 }}>{r.label}</div>
-                          <div style={{ fontSize: 12, color: 'var(--t1)', fontWeight: 500 }}>{r.val}</div>
-                        </div>
-                      ) : null)}
-                    </div>
-                  </div>
-                )}
-
-                {tabDettaglio === 'simulatore' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <div style={{ background: 'var(--bg)', borderRadius: 10, padding: '14px 16px' }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>Parametri simulazione</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-                        <div><label style={lbl}>Importo base (€)</label><input type="number" value={simImporto} onChange={e => setSimImporto(+e.target.value)} style={{ ...inp, background: '#f8fafc', color: '#1e293b' }} /></div>
-                        <div><label style={lbl}>Oneri sicurezza (€)</label><input type="number" value={simOneri} onChange={e => setSimOneri(+e.target.value)} style={{ ...inp, background: '#f8fafc', color: '#1e293b' }} /></div>
-                        <div><label style={lbl}>Costo interno stimato (€)</label><input type="number" value={simCosto} onChange={e => setSimCosto(+e.target.value)} style={{ ...inp, background: '#f8fafc', color: '#1e293b' }} /></div>
-                      </div>
-                      <div style={{ marginBottom: 6 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                          <label style={lbl}>Ribasso offerto</label>
-                          <span style={{ fontSize: 16, fontWeight: 800, color: sogliAnom ? '#ef4444' : '#10b981', fontFamily: 'var(--font-mono)' }}>{simRibasso.toFixed(3)}%</span>
-                        </div>
-                        <input type="range" min={0} max={30} step={0.1} value={simRibasso} onChange={e => setSimRibasso(+e.target.value)} style={{ width: '100%', accentColor: sogliAnom ? '#ef4444' : '#3b82f6' }} />
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--t3)', marginTop: 4 }}>
-                          <span>0%</span>
-                          <span style={{ color: '#f59e0b', fontWeight: 600 }}>Soglia anomalia ~13%</span>
-                          <span>30%</span>
-                        </div>
-                      </div>
-                      {sogliAnom && (
-                        <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#ef4444' }}>
-                          ⚠️ Ribasso superiore alla soglia di anomalia — rischio esclusione offerta
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ background: 'var(--bg)', borderRadius: 10, padding: '14px 16px' }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>Risultato simulazione</div>
-                      {[
-                        { label: 'Importo offerto', val: `€ ${fmt(simOfferta)}`, color: 'var(--accent)' },
-                        { label: 'Margine stimato', val: `€ ${fmt(simMargine)}`, color: simMargine >= 0 ? '#10b981' : '#ef4444' },
-                        { label: 'Margine %', val: `${simMarginePct.toFixed(2)}%`, color: simMarginePct >= 5 ? '#10b981' : simMarginePct >= 0 ? '#f59e0b' : '#ef4444' },
-                      ].map(r => (
-                        <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                          <span style={{ fontSize: 13, color: 'var(--t2)', fontWeight: 500 }}>{r.label}</span>
-                          <span style={{ fontSize: 16, fontFamily: 'var(--font-mono)', fontWeight: 800, color: r.color }}>{r.val}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <ArrowRight size={14} color="var(--t4)" />
             </div>
-          )}
-        </div>
-      )}
+          )
+        })}
+      </div>
 
       {/* MODAL NUOVA GARA */}
-      {showForm && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 20, overflowY: 'auto' }}>
-          <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 16, width: '100%', maxWidth: 720, padding: '28px 32px', marginTop: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', margin: 0 }}>Nuova Gara</h2>
-              <button onClick={() => { setShowForm(false); setErrore('') }} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, padding: 8, cursor: 'pointer' }}><X size={15} color="#64748b" /></button>
-            </div>
-            {errore && <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#ef4444' }}>{errore}</div>}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div style={{ gridColumn: 'span 2' }}><label style={lbl}>Nome gara *</label><input value={form.nome} onChange={e => setF('nome', e.target.value)} placeholder="es. Riqualificazione Palestra Comunale" style={inp} /></div>
-              <div><label style={lbl}>Committente *</label><input value={form.committente} onChange={e => setF('committente', e.target.value)} placeholder="es. Comune di Napoli" style={inp} /></div>
-              <div><label style={lbl}>CIG</label><input value={form.cig} onChange={e => setF('cig', e.target.value)} style={{ ...inp, fontFamily: 'monospace' }} /></div>
-              <div><label style={lbl}>Importo base asta (€)</label><input type="number" value={form.importo_base} onChange={e => setF('importo_base', +e.target.value)} style={inp} /></div>
-              <div><label style={lbl}>Oneri sicurezza (€)</label><input type="number" value={form.oneri_sicurezza} onChange={e => setF('oneri_sicurezza', +e.target.value)} style={inp} /></div>
-              <div><label style={lbl}>Ribasso offerto (%)</label><input type="number" step="0.001" value={form.ribasso_offerto} onChange={e => setF('ribasso_offerto', +e.target.value)} style={inp} /></div>
-              <div><label style={lbl}>Costo interno stimato (€)</label><input type="number" value={form.costo_interno_stimato} onChange={e => setF('costo_interno_stimato', +e.target.value)} style={inp} /></div>
-              <div><label style={lbl}>Scadenza presentazione</label><input type="date" value={form.scadenza_presentazione} onChange={e => setF('scadenza_presentazione', e.target.value)} style={inp} /></div>
-              <div>
-                <label style={lbl}>Tipo aggiudicazione</label>
-                <select value={form.tipo_aggiudicazione} onChange={e => setF('tipo_aggiudicazione', e.target.value as TipoAggiudicazione)} style={{ ...inp, width: '100%' }}>
-                  {(Object.keys(TIPO_AGG_META) as TipoAggiudicazione[]).map(t => <option key={t} value={t}>{TIPO_AGG_META[t]}</option>)}
-                </select>
+      {showNuova && (
+        <div className="modal-overlay">
+          <div className="modal-box" style={{ maxWidth: step === 'FORM' ? 680 : 480 }}>
+
+            {step === 'UPLOAD' && (
+              <>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+                  <div>
+                    <h2 style={{ fontSize:18, fontWeight:800, color:'#1e293b', margin:0 }}>Nuova Gara</h2>
+                    <p style={{ fontSize:12, color:'#64748b', marginTop:3 }}>Importa il bando oppure inserisci manualmente</p>
+                  </div>
+                  <button onClick={()=>setShowNuova(false)} style={{ background:'#f1f5f9', border:'none', borderRadius:8, padding:8, cursor:'pointer' }}><X size={15} color="#64748b" /></button>
+                </div>
+                <div onClick={()=>fileRef.current?.click()} style={{ border:'2px dashed #e2e8f0', borderRadius:14, padding:'40px 24px', textAlign:'center', cursor:'pointer', background:'#f8fafc', marginBottom:16 }}>
+                  <div style={{ width:52, height:52, borderRadius:14, background:'rgba(59,130,246,0.1)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 14px' }}>
+                    <Upload size={24} color="#3b82f6" />
+                  </div>
+                  <div style={{ fontSize:15, fontWeight:700, color:'#1e293b', marginBottom:6 }}>Importa bando di gara</div>
+                  <div style={{ fontSize:12, color:'#64748b', marginBottom:6 }}>PDF, DOCX, TXT — Disciplinare, Avviso, Determina</div>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, fontSize:11, color:'#3b82f6', fontWeight:600 }}>
+                    <Sparkles size={13} /> AI estrae dati, importo, CIG, scadenza in automatico
+                  </div>
+                  <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.txt" style={{ display:'none' }}
+                    onChange={e=>{ const f=e.target.files?.[0]; if(f) handleFileImport(f) }} />
+                </div>
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
+                  <div style={{ flex:1, height:1, background:'#e2e8f0' }} />
+                  <span style={{ fontSize:11, color:'#94a3b8' }}>oppure</span>
+                  <div style={{ flex:1, height:1, background:'#e2e8f0' }} />
+                </div>
+                <button onClick={()=>setStep('FORM')} className="btn-secondary" style={{ width:'100%', justifyContent:'center' }}>Inserisci dati manualmente</button>
+              </>
+            )}
+
+            {step === 'AI_LOADING' && (
+              <div style={{ textAlign:'center', padding:'48px 24px' }}>
+                <div style={{ width:56, height:56, borderRadius:16, background:'rgba(59,130,246,0.1)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px' }}>
+                  <TrendingUp size={28} color="#3b82f6" />
+                </div>
+                <div style={{ fontSize:16, fontWeight:700, color:'#1e293b', marginBottom:8 }}>AI analizza il bando</div>
+                <div style={{ fontSize:13, color:'#64748b', marginBottom:20 }}>{aiStatus}</div>
+                <div className="spinner" style={{ margin:'0 auto' }} />
               </div>
-              <div>
-                <label style={lbl}>Stato</label>
-                <select value={form.stato} onChange={e => setF('stato', e.target.value as StatoGara)} style={{ ...inp, width: '100%' }}>
-                  {(Object.keys(STATO_META) as StatoGara[]).map(s => <option key={s} value={s}>{STATO_META[s].label}</option>)}
-                </select>
-              </div>
-              <div><label style={lbl}>Categoria SOA</label><input value={form.categoria_soa} onChange={e => setF('categoria_soa', e.target.value)} placeholder="es. OG1 cl.III" style={inp} /></div>
-              <div style={{ gridColumn: 'span 2' }}><label style={lbl}>Note</label><input value={form.note} onChange={e => setF('note', e.target.value)} style={inp} /></div>
-            </div>
-            <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button onClick={() => { setShowForm(false); setErrore('') }} style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', fontSize: 13, cursor: 'pointer' }}>Annulla</button>
-              <button onClick={salva} disabled={saving} style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: saving ? '#93c5fd' : '#3b82f6', color: 'white', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer' }}>
-                {saving ? 'Salvataggio...' : '✓ Crea gara'}
-              </button>
-            </div>
+            )}
+
+            {step === 'FORM' && (
+              <>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
+                  <div>
+                    <h2 style={{ fontSize:18, fontWeight:800, color:'#1e293b', margin:0 }}>Dati gara</h2>
+                    {aiStatus && (
+                      <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:4, fontSize:11, color: aiStatus.startsWith('✅')?'#10b981':aiStatus.startsWith('⚠')?'#f59e0b':'#64748b' }}>
+                        {aiStatus.startsWith('✅') ? <CheckCircle size={12} /> : aiStatus.startsWith('⚠') ? <AlertCircle size={12} /> : null}
+                        {aiStatus}
+                      </div>
+                    )}
+                  </div>
+                  <button onClick={()=>setShowNuova(false)} style={{ background:'#f1f5f9', border:'none', borderRadius:8, padding:8, cursor:'pointer' }}><X size={15} color="#64748b" /></button>
+                </div>
+                <div style={{ maxHeight:'60vh', overflowY:'auto', paddingRight:4 }}>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                    <div>
+                      <label style={lbl}>Codice gara *</label>
+                      <input value={form.codice_gara} onChange={e=>setF('codice_gara',e.target.value)} style={{ ...inp, fontFamily:'monospace', fontWeight:700 }} />
+                      <div style={{ fontSize:10, color:'#94a3b8', marginTop:2 }}>Modificabile prima della conferma</div>
+                    </div>
+                    <div>
+                      <label style={lbl}>Criterio aggiudicazione</label>
+                      <select value={form.criterio_aggiudicazione} onChange={e=>setF('criterio_aggiudicazione',e.target.value)} style={{ ...inp, width:'100%' }}>
+                        <option value="OEP">Offerta economicamente più vantaggiosa</option>
+                        <option value="MPR">Minor prezzo</option>
+                      </select>
+                    </div>
+                    <div style={{ gridColumn:'span 2' }}>
+                      <label style={lbl}>Nome / Oggetto gara *</label>
+                      <input value={form.nome} onChange={e=>setF('nome',e.target.value)} style={inp} />
+                    </div>
+                    <div>
+                      <label style={lbl}>Committente / Stazione appaltante</label>
+                      <input value={form.committente} onChange={e=>setF('committente',e.target.value)} style={inp} />
+                    </div>
+                    <div>
+                      <label style={lbl}>Tipo committente</label>
+                      <select value={form.tipo_committente} onChange={e=>setF('tipo_committente',e.target.value)} style={{ ...inp, width:'100%' }}>
+                        <option value="P">Pubblico</option>
+                        <option value="PR">Privato</option>
+                      </select>
+                    </div>
+                    <div><label style={lbl}>CIG</label><input value={form.cig} onChange={e=>setF('cig',e.target.value)} style={{ ...inp, fontFamily:'monospace' }} /></div>
+                    <div><label style={lbl}>CUP</label><input value={form.cup} onChange={e=>setF('cup',e.target.value)} style={{ ...inp, fontFamily:'monospace' }} /></div>
+                    <div><label style={lbl}>Importo base d&apos;asta (€)</label><input type="number" min={0} step={0.01} value={form.importo_base||''} onChange={e=>setF('importo_base',parseFloat(e.target.value)||0)} style={{ ...inp, fontFamily:'monospace' }} /></div>
+                    <div>
+                      <label style={lbl}>Categoria prevalente</label>
+                      <input value={form.categoria_prevalente} onChange={e=>setF('categoria_prevalente',e.target.value)} placeholder="es. OG1, OG3..." style={inp} />
+                    </div>
+                    <div>
+                      <label style={lbl}>Provincia</label>
+                      <select value={form.provincia} onChange={e=>setF('provincia',e.target.value)} style={{ ...inp, width:'100%' }}>
+                        {PROVINCE_IT.map(p=><option key={p} value={p}>{p}</option>)}
+                      </select>
+                    </div>
+                    <div><label style={lbl}>Data pubblicazione</label><input type="date" value={form.data_pubblicazione} onChange={e=>setF('data_pubblicazione',e.target.value)} style={inp} /></div>
+                    <div><label style={lbl}>Data scadenza offerta</label><input type="date" value={form.data_scadenza} onChange={e=>setF('data_scadenza',e.target.value)} style={inp} /></div>
+                    <div style={{ gridColumn:'span 2' }}><label style={lbl}>Link bando / piattaforma</label><input value={form.link_bando} onChange={e=>setF('link_bando',e.target.value)} placeholder="https://..." style={inp} /></div>
+                    <div style={{ gridColumn:'span 2' }}><label style={lbl}>Note / Analisi preliminare</label><textarea value={form.note} onChange={e=>setF('note',e.target.value)} rows={3} style={{ ...inp, resize:'vertical', width:'100%' }} /></div>
+                  </div>
+                </div>
+                <div style={{ marginTop:20, display:'flex', justifyContent:'space-between' }}>
+                  <button onClick={()=>setStep('UPLOAD')} className="btn-secondary" style={{ fontSize:12 }}>← Importa bando</button>
+                  <div style={{ display:'flex', gap:10 }}>
+                    <button onClick={()=>setShowNuova(false)} className="btn-secondary">Annulla</button>
+                    <button onClick={creaGara} disabled={saving||!form.nome} className="btn-primary">
+                      <Save size={14} /> {saving?'Salvataggio...':'Crea gara'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
