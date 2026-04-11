@@ -231,6 +231,7 @@ export default function CommessePage() {
     const userId = ut.user?.id || ''
     const { data: utData } = await supabase.from('utenti').select('azienda_id').eq('id', userId).single()
     const aziendaId = utData?.azienda_id || 'f5ddf460-715a-495e-997a-0246ea73326b'
+    const progressivo = commesse.length + 1
     const insertPayload = {
       azienda_id: aziendaId,
       codice: form.codice, anno: new Date().getFullYear(),
@@ -241,6 +242,8 @@ export default function CommessePage() {
       ribasso_pct: form.ribasso_pct || 0,
       oneri_sicurezza: form.oneri_sicurezza || 0,
       provincia: form.provincia,
+      categoria: form.categoria || 'GE',
+      progressivo,
       tipo_committente: form.tipo_committente, stato: form.stato,
       indirizzo_cantiere: form.indirizzo_cantiere || null,
       citta_cantiere: form.citta_cantiere || null,
@@ -257,12 +260,10 @@ export default function CommessePage() {
       cse_nome: form.cse_nome || null, cse_email: form.cse_email || null,
       note: form.note || null,
     }
-    console.log('Insert payload:', insertPayload)
     const { data, error: insertError } = await supabase.from('commesse').insert([insertPayload]).select().single()
     setSaving(false)
     if (insertError) { 
       console.error('Errore creazione commessa:', insertError)
-      alert(`Errore: ${insertError.message}`) 
       return 
     }
     if (data) { setShowNuova(false); await carica(); router.push(`/dashboard/commesse/${data.id}`) }
