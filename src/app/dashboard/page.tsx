@@ -563,19 +563,7 @@ export default function DashboardPage() {
                 })}
               </div>
             </div>
-            <div className="card" style={{ padding: '12px 14px' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--t1)', marginBottom: 8 }}>Azioni rapide</div>
-              {[
-                { label: '+ Nuova commessa aggiudicata', href: '/dashboard/commesse?new=true', color: '#3b82f6' },
-                { label: '+ Nuova gara', href: '/dashboard/gare?new=true', color: '#f59e0b' },
-                { label: '+ Nuovo fornitore', href: '/dashboard/fornitori?new=true', color: '#10b981' },
-              ].map(a => (
-                <button key={a.label} onClick={() => router.push(a.href)} style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '8px 10px', borderRadius: 7, border: `1px solid ${a.color}25`, background: `${a.color}06`, color: a.color, fontSize: 11, fontWeight: 600, cursor: 'pointer', marginBottom: 5, textAlign: 'left' }}>
-                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: a.color }} />{a.label}
-                  <ArrowRight size={10} style={{ marginLeft: 'auto' }} />
-                </button>
-              ))}
-            </div>
+
           </div>
         )}
       </div>
