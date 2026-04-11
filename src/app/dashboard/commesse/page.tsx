@@ -16,7 +16,6 @@ interface FormCommessa {
   codice: string; nome: string; committente: string; cig: string; cup: string
   importo_base: number; importo_aggiudicato: number; ribasso_pct: number; oneri_sicurezza: number
   provincia: string; categoria: string; tipo_committente: string; stato: string
-  indirizzo_cantiere: string; citta_cantiere: string; cap_cantiere: string; lat: string; lng: string
   data_aggiudicazione: string; data_fine_contrattuale: string; durata_giorni: number; note: string
   rup_nome: string; rup_email: string; rup_telefono: string
   dl_nome: string; dl_email: string; dl_telefono: string
@@ -46,7 +45,6 @@ const FORM_VUOTO: FormCommessa = {
   codice:'', nome:'', committente:'', cig:'', cup:'',
   importo_base:0, importo_aggiudicato:0, ribasso_pct:0, oneri_sicurezza:0,
   provincia:'NA', categoria:'GE', tipo_committente:'P', stato:'AGGIUDICATA',
-  indirizzo_cantiere:'', citta_cantiere:'', cap_cantiere:'', lat:'', lng:'',
   data_aggiudicazione: new Date().toISOString().slice(0,10),
   data_fine_contrattuale:'', durata_giorni:365, note:'',
   rup_nome:'', rup_email:'', rup_telefono:'',
@@ -248,7 +246,6 @@ export default function CommessePage() {
       stato: form.stato || 'AGGIUDICATA',
       indirizzo_cantiere: form.indirizzo_cantiere || null,
       citta_cantiere: form.citta_cantiere || null,
-      cap_cantiere: form.cap_cantiere || null,
       lat: form.lat && !isNaN(parseFloat(form.lat)) ? parseFloat(form.lat) : null,
       lng: form.lng && !isNaN(parseFloat(form.lng)) ? parseFloat(form.lng) : null,
       data_aggiudicazione: form.data_aggiudicazione || null,
@@ -556,7 +553,6 @@ export default function CommessePage() {
                     </div>
                     <div style={{ gridColumn:'span 2' }}><label style={lbl}>Indirizzo cantiere</label><input value={form.indirizzo_cantiere} onChange={e=>setStr('indirizzo_cantiere',e.target.value)} placeholder="Via Roma 1" style={inp} /></div>
                     <div><label style={lbl}>Città</label><input value={form.citta_cantiere} onChange={e=>setStr('citta_cantiere',e.target.value)} style={inp} /></div>
-                    <div><label style={lbl}>CAP</label><input value={form.cap_cantiere} onChange={e=>setStr('cap_cantiere',e.target.value)} style={inp} /></div>
                     <div><label style={lbl}>Latitudine</label><input value={form.lat} onChange={e=>setStr('lat',e.target.value)} placeholder="40.8518" style={{ ...inp, fontFamily:'monospace' }} /></div>
                     <div>
                       <label style={{ ...lbl, display:'flex', justifyContent:'space-between' }}>
