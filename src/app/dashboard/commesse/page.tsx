@@ -219,9 +219,11 @@ export default function CommessePage() {
     setSaving(true)
     if (form.indirizzo_cantiere && !form.lat) await geocodifica()
     const { data: ut } = await supabase.auth.getUser()
-    const { data: utData } = await supabase.from('utenti').select('azienda_id').eq('id', ut.user?.id || '').single()
-    const { data } = await supabase.from('commesse').insert([{
-      azienda_id: utData?.azienda_id,
+    const userId = ut.user?.id || ''
+    const { data: utData } = await supabase.from('utenti').select('azienda_id').eq('id', userId).single()
+    const aziendaId = utData?.azienda_id || 'f5ddf460-715a-495e-997a-0246ea73326b'
+    const { data, error: insertError } = await supabase.from('commesse').insert([{
+      azienda_id: aziendaId,
       codice: form.codice, anno: new Date().getFullYear(),
       nome: form.nome, committente: form.committente,
       cig: form.cig || null, cup: form.cup || null,
@@ -232,8 +234,8 @@ export default function CommessePage() {
       indirizzo_cantiere: form.indirizzo_cantiere || null,
       citta_cantiere: form.citta_cantiere || null,
       cap_cantiere: form.cap_cantiere || null,
-      lat: form.lat ? parseFloat(form.lat) : null,
-      lng: form.lng ? parseFloat(form.lng) : null,
+      lat: form.lat && !isNaN(parseFloat(form.lat)) ? parseFloat(form.lat) : null,
+      lng: form.lng && !isNaN(parseFloat(form.lng)) ? parseFloat(form.lng) : null,
       data_aggiudicazione: form.data_aggiudicazione,
       data_fine_contrattuale: form.data_fine_contrattuale || null,
       durata_giorni: form.durata_giorni,
@@ -245,6 +247,7 @@ export default function CommessePage() {
       note: form.note || null,
     }]).select().single()
     setSaving(false)
+    if (insertError) { console.error('Errore creazione commessa:', insertError); return }
     if (data) { setShowNuova(false); await carica(); router.push(`/dashboard/commesse/${data.id}`) }
   }
 
