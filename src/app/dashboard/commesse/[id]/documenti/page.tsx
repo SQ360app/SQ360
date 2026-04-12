@@ -54,6 +54,7 @@ export default function DocumentiPage() {
   const dropRef = useRef<HTMLDivElement>(null)
   const [dragOver, setDragOver] = useState(false)
   const [aiResult, setAiResult] = useState<Record<string, unknown> | null>(null)
+  const [pendingFile, setPendingFile] = useState<File|null>(null)
 
   useEffect(() => { carica() }, [id])
 
@@ -103,7 +104,8 @@ export default function DocumentiPage() {
 
       // Se è capitolato o contratto → analizza con AI
       if (['CAPITOLATO', 'BANDO', 'CONTRATTO', 'COMPUTO'].includes(nuovoTipo)) {
-        analizzaAI(doc.id, file)
+        analizzaAI(doc.id, file || pendingFile || undefined)
+        setPendingFile(null)
       }
     }
     setUploading(false)
@@ -112,35 +114,34 @@ export default function DocumentiPage() {
   async function analizzaAI(docId: string, file?: File) {
     setAiAnalyzing(docId)
     try {
-      // Leggi il testo del file se disponibile
       let testoFile = ''
-      if (file && (file.type === 'application/pdf' || file.type.includes('text'))) {
-        testoFile = await file.text().catch(() => '')
+      if (file) {
+        const isDocx = file.name.toLowerCase().endsWith('.docx') || file.type.includes('officedocument')
+        if (isDocx) {
+          const fd = new FormData(); fd.append('file', file)
+          const dr = await fetch('/api/docx-text', { method: 'POST', body: fd })
+          const dj = await dr.json() as {ok:boolean; testo?:string}
+          testoFile = dj.ok ? (dj.testo || '') : ''
+        } else if (file.type.includes('text') || file.name.endsWith('.txt')) {
+          testoFile = await file.text().catch(() => '')
+        }
       }
-
       const response = await fetch('/api/ai-documenti', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ docId, commessaId: id, testoFile, tipo: nuovoTipo })
       })
-      const result = await response.json()
-
+      const result = await response.json() as {datiEstrati?: Record<string,unknown>}
       if (result.datiEstrati) {
         await supabase.from('documenti_commessa')
           .update({ ai_elaborato: true, ai_dati_estratti: result.datiEstrati })
           .eq('id', docId)
-        setDocumenti(prev => prev.map(d => d.id === docId
-          ? { ...d, ai_elaborato: true, ai_dati_estratti: result.datiEstrati }
-          : d
-        ))
+        setDocumenti(prev => prev.map(d => d.id === docId ? { ...d, ai_elaborato: true, ai_dati_estratti: result.datiEstrati as Record<string,unknown> } : d))
         setAiResult(result.datiEstrati)
       }
-    } catch (err) {
-      console.error('AI error:', err)
-    }
+    } catch (err) { console.error('AI error:', err) }
     setAiAnalyzing(null)
   }
-
   async function elimina(docId: string) {
     if (!confirm('Eliminare il documento?')) return
     await supabase.from('documenti_commessa').delete().eq('id', docId)
@@ -152,7 +153,7 @@ export default function DocumentiPage() {
   function handleDrop(e: React.DragEvent) {
     e.preventDefault(); setDragOver(false)
     const file = e.dataTransfer.files[0]
-    if (file) uploadFile(file)
+    if (file) { setPendingFile(file); setShowUpload(true) }
   }
 
   const inp = { width: '100%', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 7, padding: '8px 11px', color: '#1e293b', fontSize: 13 }
@@ -204,7 +205,7 @@ export default function DocumentiPage() {
           Trascina qui un documento oppure <strong>clicca per selezionare</strong> — PDF, Word, Excel, XPWE
         </span>
         <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.xpwe" style={{ display: 'none' }}
-          onChange={e => { const f = e.target.files?.[0]; if (f) { setShowUpload(true); } }} />
+          onChange={e => { const f = e.target.files?.[0]; if (f) { setPendingFile(f); setShowUpload(true) } }} />
       </div>
 
       {/* Risultato AI */}
