@@ -186,7 +186,6 @@ async function creaCommessa() {
     if (!form.nome.trim() || !form.committente.trim()) return
     setSaving(true); setErroreInsert('')
     try {
-      if (form.indirizzo_cantiere && form.citta_cantiere && !form.lat) await geocodifica()
       let aziendaId = AZIENDA_ID
       try {
         const { data: ut } = await supabase.auth.getUser()
@@ -194,7 +193,7 @@ async function creaCommessa() {
           const { data: utData } = await supabase.from('utenti').select('azienda_id').eq('id', ut.user.id).single()
           if (utData?.azienda_id) aziendaId = utData.azienda_id
         }
-      } catch { /* usa fallback */ }
+      } catch { /* fallback */ }
       const progressivo = commesse.length + 1
       const { data, error } = await supabase.from('commesse').insert([{
         azienda_id: aziendaId,
@@ -203,23 +202,23 @@ async function creaCommessa() {
         progressivo,
         nome: form.nome.trim(),
         committente: form.committente.trim(),
-        cig: form.cig||null, cup: form.cup||null,
+        cig: form.cig||null,
+        cup: form.cup||null,
         importo_base: form.importo_base||0,
         importo_aggiudicato: form.importo_aggiudicato||form.importo_base||0,
         ribasso_pct: form.ribasso_pct||0,
         oneri_sicurezza: form.oneri_sicurezza||0,
-        provincia: form.provincia||'NA', categoria: form.categoria||'GE',
-        tipo_committente: form.tipo_committente||'P', stato: form.stato||'AGGIUDICATA',
-        indirizzo_cantiere: form.indirizzo_cantiere||null, citta_cantiere: form.citta_cantiere||null,
-        lat: form.lat && !isNaN(parseFloat(form.lat)) ? parseFloat(form.lat) : null,
-        lng: form.lng && !isNaN(parseFloat(form.lng)) ? parseFloat(form.lng) : null,
+        provincia: form.provincia||'NA',
+        categoria: form.categoria||'GE',
+        tipo_committente: form.tipo_committente||'P',
+        stato: form.stato||'AGGIUDICATA',
         data_aggiudicazione: form.data_aggiudicazione||null,
         data_fine_contrattuale: form.data_fine_contrattuale||null,
         durata_giorni: form.durata_giorni||365,
-        rup_nome: form.rup_nome||null, rup_email: form.rup_email||null,
-        dl_nome: form.dl_nome||null, dl_email: form.dl_email||null,
-        rc_nome: form.rc_nome||null, rc_email: form.rc_email||null,
-        cse_nome: form.cse_nome||null, cse_email: form.cse_email||null,
+        rup_nome: form.rup_nome||null,
+        rup_email: form.rup_email||null,
+        dl_nome: form.dl_nome||null,
+        dl_email: form.dl_email||null,
         note: form.note||null,
       }]).select('id,codice').single()
       if (error) { setErroreInsert(`Errore DB: ${error.message} [${error.code}]`); return }
@@ -231,7 +230,6 @@ async function creaCommessa() {
       setSaving(false)
     }
   }
-
   function apriNuova() {
     setStep('UPLOAD'); setAiMsg(''); setAiOk(null); setErroreInsert('')
     setForm({...FORM_VUOTO, codice: generaCodice('NA','GE',commesse.length+1)})
