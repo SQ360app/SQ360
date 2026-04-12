@@ -98,7 +98,11 @@ export default function ComputoPage() {
         const fd = new FormData(); fd.append('file', file)
         const res = await fetch('/api/xpwe-parse', { method: 'POST', body: fd })
         const json = await res.json() as { ok: boolean; voci?: Array<Record<string,unknown>>; errore?: string }
-        if (!json.ok || !json.voci) { setImportMsg(`❌ ${json.errore || 'Errore lettura XPWE'}`); setImporting(false); return }
+        if (!json.ok || !json.voci) { 
+          const preview = json.xmlPreview ? `\n\nPrime 200 caratteri XML:\n${json.xmlPreview}` : ''
+          setImportMsg(`❌ ${json.errore || 'Errore lettura XPWE'}${preview}`)
+          setImporting(false); return 
+        }
         setImportMsg(`Trovate ${json.voci.length} voci Primus. Salvataggio...`)
         vociDaInserire = json.voci.map((v: Record<string,unknown>) => ({
           computo_id: computoId,
