@@ -120,6 +120,8 @@ export default function CommessePage() {
   const [sezFigure, setSezFigure] = useState<'sa'|'impresa'>('sa')
   const [form, setForm] = useState<FormCommessa>({...FORM_VUOTO})
   const fileRef = useRef<HTMLInputElement>(null)
+  const [deleteId, setDeleteId] = useState<string|null>(null)
+  const [deleteStep, setDeleteStep] = useState(0)
 
   useEffect(() => { carica() }, [])
 
@@ -147,9 +149,23 @@ export default function CommessePage() {
     if (file.type === 'application/pdf') {
       setStep('FORM'); setAiOk(false); setAiMsg('⚠️ PDF non supportato — usa TXT o DOCX'); return
     }
-    setStep('AI_LOADING'); setAiMsg('AI analizza il documento...'); setAiOk(null)
+    setStep('AI_LOADING'); setAiMsg('Lettura documento...'); setAiOk(null)
     try {
-      const testo = await file.text()
+      let testo: string
+      const isDocx = file.name.toLowerCase().endsWith('.docx') || file.type.includes('officedocument')
+      if (isDocx) {
+        setAiMsg('Estrazione testo DOCX...')
+        const fd = new FormData(); fd.append('file', file)
+        const dr = await fetch('/api/docx-text', { method:'POST', body: fd })
+        const dj = await dr.json() as {ok:boolean; testo?:string; errore?:string}
+        if (!dj.ok || !dj.testo) {
+          setAiOk(false); setAiMsg(`⚠️ DOCX non leggibile: ${dj.errore||'errore'} — compila manualmente`); setStep('FORM'); return
+        }
+        testo = dj.testo
+      } else {
+        testo = await file.text()
+      }
+      setAiMsg('AI estrae i dati...')
       const res = await fetch('/api/ai-estrai', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({testo: testo.slice(0,8000), tipo:'commessa'}) })
       const json = await res.json() as {ok:boolean; dati?: Record<string,unknown>; errore?:string}
       if (json.ok && json.dati) {
@@ -232,6 +248,12 @@ async function creaCommessa() {
       setSaving(false)
     }
   }
+  async function eliminaCommessa(id: string) {
+    const { error } = await supabase.from('commesse').delete().eq('id', id)
+    if (!error) { setDeleteId(null); setDeleteStep(0); await carica() }
+    else alert('Errore eliminazione: ' + error.message)
+  }
+
   function apriNuova() {
     setStep('UPLOAD'); setAiMsg(''); setAiOk(null); setErroreInsert('')
     setForm({...FORM_VUOTO, codice: generaCodice('NA','GE',commesse.length+1)})
@@ -320,11 +342,36 @@ async function creaCommessa() {
                 <span style={{fontSize:10,color:'var(--t3)',width:28}}>{c.avanzamento_pct||0}%</span>
               </div>
               <div style={{fontSize:14,fontWeight:800,color:'var(--t1)',fontFamily:'var(--font-mono)',flexShrink:0}}>€ {fmt(c.importo_aggiudicato)}</div>
+              <button onClick={e=>{e.stopPropagation();setDeleteId(c.id);setDeleteStep(1)}} style={{background:'none',border:'none',cursor:'pointer',padding:'4px 6px',borderRadius:6,color:'#ef4444',opacity:0.6}} title="Elimina commessa">🗑</button>
               <ArrowRight size={14} color="var(--t4)" />
             </div>
           )
         })}
       </div>
+
+      {deleteId && (
+        <div className="modal-overlay">
+          <div className="modal-box" style={{maxWidth:420,textAlign:'center'}}>
+            <div style={{fontSize:40,marginBottom:12}}>{deleteStep===1?'🗑':'⚠️'}</div>
+            {deleteStep===1 && <>
+              <h2 style={{fontSize:17,fontWeight:800,color:'#1e293b',marginBottom:8}}>Elimina commessa?</h2>
+              <p style={{fontSize:13,color:'#64748b',marginBottom:20}}>L'operazione è irreversibile. Tutti i dati della commessa verranno eliminati.</p>
+              <div style={{display:'flex',gap:10,justifyContent:'center'}}>
+                <button onClick={()=>{setDeleteId(null);setDeleteStep(0)}} className="btn-secondary">Annulla</button>
+                <button onClick={()=>setDeleteStep(2)} style={{background:'#ef4444',color:'white',border:'none',borderRadius:8,padding:'9px 20px',fontWeight:700,cursor:'pointer'}}>Sì, elimina</button>
+              </div>
+            </>}
+            {deleteStep===2 && <>
+              <h2 style={{fontSize:17,fontWeight:800,color:'#ef4444',marginBottom:8}}>Conferma eliminazione</h2>
+              <p style={{fontSize:13,color:'#64748b',marginBottom:20}}>Sei sicuro? Questa azione non può essere annullata.</p>
+              <div style={{display:'flex',gap:10,justifyContent:'center'}}>
+                <button onClick={()=>{setDeleteId(null);setDeleteStep(0)}} className="btn-secondary">Annulla</button>
+                <button onClick={()=>eliminaCommessa(deleteId)} style={{background:'#dc2626',color:'white',border:'none',borderRadius:8,padding:'9px 20px',fontWeight:700,cursor:'pointer'}}>ELIMINA DEFINITIVAMENTE</button>
+              </div>
+            </>}
+          </div>
+        </div>
+      )}
 
       {showNuova && (
         <div className="modal-overlay">
