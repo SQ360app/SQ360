@@ -88,45 +88,75 @@ export default function ComputoPage() {
     setImporting(true)
     setImportMsg('Analisi file in corso...')
     try {
-      const testo = await file.text()
-      const righe = testo.split('\n').filter(r => r.trim())
-      const sep = testo.includes(';') ? ';' : ','
-      const header = righe[0].split(sep).map(h => h.trim().toLowerCase().replace(/"/g, ''))
-      setImportMsg(`Trovate ${righe.length - 1} voci. Importazione...`)
+      const isXpwe = file.name.toLowerCase().endsWith('.xpwe') || file.name.toLowerCase().endsWith('.xml')
       const computoId = await getOrCreateComputoId()
       if (!computoId) { setImportMsg('❌ Errore creazione computo'); setImporting(false); return }
-      const vociDaInserire: Record<string, unknown>[] = []
-      for (let i = 1; i < righe.length; i++) {
-        const valori = righe[i].split(sep).map(v => v.trim().replace(/"/g, ''))
-        if (valori.length < 3) continue
-        const idx = (n: string) => header.findIndex(h => h.includes(n))
-        const get = (n: string) => valori[idx(n)] || ''
-        const q = parseFloat(get('quant') || get('qta') || '0') || 0
-        const p = parseFloat(get('prezz') || get('pu') || get('unitario') || '0') || 0
-        vociDaInserire.push({
-          computo_id: computoId,
-          capitolo: get('cap') || get('sezione') || 'Importato',
-          codice: get('codice') || get('cod') || `IMP${i.toString().padStart(3, '0')}`,
-          codice_prezzario: get('prezzario') || get('tariffa') || '',
-          descrizione: get('descriz') || get('desc') || get('lavorazione') || `Voce ${i}`,
-          um: get('um') || get('unita') || 'nr',
-          quantita: q, prezzo_unitario: p, importo: q * p,
-          pct_manodopera: parseFloat(get('manod') || '30') || 30,
-          pct_materiali: parseFloat(get('mater') || '45') || 45,
-          pct_noli: parseFloat(get('noli') || '12') || 12,
-          selezionata: true
-        })
-      }
-      if (vociDaInserire.length > 0) {
-        const { error } = await supabase.from('voci_computo').insert(vociDaInserire)
-        if (!error) { setImportMsg(`✅ Importate ${vociDaInserire.length} voci!`); await carica() }
-        else setImportMsg(`❌ Errore: ${error.message}`)
-      } else setImportMsg('⚠️ Nessuna voce trovata. Verifica il formato.')
-    } catch { setImportMsg('❌ Errore nel parsing. Usa CSV con intestazione.') }
-    setImporting(false)
-    setTimeout(() => { setShowImport(false); setImportMsg('') }, 3000)
-  }
+      let vociDaInserire: Record<string, unknown>[] = []
 
+      if (isXpwe) {
+        setImportMsg('🏗 Lettura file Primus XPWE...')
+        const fd = new FormData(); fd.append('file', file)
+        const res = await fetch('/api/xpwe-parse', { method: 'POST', body: fd })
+        const json = await res.json() as { ok: boolean; voci?: Array<Record<string,unknown>>; errore?: string }
+        if (!json.ok || !json.voci) { setImportMsg(`❌ ${json.errore || 'Errore lettura XPWE'}`); setImporting(false); return }
+        setImportMsg(`Trovate ${json.voci.length} voci Primus. Salvataggio...`)
+        vociDaInserire = json.voci.map((v: Record<string,unknown>) => ({
+          computo_id: computoId,
+          capitolo: String(v.capitolo || 'Importato Primus'),
+          codice: String(v.codice || '').slice(0, 30),
+          codice_prezzario: String(v.codice || '').slice(0, 30),
+          descrizione: String(v.descrizione || '').slice(0, 1000),
+          um: String(v.um || 'nr').slice(0, 10),
+          quantita: Number(v.quantita) || 0,
+          prezzo_unitario: Number(v.prezzo_unitario) || 0,
+          importo: Number(v.importo) || (Number(v.quantita) * Number(v.prezzo_unitario)) || 0,
+          pct_manodopera: 30, pct_materiali: 45, pct_noli: 12, selezionata: true
+        }))
+      } else {
+        const testo = await file.text()
+        const righe = testo.split('\n').filter(r => r.trim())
+        if (righe.length < 2) { setImportMsg('⚠️ File CSV vuoto'); setImporting(false); return }
+        const sep = testo.includes(';') ? ';' : ','
+        const header = righe[0].split(sep).map(h => h.trim().toLowerCase().replace(/[^a-z0-9_]/g, ''))
+        setImportMsg(`Trovate ${righe.length - 1} voci CSV. Importazione...`)
+        for (let i = 1; i < righe.length; i++) {
+          const valori = righe[i].split(sep).map(v => v.trim().replace(/^"|"$/g, ''))
+          if (valori.length < 2 || !valori.some(v => v.trim())) continue
+          const idx = (n: string) => header.findIndex(h => h.includes(n))
+          const get = (n: string) => valori[Math.max(0, idx(n))] || ''
+          const q = parseFloat(get('quant') || get('qta') || '0') || 0
+          const p = parseFloat(get('prezz') || get('pu') || get('unitario') || get('prezzo') || '0') || 0
+          vociDaInserire.push({
+            computo_id: computoId,
+            capitolo: get('cap') || get('sezione') || get('capitolo') || 'Importato',
+            codice: (get('codice') || get('cod') || `CSV${i.toString().padStart(3,'0')}`).slice(0,30),
+            codice_prezzario: get('prezzario') || get('tariffa') || '',
+            descrizione: (get('descriz') || get('desc') || get('lavorazione') || valori[0] || `Voce ${i}`).slice(0,1000),
+            um: (get('um') || get('unita') || get('misura') || 'nr').slice(0,10),
+            quantita: q, prezzo_unitario: p, importo: q * p,
+            pct_manodopera: parseFloat(get('manod') || '30') || 30,
+            pct_materiali: parseFloat(get('mater') || '45') || 45,
+            pct_noli: parseFloat(get('noli') || '12') || 12, selezionata: true
+          })
+        }
+      }
+
+      if (vociDaInserire.length === 0) { setImportMsg('⚠️ Nessuna voce trovata. Verifica il formato.'); setImporting(false); return }
+
+      // Inserimento batch da 100
+      let tot = 0
+      for (let i = 0; i < vociDaInserire.length; i += 100) {
+        const { error } = await supabase.from('voci_computo').insert(vociDaInserire.slice(i, i + 100))
+        if (error) { setImportMsg(`❌ Errore DB: ${error.message}`); setImporting(false); return }
+        tot += Math.min(100, vociDaInserire.length - i)
+        setImportMsg(`Salvataggio ${tot}/${vociDaInserire.length}...`)
+      }
+      setImportMsg(`✅ Importate ${tot} voci!`)
+      await carica()
+    } catch(err) { setImportMsg(`❌ Errore: ${String(err)}`) }
+    setImporting(false)
+    setTimeout(() => { setShowImport(false); setImportMsg('') }, 4000)
+  }
   async function salvaVoce() {
     if (!form.descrizione.trim()) return
     setSaving(true)
@@ -185,7 +215,7 @@ export default function ComputoPage() {
           <p style={{ fontSize: 12, color: 'var(--t3)', marginTop: 3 }}>{voci.length} voci · Totale: <strong>€ {fmt(totaleImporto)}</strong></p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setShowImport(true)} className="btn-secondary" style={{ fontSize: 12 }}><Upload size={13} /> Importa CSV</button>
+          <button onClick={() => setShowImport(true)} className="btn-secondary" style={{ fontSize: 12 }}><Upload size={13} /> Importa file</button>
           <button onClick={() => { setShowForm(true); setEditingId(null); setForm({ ...FORM_VUOTO }) }} className="btn-primary" style={{ fontSize: 12 }}><Plus size={13} /> Nuova voce</button>
         </div>
       </div>
@@ -303,6 +333,7 @@ export default function ComputoPage() {
           <div className="modal-box" style={{ maxWidth: 520 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', margin: 0 }}>Importa Computo Metrico</h2>
+                  <p style={{ fontSize: 11, color: '#64748b', marginTop: 2, margin: 0 }}>Supporta Primus XPWE e CSV</p>
               <button onClick={() => { setShowImport(false); setImportMsg('') }} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: 8, cursor: 'pointer' }}><X size={15} color="#64748b" /></button>
             </div>
             {importMsg ? (
