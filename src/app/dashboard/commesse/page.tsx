@@ -214,11 +214,13 @@ async function creaCommessa() {
         stato: form.stato||'AGGIUDICATA',
         data_aggiudicazione: form.data_aggiudicazione||null,
         data_fine_contrattuale: form.data_fine_contrattuale||null,
-        durata_giorni: form.durata_giorni||365,
+        durata_gg: form.durata_giorni||365,
         rup_nome: form.rup_nome||null,
         rup_email: form.rup_email||null,
         dl_nome: form.dl_nome||null,
         dl_email: form.dl_email||null,
+        csp_nome: form.csp_nome||null,
+        cse_nome: form.cse_nome||null,
         note: form.note||null,
       }]).select('id,codice').single()
       if (error) { setErroreInsert(`Errore DB: ${error.message} [${error.code}]`); return }
