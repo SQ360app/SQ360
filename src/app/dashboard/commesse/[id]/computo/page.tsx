@@ -353,7 +353,7 @@ export default function ComputoPage() {
                   <Upload size={26} color="#94a3b8" style={{ marginBottom: 8 }} />
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 3 }}>Clicca per selezionare il file</div>
                   <div style={{ fontSize: 11, color: '#64748b' }}>CSV, XLS, XLSX</div>
-                  <input ref={fileRef} type="file" accept=".csv,.txt,.xpwe,.xml" style={{ display: 'none' }}
+                  <input ref={fileRef} type="file" accept=".csv,.txt,.xpwe,.xml,.xls,.xlsx" style={{ display: 'none' }}
                     onChange={e => { const f = e.target.files?.[0]; if (f) handleFileImport(f) }} />
                 </div>
                 <div style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 8, padding: '10px 12px', fontSize: 11, color: '#1e40af' }}>
