@@ -348,13 +348,24 @@ export async function POST(req: NextRequest) {
 
     try {
       const zip = new AdmZip(buffer)
-      const entries = zip.getEntries().filter(e => !e.isDirectory && e.getData().length > 50).sort((a, b) => b.getData().length - a.getData().length)
-      for (const entry of entries.slice(0, 5)) {
-        try { allContents.push(entry.getData().toString('utf8')) } catch { /* skip */ }
+      const entries = zip.getEntries().filter(e => !e.isDirectory && e.getData().length > 10)
+      // Log TUTTI i file nel ZIP
+      console.log('xpwe-zip files:', entries.map(e => e.entryName + '(' + e.getData().length + ')').join(' | '))
+      entries.sort((a, b) => b.getData().length - a.getData().length)
+      for (const entry of entries.slice(0, 8)) {
+        try {
+          const utf8 = entry.getData().toString('utf8')
+          console.log('xpwe-file[' + entry.entryName + '] head:', utf8.slice(0, 200))
+          allContents.push(utf8)
+        } catch { /* skip */ }
         try { allContents.push(entry.getData().toString('latin1')) } catch { /* skip */ }
       }
     } catch {
-      try { allContents.push(buffer.toString('utf8')) } catch { /* skip */ }
+      try {
+        const utf8 = buffer.toString('utf8')
+        console.log('xpwe-notzip head:', utf8.slice(0, 200))
+        allContents.push(utf8)
+      } catch { /* skip */ }
       try { allContents.push(buffer.toString('latin1')) } catch { /* skip */ }
     }
 
