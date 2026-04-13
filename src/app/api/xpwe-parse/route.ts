@@ -25,39 +25,40 @@ function stripTags(t: string): string {
   return t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
-// Estrae il testo del primo tag trovato (usa indexOf, no regex problematici)
-function getTag(xml: string, tagName: string): string {
-  const open = '<' + tagName
-  const close = '</' + tagName + '>'
-  let p = 0
-  while (p < xml.length) {
-    const s = xml.indexOf(open, p)
-    if (s < 0) return ''
-    const ca = xml[s + open.length]
-    if (ca === '>' || ca === ' ' || ca === '\n' || ca === '\r' || ca === '\t') {
-      const eGt = xml.indexOf('>', s)
-      if (eGt < 0) return ''
-      const ec = xml.indexOf(close, eGt)
-      if (ec < 0) return ''
-      return stripTags(stripCDATA(xml.slice(eGt + 1, ec))).trim()
+// Estrae testo del primo tag trovato — gestisce namespace prefix automaticamente
+// es: getTag(xml, 'Row') trova sia <Row> che <ss:Row> che <x:Row>
+function getTag(xml: string, localName: string): string {
+  const candidates = [localName, 'ss:' + localName, 'x:' + localName, 'o:' + localName]
+  for (const tagName of candidates) {
+    const open = '<' + tagName
+    const close = '</' + tagName + '>'
+    let p = 0
+    while (p < xml.length) {
+      const s = xml.indexOf(open, p)
+      if (s < 0) break
+      const ca = xml[s + open.length]
+      if (ca === '>' || ca === ' ' || ca === '\n' || ca === '\r' || ca === '\t' || ca === '/') {
+        const eGt = xml.indexOf('>', s)
+        if (eGt < 0) break
+        const ec = xml.indexOf(close, eGt)
+        if (ec >= 0) return stripTags(stripCDATA(xml.slice(eGt + 1, ec))).trim()
+        break
+      }
+      p = s + 1
     }
-    p = s + 1
   }
   return ''
 }
 
-// Estrae il valore di un attributo
 function getAttr(xml: string, attrName: string): string {
-  const p1 = attrName + '="'
-  const s1 = xml.indexOf(p1)
-  if (s1 >= 0) { const st = s1 + p1.length; const en = xml.indexOf('"', st); if (en >= 0) return xml.slice(st, en).trim() }
-  const p2 = attrName + "='"
-  const s2 = xml.indexOf(p2)
-  if (s2 >= 0) { const st = s2 + p2.length; const en = xml.indexOf("'", st); if (en >= 0) return xml.slice(st, en).trim() }
+  for (const q of ['"', "'"]) {
+    const p = attrName + '=' + q
+    const s = xml.indexOf(p)
+    if (s >= 0) { const st = s + p.length; const en = xml.indexOf(q, st); if (en >= 0) return xml.slice(st, en).trim() }
+  }
   return ''
 }
 
-// Primo valore trovato tra nomi multipli
 function firstTag(xml: string, ...names: string[]): string {
   for (const n of names) { const v = getTag(xml, n); if (v) return v }
   return ''
@@ -67,8 +68,17 @@ function firstAttr(xml: string, ...names: string[]): string {
   return ''
 }
 
-// Parser bilanciato di blocchi con lo stesso tag (gestisce annidamento)
-function blocks(xml: string, tagName: string): string[] {
+// Parser bilanciato — cerca sia <Tag> che <ns:Tag>
+function blocks(xml: string, localName: string): string[] {
+  const candidates = [localName, 'ss:' + localName, 'x:' + localName, 'o:' + localName]
+  for (const tagName of candidates) {
+    const res = blocksExact(xml, tagName)
+    if (res.length > 0) return res
+  }
+  return []
+}
+
+function blocksExact(xml: string, tagName: string): string[] {
   const res: string[] = []
   const open = '<' + tagName
   const close = '</' + tagName + '>'
@@ -78,6 +88,9 @@ function blocks(xml: string, tagName: string): string[] {
     if (si < 0) break
     const ca = xml[si + open.length]
     if (ca !== '>' && ca !== ' ' && ca !== '\n' && ca !== '\r' && ca !== '\t' && ca !== '/') { pos = si + 1; continue }
+    // Self-closing?
+    const firstGt = xml.indexOf('>', si)
+    if (firstGt > 0 && xml[firstGt - 1] === '/') { pos = firstGt + 1; continue }
     let depth = 1, search = si + open.length
     while (depth > 0 && search < xml.length) {
       const no = xml.indexOf(open, search)
@@ -107,222 +120,202 @@ function parseNum(s: string): number {
   return parseFloat(c.replace(',', '.')) || 0
 }
 
-// ── STRATEGIA A: Formato Primus DEI con ElencoPrezzi + AlberoVoci ─────────────
-// I VersoVoce hanno IDVoce che referenzia ElemElenco nel ElencoPrezzi
-
-function parsePrimusStandard(xml: string): VoceParsed[] {
-  const voci: VoceParsed[] = []
-
-  // 1. Costruisco mappa ID → {codice, descrizione, um, prezzo}
-  const lookup = new Map<string, { codice: string; descrizione: string; um: string; prezzo: number }>()
-
-  const elencoSection = blocks(xml, 'ElencoPrezzi')[0] || blocks(xml, 'Listino')[0] || ''
-  const elencoItems = firstBlocks(elencoSection || xml,
-    'ElemElenco', 'ArticoloElenco', 'VoceElenco', 'ElemListino',
-    'PrezzoElemento', 'Elemento', 'Articolo', 'ElencoVoce'
-  )
-
-  for (const item of elencoItems) {
-    const id = firstAttr(item, 'IDVoce', 'ID', 'CodBreve') ||
-               firstTag(item, 'IDVoce', 'CodBreve', 'Codice', 'ID')
-    const desc = firstTag(item, 'Descrizione', 'DescrizioneEstesa', 'Description', 'Testo', 'DescrizioneVoce')
-    if (!id || !desc) continue
-    lookup.set(id, {
-      codice: firstTag(item, 'CodBreve', 'Codice', 'CodiceVoce') || id,
-      descrizione: desc.slice(0, 2000),
-      um: firstTag(item, 'UnMis', 'UnitaMisura', 'UM', 'Unit') || 'nr',
-      prezzo: parseNum(firstTag(item, 'PrezzoUnitario', 'Prezzo', 'PU', 'CostoUnitario'))
-    })
-  }
-
-  if (lookup.size === 0) return [] // Nessun ElencoPrezzi trovato
-
-  // 2. Scorro l'albero delle voci
-  function processCapitolo(capXml: string, nomeCap: string) {
-    // Cerca VersoVoce diretti
-    const vociBlocks = firstBlocks(capXml,
-      'VersoVoce', 'VoceAlbero', 'VersoDeiVoci', 'NodoVoce', 'VoceComputo'
-    )
-
-    let hasValidVoci = false
-    for (const v of vociBlocks) {
-      const tipo = firstAttr(v, 'TipoVoce', 'Tipo', 'Type')
-      if (['U','T','S','G','H','CAPITOLO','TITOLO'].includes(tipo.toUpperCase())) continue
-
-      const voceId = firstAttr(v, 'IDVoce', 'ID', 'CodBreve', 'IDArticolo') ||
-                     firstTag(v, 'IDVoce', 'CodBreve', 'Codice')
-
-      const priceData = voceId ? lookup.get(voceId) : null
-
-      const desc = priceData?.descrizione ||
-                   firstTag(v, 'Descrizione', 'DescrizioneVoce', 'Description', 'Testo', 'DesBreve')
-      if (!desc || desc.length < 3) continue
-
-      const qt = parseNum(firstTag(v, 'SommaMisure', 'Quantita', 'QuantitaTotale', 'Qt', 'Qta', 'TotaleQuantita', 'QuantitaComplessiva'))
-      const pu = priceData?.prezzo || parseNum(firstTag(v, 'PrezzoUnitario', 'Prezzo', 'PU'))
-      const um = priceData?.um || firstTag(v, 'UnMis', 'UnitaMisura', 'UM', 'Unit') || 'nr'
-      const cod = priceData?.codice || firstAttr(v, 'IDVoce', 'CodBreve', 'ID') || ('V' + (voci.length + 1))
-
-      voci.push({
-        capitolo: nomeCap.slice(0, 150),
-        codice: cod.slice(0, 50),
-        descrizione: desc,
-        um: um.slice(0, 10),
-        quantita: qt,
-        prezzo_unitario: pu,
-        importo: Math.round(qt * pu * 100) / 100
-      })
-      hasValidVoci = true
-    }
-
-    if (!hasValidVoci || vociBlocks.length === 0) {
-      // Scendi nei sottocapitoli
-      const subCaps = firstBlocks(capXml,
-        'RamoDeiVoci', 'CapitoloDeiVoci', 'Capitolo', 'Chapter',
-        'NodoAlbero', 'GruppoArticoli', 'SezioneComputo', 'WBS'
-      )
-      for (const sub of subCaps) {
-        const subNome = firstAttr(sub, 'Descrizione', 'Description', 'Nome', 'Name', 'Titolo') ||
-                        firstTag(sub, 'Descrizione', 'Nome', 'Titolo') || nomeCap
-        const nomeCompleto = subNome !== nomeCap ? (nomeCap + ' > ' + subNome) : nomeCap
-        processCapitolo(sub, nomeCompleto)
-      }
-    }
-  }
-
-  // Trova i capitoli top-level
-  const alberonXml = blocks(xml, 'AlberoVoci')[0] ||
-                     blocks(xml, 'Computo')[0] ||
-                     blocks(xml, 'ComputoMetrico')[0] || xml
-
-  const capTopLevel = firstBlocks(alberonXml,
-    'RamoDeiVoci', 'CapitoloDeiVoci', 'Capitolo', 'Chapter',
-    'NodoAlbero', 'GruppoArticoli', 'SezioneComputo', 'WBS'
-  )
-
-  for (const cap of capTopLevel) {
-    const nome = firstAttr(cap, 'Descrizione', 'Description', 'Nome', 'Name', 'Titolo') ||
-                 firstTag(cap, 'Descrizione', 'Nome', 'Titolo') || 'Capitolo'
-    processCapitolo(cap, nome)
-  }
-
-  return voci
-}
-
-// ── STRATEGIA B: SpreadsheetML (<?mso-application progid="Excel.Sheet"?>) ─────
-// Primus a volte esporta XPWE come Excel XML SpreadsheetML
+// ── STRATEGIA A: SpreadsheetML (<?mso-application progid="Excel.Sheet"?>) ─────
+// Primus/DEI esporta XPWE come SpreadsheetML. Le righe possono avere namespace.
 
 function parseSpreadsheetML(xml: string): VoceParsed[] {
   const voci: VoceParsed[] = []
 
-  // Trova il primo foglio di lavoro con dati
+  // Trova tutti i worksheet
   const worksheetBlocks = blocks(xml, 'Worksheet')
-  if (worksheetBlocks.length === 0) return []
+  if (worksheetBlocks.length === 0) {
+    console.log('SpreadsheetML: nessun Worksheet trovato')
+    // Debug: mostra i primi 200 chars per capire la struttura
+    const debug = xml.slice(0, 500).replace(/\n/g, ' ')
+    console.log('XML head:', debug)
+    return []
+  }
 
-  // Prende il foglio più grande (più dati)
+  // Prende il worksheet più grande
   const mainWs = worksheetBlocks.sort((a, b) => b.length - a.length)[0]
+  const wsName = getAttr(mainWs, 'ss:Name') || getAttr(mainWs, 'Name') || ''
+  console.log('SpreadsheetML: worksheet=' + wsName + ' size=' + mainWs.length)
+
+  // Trova la tabella
   const tableBlock = blocks(mainWs, 'Table')[0] || mainWs
+
+  // Legge tutte le righe
   const rowBlocks = blocks(tableBlock, 'Row')
+  console.log('SpreadsheetML: rows=' + rowBlocks.length)
   if (rowBlocks.length < 2) return []
 
-  // Prima riga = intestazioni
-  const getCellData = (rowXml: string): string[] => {
-    return blocks(rowXml, 'Cell').map(cell => {
-      const data = getTag(cell, 'Data') || firstAttr(cell, 'ss:Value') || ''
+  // Estrae il testo di ogni cella di una riga
+  const getCells = (rowXml: string): string[] => {
+    const cellBlocks = blocks(rowXml, 'Cell')
+    return cellBlocks.map(cell => {
+      // Prova ss:Data, Data, o valore diretto
+      const data = getTag(cell, 'Data') || getTag(cell, 'ss:Data') || ''
       return stripTags(data).trim()
     })
   }
 
-  const headers = getCellData(rowBlocks[0]).map(h => h.toLowerCase().replace(/[^a-z0-9_àèéìòùì]/g, ''))
+  // Prima riga = intestazione
+  const hdr = getCells(rowBlocks[0]).map(h => h.toLowerCase().replace(/[^a-zàèéìòù0-9_]/g, ''))
+  console.log('SpreadsheetML: headers=' + hdr.slice(0,8).join('|'))
 
-  const idx = (keywords: string[]) => headers.findIndex(h => keywords.some(k => h.includes(k)))
-  const iCap = idx(['cap', 'categ', 'titol'])
-  const iCod = idx(['cod', 'tar'])
-  const iDesc = idx(['desc', 'lav', 'ogg'])
+  const idx = (kws: string[]) => hdr.findIndex(h => kws.some(k => h.includes(k)))
+  const iCap = idx(['cap', 'categ', 'titol', 'sez'])
+  const iCod = idx(['cod', 'tar', 'num'])
+  const iDesc = idx(['desc', 'lav', 'ogg', 'voc'])
   const iUm = idx(['um', 'unit', 'mis'])
-  const iQt = idx(['quan', 'qta', 'qt'])
-  const iPu = idx(['prezz', 'pu', 'unitario'])
+  const iQt = idx(['quan', 'qta', 'qt', 'mis'])
+  const iPu = idx(['prezz', 'pu', 'unitario', 'costo'])
   const iImp = idx(['imp', 'tot', 'import'])
 
-  if (iDesc < 0) return [] // Nessuna colonna descrizione
+  console.log('SpreadsheetML: iDesc=' + iDesc + ' iQt=' + iQt + ' iPu=' + iPu)
+
+  // Se non troviamo descrizione nell'header, prova approccio euristico (nessun header)
+  if (iDesc < 0 && rowBlocks.length > 1) {
+    // Prova a rilevare le colonne dalla struttura delle prime righe dati
+    const sample = getCells(rowBlocks[1])
+    console.log('SpreadsheetML: sample row1=' + JSON.stringify(sample.slice(0,6)))
+  }
 
   let lastCap = 'Importato'
 
   for (let r = 1; r < rowBlocks.length; r++) {
-    const cells = getCellData(rowBlocks[r])
+    const cells = getCells(rowBlocks[r])
     if (!cells.some(c => c.trim())) continue
 
-    const desc = iDesc >= 0 ? cells[iDesc] || '' : ''
-    if (!desc || desc.length < 3) {
-      // Riga capitolo?
-      if (iCap >= 0 && cells[iCap]) lastCap = cells[iCap]
-      else if (cells[0] && cells.filter(c => c).length <= 2) lastCap = cells[0]
+    // Riga capitolo: molte celle vuote con solo 1-2 valori
+    const nonEmpty = cells.filter(c => c.trim())
+    if (nonEmpty.length <= 2 && cells.some(c => c.length > 10)) {
+      lastCap = nonEmpty.find(c => c.length > 5) || lastCap
       continue
     }
 
-    const qt = parseNum(iQt >= 0 ? cells[iQt] : '')
-    const pu = parseNum(iPu >= 0 ? cells[iPu] : '')
-    const imp = parseNum(iImp >= 0 ? cells[iImp] : '') || Math.round(qt * pu * 100) / 100
-    const cod = (iCod >= 0 ? cells[iCod] : '') || ('R' + r)
-    const um = (iUm >= 0 ? cells[iUm] : '') || 'nr'
+    const desc = iDesc >= 0 ? cells[iDesc] : (cells[2] || cells[1] || '')
+    if (!desc || desc.length < 3) {
+      if (cells[0] && cells.filter(c=>c).length <= 2) lastCap = cells.find(c=>c.length>5) || lastCap
+      continue
+    }
+
+    const qt = parseNum(iQt >= 0 ? cells[iQt] : cells[4] || '')
+    const pu = parseNum(iPu >= 0 ? cells[iPu] : cells[5] || '')
+    const imp = parseNum(iImp >= 0 ? cells[iImp] : cells[6] || '') || Math.round(qt * pu * 100) / 100
+    const cod = (iCod >= 0 ? cells[iCod] : cells[1] || '').slice(0, 50) || ('R' + r)
+    const um = (iUm >= 0 ? cells[iUm] : cells[3] || '').slice(0, 10) || 'nr'
     const cap = (iCap >= 0 && cells[iCap]) ? cells[iCap] : lastCap
+
+    if (qt === 0 && pu === 0 && imp === 0) continue // Riga vuota/capitolo
 
     voci.push({
       capitolo: cap.slice(0, 150),
-      codice: cod.slice(0, 50),
+      codice: cod,
       descrizione: desc.slice(0, 2000),
-      um: um.slice(0, 10),
+      um,
       quantita: qt,
       prezzo_unitario: pu,
-      importo: imp
+      importo: imp || Math.round(qt * pu * 100) / 100
     })
   }
 
   return voci
 }
 
-// ── STRATEGIA C: XML flat (voci inline senza price list separata) ────────────
-function parsePrimusFlat(xml: string): VoceParsed[] {
+// ── STRATEGIA B: Primus Standard (ElencoPrezzi + AlberoVoci) ──────────────────
+
+function parsePrimusStandard(xml: string): VoceParsed[] {
   const voci: VoceParsed[] = []
 
-  function processBlock(blockXml: string, capNome: string) {
-    const capBlocks = firstBlocks(blockXml,
-      'RamoDeiVoci', 'CapitoloDeiVoci', 'Capitolo', 'Chapter',
-      'GruppoArticoli', 'NodoAlbero', 'SezioneComputo', 'WBS', 'Gruppo'
+  const lookup = new Map<string, { codice: string; descrizione: string; um: string; prezzo: number }>()
+
+  const elencoSection = blocks(xml, 'ElencoPrezzi')[0] || blocks(xml, 'Listino')[0] || ''
+  if (elencoSection) {
+    const elencoItems = firstBlocks(elencoSection,
+      'ElemElenco', 'ArticoloElenco', 'VoceElenco', 'ElemListino', 'Elemento', 'Articolo'
     )
+    for (const item of elencoItems) {
+      const id = firstAttr(item, 'IDVoce', 'ID', 'CodBreve') || firstTag(item, 'IDVoce', 'CodBreve', 'Codice', 'ID')
+      const desc = firstTag(item, 'Descrizione', 'DescrizioneEstesa', 'Description', 'Testo')
+      if (!id || !desc) continue
+      lookup.set(id, { codice: firstTag(item, 'CodBreve', 'Codice') || id, descrizione: desc.slice(0, 2000), um: firstTag(item, 'UnMis', 'UnitaMisura', 'UM') || 'nr', prezzo: parseNum(firstTag(item, 'PrezzoUnitario', 'Prezzo', 'PU')) })
+    }
+  }
+
+  function processCapitolo(capXml: string, nomeCap: string) {
+    const voceBlocks = firstBlocks(capXml, 'VersoVoce', 'VoceAlbero', 'VersoDeiVoci', 'NodoVoce', 'VoceComputo')
+    let hasVoci = false
+    for (const v of voceBlocks) {
+      const tipo = firstAttr(v, 'TipoVoce', 'Tipo', 'Type')
+      if (['U','T','S','G','H','CAPITOLO','TITOLO'].includes(tipo.toUpperCase())) continue
+      const voceId = firstAttr(v, 'IDVoce', 'ID', 'CodBreve') || firstTag(v, 'IDVoce', 'CodBreve')
+      const pd = voceId ? lookup.get(voceId) : null
+      const desc = pd?.descrizione || firstTag(v, 'Descrizione', 'DescrizioneVoce', 'Description', 'Testo', 'DesBreve')
+      if (!desc || desc.length < 3) continue
+      const qt = parseNum(firstTag(v, 'SommaMisure', 'Quantita', 'QuantitaTotale', 'Qt', 'Qta', 'TotaleQuantita'))
+      const pu = pd?.prezzo || parseNum(firstTag(v, 'PrezzoUnitario', 'Prezzo', 'PU'))
+      const um = pd?.um || firstTag(v, 'UnMis', 'UnitaMisura', 'UM') || 'nr'
+      const cod = pd?.codice || firstAttr(v, 'IDVoce', 'CodBreve') || ('V' + (voci.length + 1))
+      voci.push({ capitolo: nomeCap.slice(0,150), codice: cod.slice(0,50), descrizione: desc, um: um.slice(0,10), quantita: qt, prezzo_unitario: pu, importo: Math.round(qt*pu*100)/100 })
+      hasVoci = true
+    }
+    if (!hasVoci || voceBlocks.length === 0) {
+      const subCaps = firstBlocks(capXml, 'RamoDeiVoci', 'CapitoloDeiVoci', 'Capitolo', 'Chapter', 'NodoAlbero', 'GruppoArticoli', 'SezioneComputo', 'WBS')
+      for (const sub of subCaps) {
+        const subNome = firstAttr(sub, 'Descrizione', 'Description', 'Nome') || firstTag(sub, 'Descrizione', 'Nome') || nomeCap
+        processCapitolo(sub, subNome !== nomeCap ? nomeCap + ' > ' + subNome : nomeCap)
+      }
+    }
+  }
+
+  const alberonXml = blocks(xml, 'AlberoVoci')[0] || blocks(xml, 'Computo')[0] || xml
+  const capTopLevel = firstBlocks(alberonXml, 'RamoDeiVoci', 'CapitoloDeiVoci', 'Capitolo', 'Chapter', 'NodoAlbero', 'GruppoArticoli', 'SezioneComputo', 'WBS')
+  for (const cap of capTopLevel) {
+    const nome = firstAttr(cap, 'Descrizione', 'Description', 'Nome') || firstTag(cap, 'Descrizione', 'Nome') || 'Capitolo'
+    processCapitolo(cap, nome)
+  }
+  return voci
+}
+
+// ── STRATEGIA C: Flat XML ─────────────────────────────────────────────────────
+
+function parsePrimusFlat(xml: string): VoceParsed[] {
+  const voci: VoceParsed[] = []
+  function processBlock(blockXml: string, capNome: string) {
+    const capBlocks = firstBlocks(blockXml, 'RamoDeiVoci', 'CapitoloDeiVoci', 'Capitolo', 'Chapter', 'GruppoArticoli', 'NodoAlbero', 'SezioneComputo', 'WBS', 'Gruppo')
     if (capBlocks.length > 0) {
       for (const cap of capBlocks) {
-        const nome = firstAttr(cap, 'Descrizione', 'Description', 'Nome', 'Name') ||
-                     firstTag(cap, 'Descrizione', 'Nome', 'Titolo') || capNome
+        const nome = firstAttr(cap, 'Descrizione', 'Description', 'Nome') || firstTag(cap, 'Descrizione', 'Nome') || capNome
         processBlock(cap, nome)
       }
       return
     }
-
-    const voceBlocks = firstBlocks(blockXml,
-      'VersoVoce', 'VoceAlbero', 'SintesiArticolo', 'VoceComputo',
-      'Voce', 'Articolo', 'Item', 'Lavorazione', 'Prestazione', 'RigaComputo', 'Row'
-    )
+    const voceBlocks = firstBlocks(blockXml, 'VersoVoce', 'VoceAlbero', 'SintesiArticolo', 'VoceComputo', 'Voce', 'Articolo', 'Item', 'Lavorazione', 'Prestazione', 'RigaComputo')
     for (const v of voceBlocks) {
       const tipo = firstAttr(v, 'TipoVoce', 'Tipo', 'Type')
       if (['U','T','S','G','H'].includes(tipo.toUpperCase())) continue
       const desc = firstTag(v, 'Descrizione', 'DescrizioneVoce', 'Description', 'Testo', 'DesBreve', 'Oggetto')
       if (!desc || desc.length < 3) continue
-      const qt = parseNum(firstTag(v, 'Quantita', 'SommaMisure', 'Qt', 'Qta', 'QuantitaTotale', 'TotaleQuantita'))
-      const pu = parseNum(firstTag(v, 'PrezzoUnitario', 'PrezzoArticolo', 'Prezzo', 'PU', 'Price'))
+      const qt = parseNum(firstTag(v, 'Quantita', 'SommaMisure', 'Qt', 'Qta', 'QuantitaTotale'))
+      const pu = parseNum(firstTag(v, 'PrezzoUnitario', 'PrezzoArticolo', 'Prezzo', 'PU'))
       const um = firstTag(v, 'UnMis', 'UnitaMisura', 'UM', 'Unit') || 'nr'
-      const cod = firstTag(v, 'Codice', 'CodiceVoce', 'CodBreve', 'Code') || firstAttr(v, 'IDVoce', 'ID') || ('V' + (voci.length + 1))
-      voci.push({ capitolo: capNome.slice(0, 150), codice: cod.slice(0, 50), descrizione: desc.slice(0, 2000), um: um.slice(0, 10), quantita: qt, prezzo_unitario: pu, importo: Math.round(qt * pu * 100) / 100 })
+      const cod = firstTag(v, 'Codice', 'CodiceVoce', 'CodBreve') || firstAttr(v, 'IDVoce', 'ID') || ('V' + (voci.length + 1))
+      voci.push({ capitolo: capNome.slice(0,150), codice: cod.slice(0,50), descrizione: desc.slice(0,2000), um: um.slice(0,10), quantita: qt, prezzo_unitario: pu, importo: Math.round(qt*pu*100)/100 })
     }
   }
-
   processBlock(xml, 'Importato')
   return voci
 }
 
-// ── FALLBACK: Claude AI ───────────────────────────────────────────────────────
+// ── CLAUDE AI FALLBACK ────────────────────────────────────────────────────────
+
 async function parseWithClaude(xml: string, apiKey: string): Promise<VoceParsed[]> {
-  const prompt = 'Sei un esperto di computi metrici edili italiani. Analizza questo XML/documento Primus DEI ed estrai TUTTE le voci del computo con quantita e prezzi. Ignora le categorie/supercategorie senza quantità. RISPONDI SOLO con JSON array, nessun testo. Schema: [{"capitolo":"","codice":"","descrizione":"DESCRIZIONE COMPLETA","um":"nr","quantita":0,"prezzo_unitario":0,"importo":0}]. Includi SOLO voci che hanno quantita > 0 o prezzo > 0. XML: ' + xml.slice(0, 8000)
+  const isExcel = xml.includes('mso-application') || xml.includes('Workbook')
+  const hint = isExcel
+    ? 'Il file è in formato SpreadsheetML (Excel XML). Ogni <Row> contiene <Cell><Data> con i valori. Ignora le righe che sono capitoli/titoli (quelle senza quantità e prezzo). Estrai solo le righe con descrizione, quantità e prezzo.'
+    : 'Il file è un XML Primus DEI. Estrai tutte le voci con descrizione, quantità e prezzo.'
+  const prompt = 'Sei un esperto di computi metrici edili italiani. ' + hint + ' RISPONDI SOLO con JSON array senza markdown. Schema: [{"capitolo":"","codice":"","descrizione":"DESCRIZIONE COMPLETA","um":"nr","quantita":0,"prezzo_unitario":0,"importo":0}]. Includi SOLO voci con quantita > 0 o prezzo > 0. XML: ' + xml.slice(0, 8000)
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
@@ -337,6 +330,7 @@ async function parseWithClaude(xml: string, apiKey: string): Promise<VoceParsed[
 }
 
 // ── MAIN ─────────────────────────────────────────────────────────────────────
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData()
@@ -348,25 +342,16 @@ export async function POST(req: NextRequest) {
 
     try {
       const zip = new AdmZip(buffer)
-      const entries = zip.getEntries().filter(e => !e.isDirectory && e.getData().length > 10)
-      // Log TUTTI i file nel ZIP
-      console.log('xpwe-zip files:', entries.map(e => e.entryName + '(' + e.getData().length + ')').join(' | '))
-      entries.sort((a, b) => b.getData().length - a.getData().length)
-      for (const entry of entries.slice(0, 8)) {
-        try {
-          const utf8 = entry.getData().toString('utf8')
-          console.log('xpwe-file[' + entry.entryName + '] head:', utf8.slice(0, 200))
-          allContents.push(utf8)
-        } catch { /* skip */ }
+      const entries = zip.getEntries().filter(e => !e.isDirectory && e.getData().length > 50).sort((a, b) => b.getData().length - a.getData().length)
+      for (const entry of entries.slice(0, 5)) {
+        try { allContents.push(entry.getData().toString('utf8')) } catch { /* skip */ }
         try { allContents.push(entry.getData().toString('latin1')) } catch { /* skip */ }
       }
+      console.log('xpwe: ZIP entries=' + entries.length)
     } catch {
-      try {
-        const utf8 = buffer.toString('utf8')
-        console.log('xpwe-notzip head:', utf8.slice(0, 200))
-        allContents.push(utf8)
-      } catch { /* skip */ }
+      try { allContents.push(buffer.toString('utf8')) } catch { /* skip */ }
       try { allContents.push(buffer.toString('latin1')) } catch { /* skip */ }
+      console.log('xpwe: not ZIP, reading as text, head=' + buffer.toString('utf8').slice(0, 100).replace(/\n/g,' '))
     }
 
     const contents = allContents.filter(c => c && c.trim().length > 50)
@@ -376,38 +361,37 @@ export async function POST(req: NextRequest) {
     let bestContent = contents[0]
 
     for (const content of contents) {
-      // Tenta le 3 strategie in ordine
-      const isSpreadsheetML = content.includes('mso-application') || content.includes('Workbook') || content.includes('Worksheet')
+      const isSpreadsheet = content.includes('mso-application') || content.includes('Workbook') || content.includes('Worksheet')
       let v: VoceParsed[] = []
 
-      if (isSpreadsheetML) {
+      if (isSpreadsheet) {
         v = parseSpreadsheetML(content)
-        console.log('xpwe SpreadsheetML voci=' + v.length)
+        console.log('xpwe: SpreadsheetML=' + v.length)
       }
 
       if (v.length === 0) {
         v = parsePrimusStandard(content)
-        console.log('xpwe PrimusStandard voci=' + v.length)
+        console.log('xpwe: PrimusStd=' + v.length)
       }
 
       if (v.length === 0) {
         v = parsePrimusFlat(content)
-        console.log('xpwe PrimusFlat voci=' + v.length)
+        console.log('xpwe: PrimusFlat=' + v.length)
       }
 
       if (v.length > voci.length) { voci = v; bestContent = content }
     }
 
     const xmlPreview = bestContent.slice(0, 600)
-    console.log('xpwe-final voci=' + voci.length + ' head=' + xmlPreview.slice(0, 200))
 
     if (voci.length === 0) {
       const apiKey = process.env.ANTHROPIC_API_KEY
+      console.log('xpwe: fallback Claude AI, xmlHead=' + xmlPreview.slice(0, 200).replace(/\n/g,' '))
       if (apiKey) {
         voci = await parseWithClaude(bestContent, apiKey)
         if (voci.length > 0) return NextResponse.json({ ok: true, voci, fonte: 'AI', totale: voci.length, xmlPreview })
       }
-      return NextResponse.json({ ok: false, errore: 'Formato XPWE non riconosciuto. Struttura XML non supportata.', xmlPreview })
+      return NextResponse.json({ ok: false, errore: 'Formato non riconosciuto.', xmlPreview })
     }
 
     return NextResponse.json({ ok: true, voci, fonte: 'parser', totale: voci.length, xmlPreview })
