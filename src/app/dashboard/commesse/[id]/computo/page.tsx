@@ -97,10 +97,10 @@ export default function ComputoPage() {
         setImportMsg('🏗 Lettura file Primus XPWE...')
         const fd = new FormData(); fd.append('file', file)
         const res = await fetch('/api/xpwe-parse', { method: 'POST', body: fd })
-        const json = await res.json() as { ok: boolean; voci?: Array<Record<string,unknown>>; errore?: string }
+        const json = await res.json() as { ok: boolean; voci?: Array<Record<string,unknown>>; errore?: string; xmlPreview?: string }
         if (!json.ok || !json.voci) { 
-          const preview = json.xmlPreview ? `\n\nPrime 200 caratteri XML:\n${json.xmlPreview}` : ''
-          setImportMsg(`❌ ${json.errore || 'Errore lettura XPWE'}${preview}`)
+          const preview = json.xmlPreview ? (' — XML: ' + json.xmlPreview.slice(0, 100)) : ''
+          setImportMsg('❌ ' + (json.errore || 'Errore lettura XPWE') + preview)
           setImporting(false); return 
         }
         setImportMsg(`Trovate ${json.voci.length} voci Primus. Salvataggio...`)
