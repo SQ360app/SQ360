@@ -267,7 +267,8 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    return NextResponse.json({ ok: true, voci, fonte: 'parser', totale: voci.length })
+    console.log('xpwe-ok voci=' + voci.length + ' xmlHead=' + bestContent.slice(0,300))
+    return NextResponse.json({ ok: true, voci, fonte: 'parser', totale: voci.length, xmlPreview: bestContent.slice(0,500) })
 
   } catch (err) {
     console.error('xpwe-parse error:', String(err))
