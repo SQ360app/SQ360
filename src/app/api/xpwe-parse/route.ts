@@ -267,4 +267,10 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    re
+    return NextResponse.json({ ok: true, voci, fonte: 'parser', totale: voci.length })
+
+  } catch (err) {
+    console.error('xpwe-parse error:', String(err))
+    return NextResponse.json({ ok: false, errore: 'Errore: ' + String(err) }, { status: 500 })
+  }
+}
