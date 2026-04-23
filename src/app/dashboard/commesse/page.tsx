@@ -146,21 +146,71 @@ export default function CommessePage() {
   }
 
   async function handleFileImport(file: File) {
-    if (file.type === 'application/pdf') {
-      setStep('FORM'); setAiOk(false); setAiMsg('⚠️ PDF non supportato — usa TXT o DOCX'); return
-    }
-    setStep('AI_LOADING'); setAiMsg('Lettura documento...'); setAiOk(null)
+    setStep('AI_LOADING'); setAiMsg('Analisi documento...'); setAiOk(null)
     try {
-      let testo: string
+      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
       const isDocx = file.name.toLowerCase().endsWith('.docx') || file.type.includes('officedocument')
-      if (isDocx) {
-        setAiMsg('Estrazione testo DOCX...')
-        const fd = new FormData(); fd.append('file', file)
-        const dr = await fetch('/api/docx-text', { method:'POST', body: fd })
-        const dj = await dr.json() as {ok:boolean; testo?:string; errore?:string}
-        if (!dj.ok || !dj.testo) {
-          setAiOk(false); setAiMsg(`⚠️ DOCX non leggibile: ${dj.errore||'errore'} — compila manualmente`); setStep('FORM'); return
-        }
+ 
+      setAiMsg(isPdf ? '📄 AI legge il PDF...' : isDocx ? '📝 Analisi DOCX...' : '🔍 AI estrae i dati...')
+ 
+      const fd = new FormData()
+      if (isPdf || isDocx) {
+        fd.append('file', file)
+      } else {
+        const testo = await file.text()
+        fd.append('testo', testo.slice(0, 9000))
+      }
+ 
+      const res = await fetch('/api/ai-import-contratto', { method: 'POST', body: fd })
+      const json = await res.json() as { ok: boolean; dati?: Record<string, unknown>; errore?: string }
+ 
+      if (json.ok && json.dati) {
+        const d = json.dati
+        const s = (v: unknown) => typeof v === 'string' ? v : ''
+        const n = (v: unknown) => parseFloat(String(v || '0')) || 0
+        const prov = (s(d.provincia) || 'NA').toUpperCase().slice(0, 2)
+        const cat = (s(d.categoria_prevalente) || 'GE').toUpperCase().slice(0, 2)
+        const durataGg = parseInt(String(d.durata_gg || d.durata_giorni || '365')) || 365
+ 
+        setForm(p => ({
+          ...p,
+          codice: generaCodice(prov, cat, commesse.length + 1),
+          nome: s(d.nome) || p.nome,
+          committente: s(d.committente) || p.committente,
+          cig: s(d.cig) || p.cig,
+          cup: s(d.cup) || p.cup,
+          importo_base: n(d.importo_base) || p.importo_base,
+          importo_aggiudicato: n(d.importo_aggiudicato) || n(d.importo_base) || p.importo_aggiudicato,
+          ribasso_pct: n(d.ribasso_pct) || p.ribasso_pct,
+          oneri_sicurezza: n(d.oneri_sicurezza) || p.oneri_sicurezza,
+          provincia: prov,
+          categoria: cat,
+          data_aggiudicazione: s(d.data_aggiudicazione) || p.data_aggiudicazione,
+          durata_giorni: durataGg,
+          indirizzo_cantiere: s(d.indirizzo_cantiere) || p.indirizzo_cantiere,
+          citta_cantiere: s(d.citta_cantiere) || p.citta_cantiere,
+          rup_nome: s(d.rup_nome) || p.rup_nome,
+          rup_email: s(d.rup_email) || p.rup_email,
+          rup_telefono: s(d.rup_telefono) || p.rup_telefono,
+          dl_nome: s(d.dl_nome) || p.dl_nome,
+          dl_email: s(d.dl_email) || p.dl_email,
+          dl_telefono: s(d.dl_telefono) || p.dl_telefono,
+          csp_nome: s(d.csp_nome) || p.csp_nome,
+          cse_nome: s(d.cse_nome) || p.cse_nome,
+          note: s(d.note) || p.note,
+        }))
+        setAiOk(true)
+        setAiMsg('✅ Dati estratti — verifica e integra i campi mancanti')
+      } else {
+        setAiOk(false)
+        setAiMsg(`⚠️ ${json.errore || 'Estrazione parziale'} — compila manualmente i campi`)
+      }
+    } catch (e) {
+      setAiOk(false)
+      setAiMsg(`❌ ${String(e)} — inserisci i dati manualmente`)
+    }
+    setStep('FORM')
+  }
         testo = dj.testo
       } else {
         testo = await file.text()
