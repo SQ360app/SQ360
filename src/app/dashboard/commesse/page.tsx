@@ -437,7 +437,7 @@ async function creaCommessa() {
                 <div style={{fontSize:15,fontWeight:700,color:'#1e293b',marginBottom:6}}>Importa documento</div>
                 <div style={{fontSize:12,color:'#64748b',marginBottom:6}}>TXT, DOCX — Contratto, Capitolato, Determina</div>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,fontSize:11,color:'#3b82f6',fontWeight:600}}><Sparkles size={13} /> AI compila i campi in automatico</div>
-                <input ref={fileRef} type="file" accept=".txt,.doc,.docx" style={{display:'none'}} onChange={e=>{const f=e.target.files?.[0];if(f)handleFileImport(f)}} />
+                <input ref={fileRef} type="file" accept=".txt,.doc,.docx,.pdf" style={{display:'none'}} onChange={e=>{const f=e.target.files?.[0];if(f)handleFileImport(f)}} />
               </div>
               <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}><div style={{flex:1,height:1,background:'#e2e8f0'}} /><span style={{fontSize:11,color:'#94a3b8'}}>oppure</span><div style={{flex:1,height:1,background:'#e2e8f0'}} /></div>
               <button onClick={()=>setStep('FORM')} className="btn-secondary" style={{width:'100%',justifyContent:'center'}}>Inserisci dati manualmente</button>
