@@ -89,15 +89,12 @@ function parseNum(s: string): number {
 }
 
 function parseRGItem(rgXml: string, pos: number): RigaMisura {
-  const nota = getTag(rgXml, 'Descrizione') || ''
-  // Conserva le stringhe originali — Primus permette espressioni es. "14.00+16.00+3.00"
+  const nota    = getTag(rgXml, 'Descrizione') || ''
   const nr_expr = getTag(rgXml, 'PartiUguali') || ''
   const a_expr  = getTag(rgXml, 'Lunghezza')   || ''
   const b_expr  = getTag(rgXml, 'Larghezza')   || ''
-  const h_expr  = getTag(rgXml, 'HPeso')        || ''
-  // q_parziale già calcolato da Primus — usalo come verità
+  const h_expr  = getTag(rgXml, 'HPeso')       || ''
   const q_parziale = parseNum(getTag(rgXml, 'Quantita'))
-  // Riga titolo = solo nota, nessun valore numerico, q=0
   const is_titolo = !nr_expr && !a_expr && !b_expr && !h_expr && q_parziale === 0
   return { posizione: pos, nota: nota.slice(0, 300), nr_expr, a_expr, b_expr, h_expr, q_parziale, is_titolo }
 }
@@ -169,8 +166,7 @@ function parsePrimusXPWE(xml: string): VoceParsed[] {
       misure
     })
   }
-  const totMisure = voci.reduce((s, v) => s + v.misure.length, 0)
-  console.log('xpwe OK: voci=' + voci.length + ' misure=' + totMisure)
+  console.log('xpwe OK: voci=' + voci.length + ' misure=' + voci.reduce((s, v) => s + v.misure.length, 0))
   return voci
 }
 
@@ -197,7 +193,7 @@ export async function POST(req: NextRequest) {
       const v = parsePrimusXPWE(content)
       if (v.length > voci.length) voci = v
     }
-    if (voci.length === 0) return NextResponse.json({ ok: false, errore: 'Formato non riconosciuto', xmlPreview: contents[0].slice(0, 200) })
+    if (voci.length === 0) return NextResponse.json({ ok: false, errore: 'Formato non riconosciuto' })
     return NextResponse.json({ ok: true, voci, fonte: 'parser', totale: voci.length, totale_misure: voci.reduce((s, v) => s + v.misure.length, 0) })
   } catch (err) {
     return NextResponse.json({ ok: false, errore: 'Errore: ' + String(err) }, { status: 500 })
