@@ -115,25 +115,15 @@ export default function ComputoPage() {
       const isXpwe = /\.(xpwe|xml)$/i.test(file.name)
       const computoId = await getOrCreateComputoId()
       if (!computoId) { setImportErr('Errore creazione computo'); setImporting(false); return }
-      let rows: Record<string, unknown>[] = []
-     if (isXpwe) {
+
+      if (isXpwe) {
         setImportMsg('Lettura Primus XPWE...')
         const fd = new FormData(); fd.append('file', file)
         const res = await fetch('/api/xpwe-parse', { method: 'POST', body: fd })
-        const json = await res.json() as {
-          ok: boolean
-          voci?: Array<Record<string, unknown>>
-          errore?: string
-          totale?: number
-          totale_misure?: number
-        }
-        if (!json.ok || !json.voci) {
-          setImportErr('Errore XPWE: ' + (json.errore || 'formato non riconosciuto'))
-          setImporting(false); return
-        }
+        const json = await res.json() as { ok: boolean; voci?: Array<Record<string, unknown>>; errore?: string; totale?: number; totale_misure?: number }
+        if (!json.ok || !json.voci) { setImportErr('Errore XPWE: ' + (json.errore || 'formato non riconosciuto')); setImporting(false); return }
 
-        setImportMsg(`Trovate ${json.voci.length} voci (${json.totale_misure || 0} righe misura). Salvataggio...`)
-
+        setImportMsg('Trovate ' + json.voci.length + ' voci (' + (json.totale_misure || 0) + ' righe misura). Salvataggio...')
         let tot = 0
         const voceIdMap: Array<{ voceId: string; misure: Array<Record<string,unknown>> }> = []
 
@@ -155,45 +145,27 @@ export default function ComputoPage() {
             tipo_costo: ['INT'],
             selezionata: true
           }))
-
-          const { data: savedVoci, error } = await supabase
-            .from('voci_computo').insert(rows).select('id')
+          const { data: savedVoci, error } = await supabase.from('voci_computo').insert(rows).select('id')
           if (error) { setImportErr('Errore DB: ' + error.message); setImporting(false); return }
-
           if (savedVoci) {
             savedVoci.forEach((sv: { id: string }, idx: number) => {
               const misureVoce = Array.isArray(chunk[idx]?.misure) ? chunk[idx].misure as Array<Record<string,unknown>> : []
-              if (misureVoce.length > 0) {
-                voceIdMap.push({ voceId: sv.id, misure: misureVoce })
-              }
+              if (misureVoce.length > 0) voceIdMap.push({ voceId: sv.id, misure: misureVoce })
             })
           }
-
           tot += chunk.length
-          setImportMsg(`Salvate ${tot}/${json.voci.length} voci...`)
+          setImportMsg('Salvate ' + tot + '/' + json.voci.length + ' voci...')
         }
 
         if (voceIdMap.length > 0) {
-          setImportMsg(`Salvataggio righe di misura...`)
+          setImportMsg('Salvataggio righe di misura...')
           const misureRows: Array<Record<string,unknown>> = []
           for (const { voceId, misure } of voceIdMap) {
             misure.forEach((m: Record<string,unknown>, idx: number) => {
               const nrStr = String(m.nr || '0')
               let nrVal = 0
-              try {
-                nrVal = nrStr.includes('*')
-                  ? nrStr.split('*').reduce((p, v) => p * (parseFloat(v) || 1), 1)
-                  : parseFloat(nrStr) || 0
-              } catch { nrVal = 0 }
-              misureRows.push({
-                voce_id: voceId,
-                posizione: idx,
-                nota: String(m.nota || '').slice(0, 300),
-                nr: nrVal,
-                a: Number(m.a) || 0,
-                b: Number(m.b) || 0,
-                h: Number(m.h) || 0,
-              })
+              try { nrVal = nrStr.includes('*') ? nrStr.split('*').reduce((p: number, v: string) => p * (parseFloat(v) || 1), 1) : parseFloat(nrStr) || 0 } catch { nrVal = 0 }
+              misureRows.push({ voce_id: voceId, posizione: idx, nota: String(m.nota || '').slice(0, 300), nr: nrVal, a: Number(m.a) || 0, b: Number(m.b) || 0, h: Number(m.h) || 0 })
             })
           }
           for (let i = 0; i < misureRows.length; i += 200) {
@@ -201,23 +173,9 @@ export default function ComputoPage() {
           }
         }
 
-        setImportMsg(`✅ ${tot} voci con ${voceIdMap.reduce((s,x)=>s+x.misure.length,0)} righe misura importate!`)
+        setImportMsg('✅ ' + tot + ' voci con ' + voceIdMap.reduce((s,x)=>s+x.misure.length,0) + ' righe misura importate!')
         await carica()
-      }
-        setImportMsg('Trovate ' + json.voci.length + ' voci. Salvataggio...')
-        rows = json.voci.map((v: Record<string,unknown>) => ({
-          computo_id: computoId,
-          capitolo: String(v.capitolo || 'Importato').slice(0,150),
-          codice: String(v.codice || '').slice(0,50),
-          codice_prezzario: String(v.codice || '').slice(0,50),
-          descrizione: String(v.descrizione || '').slice(0,2000),
-          um: String(v.um || 'nr').slice(0,10),
-          quantita: Number(v.quantita) || 0,
-          prezzo_unitario: Number(v.prezzo_unitario) || 0,
-          importo: Number(v.importo) || (Number(v.quantita) * Number(v.prezzo_unitario)) || 0,
-          pct_manodopera: 30, pct_materiali: 45, pct_noli: 12,
-          tipo_costo: ['INT'], selezionata: true
-        }))
+
       } else {
         const txt = await file.text()
         const lines = txt.split('\n').filter(l => l.trim())
@@ -225,24 +183,25 @@ export default function ComputoPage() {
         const sep = txt.includes(';') ? ';' : ','
         const hdr = lines[0].split(sep).map(h => h.trim().toLowerCase().replace(/[^a-z0-9_]/g,''))
         const get = (vals: string[], n: string) => { const i = hdr.findIndex(h => h.includes(n)); return i >= 0 ? vals[i] || '' : '' }
+        const rows: Record<string, unknown>[] = []
         for (let i = 1; i < lines.length; i++) {
           const vals = lines[i].split(sep).map(v => v.trim().replace(/^"|"$/g,''))
           if (!vals.some(v => v)) continue
           const q = parseFloat(get(vals,'quant') || get(vals,'qta') || '0') || 0
           const p = parseFloat(get(vals,'prezz') || get(vals,'pu') || get(vals,'prezzo') || '0') || 0
-          rows.push({ computo_id: computoId, capitolo: (get(vals,'cap') || get(vals,'capitolo') || 'Importato').slice(0,150), codice: (get(vals,'codice') || get(vals,'cod') || 'CSV'+String(i).padStart(3,'0')).slice(0,50), codice_prezzario: (get(vals,'prezzario') || get(vals,'tariffa') || '').slice(0,50), descrizione: (get(vals,'descriz') || get(vals,'desc') || get(vals,'lavorazione') || vals[0] || '').slice(0,2000), um: (get(vals,'um') || 'nr').slice(0,10), quantita: q, prezzo_unitario: p, importo: q*p, pct_manodopera: 30, pct_materiali: 45, pct_noli: 12, tipo_costo: ['INT'], selezionata: true })
+          rows.push({ computo_id: computoId, capitolo: (get(vals,'cap') || get(vals,'capitolo') || 'Importato').slice(0,500), codice: (get(vals,'codice') || get(vals,'cod') || 'CSV'+String(i).padStart(3,'0')).slice(0,100), codice_prezzario: (get(vals,'prezzario') || get(vals,'tariffa') || '').slice(0,100), descrizione: (get(vals,'descriz') || get(vals,'desc') || get(vals,'lavorazione') || vals[0] || '').slice(0,5000), um: (get(vals,'um') || 'nr').slice(0,20), quantita: q, prezzo_unitario: p, importo: q*p, pct_manodopera: 30, pct_materiali: 45, pct_noli: 12, tipo_costo: ['INT'], selezionata: true })
         }
+        if (!rows.length) { setImportErr('Nessuna voce trovata'); setImporting(false); return }
+        let tot = 0
+        for (let i = 0; i < rows.length; i += 100) {
+          const { error } = await supabase.from('voci_computo').insert(rows.slice(i, i+100))
+          if (error) { setImportErr('Errore DB: ' + error.message); setImporting(false); return }
+          tot += Math.min(100, rows.length - i)
+          setImportMsg('Salvate ' + tot + '/' + rows.length + '...')
+        }
+        setImportMsg('✅ Importate ' + tot + ' voci!')
+        await carica()
       }
-      if (!rows.length) { setImportErr('Nessuna voce trovata'); setImporting(false); return }
-      let tot = 0
-      for (let i = 0; i < rows.length; i += 100) {
-        const { error } = await supabase.from('voci_computo').insert(rows.slice(i, i+100))
-        if (error) { setImportErr('Errore DB: ' + error.message); setImporting(false); return }
-        tot += Math.min(100, rows.length - i)
-        setImportMsg('Salvate ' + tot + '/' + rows.length + '...')
-      }
-      setImportMsg('✅ Importate ' + tot + ' voci!')
-      await carica()
     } catch(e) { setImportErr('Errore: ' + String(e)) }
     setImporting(false)
     setTimeout(() => { setShowImport(false); setImportMsg(''); setImportErr('') }, 3500)
