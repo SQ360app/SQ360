@@ -6,10 +6,10 @@ export const runtime = 'nodejs'
 export interface RigaMisura {
   posizione: number
   nota: string
-  nr: string
-  a: string
-  b: string
-  h: string
+  nr_expr: string
+  a_expr: string
+  b_expr: string
+  h_expr: string
   q_parziale: number
   is_titolo: boolean
 }
@@ -90,13 +90,16 @@ function parseNum(s: string): number {
 
 function parseRGItem(rgXml: string, pos: number): RigaMisura {
   const nota = getTag(rgXml, 'Descrizione') || ''
-  const nrRaw = getTag(rgXml, 'PartiUguali') || ''
-  const aRaw = getTag(rgXml, 'Lunghezza') || ''
-  const bRaw = getTag(rgXml, 'Larghezza') || ''
-  const hRaw = getTag(rgXml, 'HPeso') || ''
-  const qParz = parseNum(getTag(rgXml, 'Quantita'))
-  const isTitolo = !nrRaw && !aRaw && !bRaw && !hRaw && qParz === 0
-  return { posizione: pos, nota: nota.slice(0, 300), nr: nrRaw, a: aRaw, b: bRaw, h: hRaw, q_parziale: qParz, is_titolo: isTitolo }
+  // Conserva le stringhe originali — Primus permette espressioni es. "14.00+16.00+3.00"
+  const nr_expr = getTag(rgXml, 'PartiUguali') || ''
+  const a_expr  = getTag(rgXml, 'Lunghezza')   || ''
+  const b_expr  = getTag(rgXml, 'Larghezza')   || ''
+  const h_expr  = getTag(rgXml, 'HPeso')        || ''
+  // q_parziale già calcolato da Primus — usalo come verità
+  const q_parziale = parseNum(getTag(rgXml, 'Quantita'))
+  // Riga titolo = solo nota, nessun valore numerico, q=0
+  const is_titolo = !nr_expr && !a_expr && !b_expr && !h_expr && q_parziale === 0
+  return { posizione: pos, nota: nota.slice(0, 300), nr_expr, a_expr, b_expr, h_expr, q_parziale, is_titolo }
 }
 
 function parsePrimusXPWE(xml: string): VoceParsed[] {
@@ -166,7 +169,8 @@ function parsePrimusXPWE(xml: string): VoceParsed[] {
       misure
     })
   }
-  console.log('xpwe OK: voci=' + voci.length + ' misure=' + voci.reduce((s, v) => s + v.misure.length, 0))
+  const totMisure = voci.reduce((s, v) => s + v.misure.length, 0)
+  console.log('xpwe OK: voci=' + voci.length + ' misure=' + totMisure)
   return voci
 }
 
