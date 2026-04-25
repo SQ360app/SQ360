@@ -181,10 +181,10 @@ export async function POST(req: NextRequest) {
       const zip = new AdmZip(buffer)
       const entries = zip.getEntries().filter(e => !e.isDirectory && e.getData().length > 50).sort((a, b) => b.getData().length - a.getData().length)
       for (const entry of entries.slice(0, 5)) {
-        try { allContents.push(entry.getData().toString('utf8')) } catch { /* skip */ }
+        try { allContents.push(entry.getData().toString('utf8')) } catch { }
       }
     } catch {
-      try { allContents.push(buffer.toString('utf8')) } catch { /* skip */ }
+      try { allContents.push(buffer.toString('utf8')) } catch { }
     }
     const contents = allContents.filter(c => c && c.trim().length > 50)
     if (contents.length === 0) return NextResponse.json({ ok: false, errore: 'File vuoto o illeggibile' })
