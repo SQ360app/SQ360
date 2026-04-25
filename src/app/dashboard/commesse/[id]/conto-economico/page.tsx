@@ -6,6 +6,174 @@ import { supabase } from '@/lib/supabase'
 import { TrendingUp, TrendingDown, Minus, AlertTriangle, Loader2, RefreshCw } from 'lucide-react'
 
 const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+export default function ContoEconomicoPage() {
+  const { id } = useParams() as { id: string }
+  const [ce, setCe] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  async function load() {
+    setLoading(true)
+
+    // 1. Commessa - prova tutte le colonne possibili per l'importo
+    const { data: commessa } = await supabase.from('commesse').select('*').eq('id', id).single()
+    const importoContratto = commessa?.importo_contratto
+      || commessa?.importo_netto_aggiudicato
+      || commessa?.importo_aggiudicato
+      || commessa?.importo_netto
+      || 0
+
+    // 2. SAL Attivi
+    const { data: sal } = await supabase.from('sal_attivi').select('importo_netto_sal, stato').eq('commessa_id', id)
+    const ricaviEmessi = (sal || []).filter(s => s.stato !== 'BOZZA').reduce((s, x) => s + (x.importo_netto_sal || 0), 0)
+    const ricaviIncassati = (sal || []).filter(s => s.stato === 'PAGATO').reduce((s, x) => s + (x.importo_netto_sal || 0), 0)
+
+    // 3. ODA - costi impegnati
+    const { data: odaList } = await supabase.from('oda').select('importo_netto, stato').eq('commessa_id', id)
+    const costiOda = (odaList || []).filter(o => o.stato !== 'ANNULLATO').reduce((s, x) => s + (x.importo_netto || 0), 0)
+
+    // 4. Spese cantiere
+    const { data: speseList } = await supabase.from('spese_cantiere').select('importo_netto, stato').eq('commessa_id', id)
+    const costiSpese = (speseList || []).filter(s => ['REGISTRATA','APPROVATA'].includes(s.stato)).reduce((s, x) => s + (x.importo_netto || 0), 0)
+
+    // 5. SAL Passivi - ritenute accumulate
+    const { data: salP } = await supabase.from('sal_passivi').select('ritenuta_importo, stato').eq('commessa_id', id)
+    const ritenute = (salP || []).filter(s => ['APPROVATO','PAGATO'].includes(s.stato)).reduce((s, x) => s + (x.ritenuta_importo || 0), 0)
+
+    // 6. Fatture passive pagate
+    const { data: fatt } = await supabase.from('fatture_passive').select('imponibile, stato').eq('commessa_id', id)
+    const costiPagati = (fatt || []).filter(f => f.stato === 'PAGATA').reduce((s, x) => s + (x.imponibile || 0), 0)
+
+    setCe({ importoContratto, ricaviEmessi, ricaviIncassati, costiOda, costiSpese, costiPagati, ritenute })
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [id])
+
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, gap: 8, fontSize: 14, color: '#9ca3af' }}>
+      <Loader2 size={16} className="animate-spin" /> Calcolo conto economico...
+    </div>
+  )
+
+  const totCosti = ce.costiOda + ce.costiSpese
+  const margine = ce.importoContratto - totCosti
+  const mPct = ce.importoContratto > 0 ? (margine / ce.importoContratto * 100) : 0
+  const mColor = mPct > 10 ? '#059669' : mPct > 0 ? '#d97706' : '#dc2626'
+  const mBg    = mPct > 10 ? '#f0fdf4' : mPct > 0 ? '#fffbeb' : '#fef2f2'
+
+  const rows = [
+    { label: 'Importo contratto netto', value: ce.importoContratto, tipo: 'header' },
+    { label: 'SAL attivi emessi (ricavo maturato)', value: ce.ricaviEmessi, tipo: 'ricavo', sub: true },
+    { label: 'di cui incassati dal committente', value: ce.ricaviIncassati, tipo: 'ricavo_light', sub: true },
+    { label: 'Costi da ODA / contratti impegnati', value: ce.costiOda, tipo: 'costo', sub: false },
+    { label: 'Spese cantiere contabilizzate', value: ce.costiSpese, tipo: 'costo', sub: false },
+    { label: 'Totale costi impegnati', value: totCosti, tipo: 'subtotal', sub: false },
+    { label: 'Ritenute accumulate (sbloccate a collaudo)', value: ce.ritenute, tipo: 'warning', sub: false },
+  ]
+
+  const avanzamentoSal = ce.importoContratto > 0 ? Math.min(100, ce.ricaviEmessi / ce.importoContratto * 100) : 0
+  const avanzamentoPagato = ce.importoContratto > 0 ? Math.min(100, ce.ricaviIncassati / ce.importoContratto * 100) : 0
+  const avanzamentoCosti = ce.importoContratto > 0 ? Math.min(100, totCosti / ce.importoContratto * 100) : 0
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      {/* Box margine principale */}
+      <div style={{ background: mBg, border: '1px solid ' + mColor + '30', borderRadius: 12, padding: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 8px' }}>Margine lordo previsto</p>
+            <p style={{ fontSize: 28, fontWeight: 700, color: mColor, margin: 0 }}>EUR {fmt(margine)}</p>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 8px' }}>su importo contratto</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+              {mPct > 10 ? <TrendingUp size={22} style={{ color: mColor }} />
+                : mPct > 0 ? <Minus size={22} style={{ color: mColor }} />
+                : <TrendingDown size={22} style={{ color: mColor }} />}
+              <span style={{ fontSize: 24, fontWeight: 700, color: mColor }}>{mPct.toFixed(1)}%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabella righe CE */}
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} style={{
+                borderBottom: '1px solid #f3f4f6',
+                background: r.tipo === 'header' || r.tipo === 'subtotal' ? '#f9fafb'
+                  : r.tipo === 'warning' ? '#fffbeb' : '#fff',
+                borderTop: r.tipo === 'subtotal' ? '2px solid #e5e7eb' : undefined,
+              }}>
+                <td style={{
+                  padding: '12px 16px',
+                  paddingLeft: r.sub ? 32 : 16,
+                  fontWeight: r.tipo === 'header' || r.tipo === 'subtotal' ? 600 : 400,
+                  color: r.tipo === 'warning' ? '#92400e' : '#374151',
+                }}>
+                  {r.tipo === 'warning' && <AlertTriangle size={13} style={{ display: 'inline', marginRight: 6, verticalAlign: 'text-bottom', color: '#d97706' }} />}
+                  {r.label}
+                </td>
+                <td style={{
+                  padding: '12px 16px',
+                  textAlign: 'right',
+                  fontFamily: 'tabular-nums',
+                  fontWeight: r.tipo === 'header' || r.tipo === 'subtotal' ? 600 : 400,
+                  color: r.tipo === 'costo' || r.tipo === 'subtotal' ? '#dc2626'
+                    : r.tipo === 'ricavo' ? '#059669'
+                    : r.tipo === 'ricavo_light' ? '#6b7280'
+                    : r.tipo === 'warning' ? '#d97706'
+                    : '#111827',
+                }}>
+                  EUR {fmt(r.value)}
+                </td>
+                <td style={{ padding: '12px 16px', textAlign: 'right', color: '#9ca3af', fontSize: 12, width: 70 }}>
+                  {r.tipo !== 'header' && ce.importoContratto > 0 ? (r.value / ce.importoContratto * 100).toFixed(1) + '%' : ''}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Avanzamento grafico */}
+      <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 12, padding: 20 }}>
+        <h3 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 16px', color: '#374151' }}>Avanzamento commessa</h3>
+        {[
+          { label: 'Ricavo contratto', value: ce.importoContratto, pct: 100, color: '#94a3b8' },
+          { label: 'SAL emessi (ricavo maturato)', value: ce.ricaviEmessi, pct: avanzamentoSal, color: '#2563eb' },
+          { label: 'SAL incassati dal committente', value: ce.ricaviIncassati, pct: avanzamentoPagato, color: '#059669' },
+          { label: 'Costi impegnati (ODA + spese)', value: totCosti, pct: avanzamentoCosti, color: '#dc2626' },
+        ].map(({ label, value, pct, color }, i) => (
+          <div key={i} style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 12 }}>
+              <span style={{ color: '#6b7280' }}>{label}</span>
+              <span style={{ fontWeight: 600, color: '#111827' }}>EUR {fmt(value)} ({pct.toFixed(1)}%)</span>
+            </div>
+            <div style={{ height: 8, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ height: '100%', background: color, borderRadius: 4, width: pct + '%', transition: 'width 0.8s ease' }} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <button onClick={load} disabled={loading} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#6b7280', background: 'none', border: '1px solid #e5e7eb', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', width: 'fit-content' }}>
+        <RefreshCw size={12} /> Aggiorna
+      </button>
+    </div>
+  )
+}'use client'
+
+import { useState, useEffect } from 'react'
+import { useParams } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+import { TrendingUp, TrendingDown, Minus, AlertTriangle, Loader2, RefreshCw } from 'lucide-react'
+
+const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const pct = (v: number, tot: number) => tot > 0 ? (v / tot * 100).toFixed(1) + '%' : '-'
 
 export default function ContoEconomicoPage() {
