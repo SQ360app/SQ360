@@ -1,698 +1,625 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import {
-  Upload, Plus, Search, FileText, Trash2, Edit2, Save, X,
-  ShoppingCart, CheckSquare, Square, AlertTriangle, Printer, Calculator
+  ChevronRight, ChevronDown, Plus, Settings, AlertTriangle,
+  FileText, Loader2, Check, MoreHorizontal, X, Filter
 } from 'lucide-react'
 
-interface Misura {
-  id?: string
-  voce_id?: string
-  posizione: number
-  nota: string
-  nr_expr: string
-  a_expr: string
-  b_expr: string
-  h_expr: string
-  q_parziale: number
-  is_titolo: boolean
+const fmt = (n: number | null | undefined) =>
+  Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const fmtQty = (n: number | null | undefined) =>
+  Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+
+const TIPO_BADGE: Record<string, { label: string; bg: string; color: string }> = {
+  INT: { label: 'INT', bg: '#f5f3ff', color: '#4338ca' },
+  SUB: { label: 'SUB', bg: '#eff6ff', color: '#1e40af' },
+  ACQ: { label: 'ACQ', bg: '#f0fdf4', color: '#166534' },
+  NC:  { label: 'NC',  bg: '#f9fafb', color: '#6b7280' },
+  NF:  { label: 'NF',  bg: '#fafafa', color: '#9ca3af' },
+}
+
+const TIPO_VOCE_BADGE: Record<string, { label: string; bg: string; color: string }> = {
+  LAVORO:   { label: 'Lavoro', bg: '#f3f4f6', color: '#374151' },
+  SIC:      { label: 'SIC',   bg: '#fef2f2', color: '#991b1b' },
+  SIC_SPCL: { label: 'SIC.S', bg: '#fef2f2', color: '#b91c1c' },
+  MDO:      { label: 'MDO',   bg: '#fff7ed', color: '#c2410c' },
+  NR:       { label: 'NR',    bg: '#fafafa', color: '#6b7280' },
+  ECONOMIA: { label: 'Econ.', bg: '#fefce8', color: '#713f12' },
 }
 
 interface VoceComputo {
-  id: string; capitolo: string; codice: string; codice_prezzario: string
-  descrizione: string; um: string; quantita: number; prezzo_unitario: number
-  importo: number; pct_manodopera: number; pct_materiali: number; pct_noli: number
-  tipo_costo: string[]; note_approvvigionamento: string
+  id: string
+  codice: string
+  codice_prezzario?: string
+  descrizione: string
+  um: string
+  quantita: number
+  prezzo_unitario: number
+  importo: number
+  capitolo?: string
+  sottocapitolo?: string
+  voce_capitolo?: string
+  tipo_voce?: string
+  tipo_assegnazione?: string
+  wbs_nodo_id?: string
+  soggetta_ribasso?: boolean
+  pct_manodopera?: number
+  pct_sicurezza?: number
+  avanzamento_pct?: number
+  categoria_og_os?: string
+  tipo_lavoro?: string
+  ordine_albero?: number
 }
 
-interface Computo { id: string; tipo_uso: string; fonte: string; data_import: string }
-
-interface FormVoce {
-  capitolo: string; codice: string; codice_prezzario: string; descrizione: string
-  um: string; quantita: number; prezzo_unitario: number
-  pct_manodopera: number; pct_materiali: number; pct_noli: number
-  tipo_costo: string[]; note_approvvigionamento: string
+interface Capitolo {
+  nome: string
+  sottocapitoli: Record<string, { nome: string; voci: VoceComputo[] }>
+  totale: number
 }
 
-const TIPI_COSTO = [
-  { id: 'INT', label: 'Interno',     color: '#10b981' },
-  { id: 'SUB', label: 'Subappalto',  color: '#8b5cf6' },
-  { id: 'ACQ', label: 'Acquisto',    color: '#3b82f6' },
-  { id: 'NC',  label: 'Nolo Caldo',  color: '#f59e0b' },
-  { id: 'NF',  label: 'Nolo Freddo', color: '#64748b' },
-]
-
-const UM_LIST = ['mc','mq','ml','kg','t','nr','corpo','lt','ora','gg','%','kW','kWh']
-
-function fmt(n: number, dec = 2) { return (n||0).toLocaleString('it-IT',{minimumFractionDigits:dec,maximumFractionDigits:dec}) }
-function fmtQ(n: number) { return fmt(n,3) }
-
-const FORM_VUOTO: FormVoce = {
-  capitolo:'',codice:'',codice_prezzario:'',descrizione:'',um:'mc',
-  quantita:0,prezzo_unitario:0,pct_manodopera:0,pct_materiali:0,pct_noli:0,
-  tipo_costo:['INT'],note_approvvigionamento:''
-}
-
-function evalExpr(s: string): number {
-  if (!s||!s.trim()) return 0
-  try {
-    const clean=s.trim().replace(/,/g,'.')
-    if (/^[\d\s\+\-\*\/\.\(\)]+$/.test(clean)) {
-      // eslint-disable-next-line no-eval
-      const r=eval(clean)
-      return typeof r==='number'&&isFinite(r)?Math.round(r*1000)/1000:0
-    }
-  } catch { /* skip */ }
-  return 0
-}
-
-function calcolaQparz(m: Misura): number {
-  if (m.is_titolo) return 0
-  const nr=evalExpr(m.nr_expr)||1
-  const a=evalExpr(m.a_expr),b=evalExpr(m.b_expr),h=evalExpr(m.h_expr)
-  const vals=[a,b,h].filter(v=>v!==0)
-  if(vals.length===0) return 0
-  return Math.round(nr*vals.reduce((p,v)=>p*v,1)*1000)/1000
-}
-
-interface FoglioMisureProps {
-  voceId:string;voceInfo:{codice:string;descrizione:string;um:string}
-  onClose:()=>void;onSaved:(q:number,i:number)=>void
-}
-
-function FoglioMisure({voceId,voceInfo,onClose,onSaved}:FoglioMisureProps) {
-  const [misure,setMisure]=useState<Misura[]>([])
-  const [loading,setLoading]=useState(true)
-  const [saving,setSaving]=useState(false)
-  const [contextMenu,setContextMenu]=useState<{x:number;y:number;idx:number}|null>(null)
-  const [prezzoUnit,setPrezzoUnit]=useState(0)
-
-  useEffect(()=>{
-    caricaMisure()
-    const h=()=>setContextMenu(null)
-    document.addEventListener('click',h)
-    return ()=>document.removeEventListener('click',h)
-  },[voceId])
-
-  async function caricaMisure() {
-    setLoading(true)
-    const [{data:md},{data:vd}]=await Promise.all([
-      supabase.from('misure_voce').select('*').eq('voce_id',voceId).order('posizione'),
-      supabase.from('voci_computo').select('prezzo_unitario').eq('id',voceId).single()
-    ])
-    if(vd) setPrezzoUnit(Number((vd as Record<string,unknown>).prezzo_unitario)||0)
-    if(md&&md.length>0){
-      setMisure((md as Record<string,unknown>[]).map((r,i)=>({
-        id:String(r.id),voce_id:voceId,posizione:i,
-        nota:String(r.nota||''),
-        nr_expr:String(r.nr_expr||r.nr||''),
-        a_expr:String(r.a_expr||r.a||''),
-        b_expr:String(r.b_expr||r.b||''),
-        h_expr:String(r.h_expr||r.h||''),
-        q_parziale:Number(r.q_parziale)||0,
-        is_titolo:Boolean(r.is_titolo)
-      })))
-    } else {
-      setMisure([
-        {posizione:0,nota:'',nr_expr:'',a_expr:'',b_expr:'',h_expr:'',q_parziale:0,is_titolo:true},
-        {posizione:1,nota:'',nr_expr:'',a_expr:'',b_expr:'',h_expr:'',q_parziale:0,is_titolo:false}
-      ])
-    }
-    setLoading(false)
-  }
-
-  function aggiorna(idx:number,field:keyof Misura,val:string|boolean){
-    setMisure(prev=>prev.map((m,i)=>{
-      if(i!==idx) return m
-      const u={...m,[field]:val}
-      if(!u.is_titolo) u.q_parziale=calcolaQparz(u)
-      return u
-    }))
-  }
-
-  function inserisciRiga(idx:number,titolo=false){
-    setMisure(prev=>{
-      const n:Misura={posizione:idx+1,nota:'',nr_expr:'',a_expr:'',b_expr:'',h_expr:'',q_parziale:0,is_titolo:titolo}
-      const a=[...prev];a.splice(idx+1,0,n)
-      return a.map((m,i)=>({...m,posizione:i}))
-    })
-    setContextMenu(null)
-  }
-
-  function eliminaRiga(idx:number){
-    setMisure(prev=>prev.filter((_,i)=>i!==idx).map((m,i)=>({...m,posizione:i})))
-    setContextMenu(null)
-  }
-
-  function convertiTitolo(idx:number){
-    setMisure(prev=>prev.map((m,i)=>i===idx?{...m,is_titolo:!m.is_titolo,nr_expr:'',a_expr:'',b_expr:'',h_expr:'',q_parziale:0}:m))
-    setContextMenu(null)
-  }
-
-  const totM=misure.reduce((s,m)=>s+(m.is_titolo?0:calcolaQparz(m)),0)
-
-  function hkd(e:React.KeyboardEvent,ri:number,cn:string){
-    const cols=['nota','nr_expr','a_expr','b_expr','h_expr']
-    const ci=cols.indexOf(cn)
-    if(e.key==='Tab'){e.preventDefault();let nc=e.shiftKey?ci-1:ci+1,nr=ri;if(nc<0){nc=cols.length-1;nr--}if(nc>=cols.length){nc=0;nr++}if(nr>=misure.length)inserisciRiga(misure.length-1)}
-    if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();inserisciRiga(ri)}
-    if(e.key==='Delete'&&e.ctrlKey){e.preventDefault();eliminaRiga(ri)}
-  }
-
-  async function salva(){
-    setSaving(true)
-    try{
-      await supabase.from('misure_voce').delete().eq('voce_id',voceId)
-      if(misure.length>0){
-        await supabase.from('misure_voce').insert(misure.map((m,i)=>({
-          voce_id:voceId,posizione:i,nota:m.nota.slice(0,300),
-          nr_expr:m.nr_expr,a_expr:m.a_expr,b_expr:m.b_expr,h_expr:m.h_expr,
-          q_parziale:m.is_titolo?0:calcolaQparz(m),is_titolo:m.is_titolo,
-          nr:evalExpr(m.nr_expr)||0,a:evalExpr(m.a_expr)||0,b:evalExpr(m.b_expr)||0,h:evalExpr(m.h_expr)||0
-        })))
-      }
-      const qt=Math.round(totM*1000)/1000
-      const ni=Math.round(qt*prezzoUnit*100)/100
-      await supabase.from('voci_computo').update({quantita:qt,importo:ni}).eq('id',voceId)
-      onSaved(qt,ni)
-    }finally{setSaving(false)}
-  }
-
-  const f3=(n:number)=>n===0?'':n.toLocaleString('it-IT',{minimumFractionDigits:3,maximumFractionDigits:3})
-  const cs=(t:boolean,al:'left'|'right'='right'):React.CSSProperties=>({padding:0,borderBottom:'1px solid #d1d5db',borderRight:'1px solid #e5e7eb',background:t?'#eff6ff':'white',textAlign:al})
-  const is=(t:boolean,al:'left'|'right'='right'):React.CSSProperties=>({width:'100%',border:'none',outline:'none',background:'transparent',padding:'5px 6px',fontSize:12,fontFamily:al==='right'?'monospace':'inherit',textAlign:al,color:t?'#1e40af':'#1e293b',fontWeight:t?600:400,fontStyle:t?'italic':'normal'})
-
-  return (
-    <div className="modal-overlay" onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
-      <div className="modal-box" style={{maxWidth:860,padding:0,overflow:'hidden'}}>
-        <div style={{padding:'12px 18px',background:'#1e3a5f',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <div>
-            <div style={{fontSize:13,fontWeight:800,color:'white',fontFamily:'monospace'}}>{voceInfo.codice} — Foglio Misure</div>
-            <div style={{fontSize:11,color:'#94c5f8',marginTop:2,maxWidth:650,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{voceInfo.descrizione}</div>
-          </div>
-          <button onClick={onClose} style={{background:'rgba(255,255,255,0.15)',border:'none',borderRadius:6,padding:'4px 10px',cursor:'pointer',color:'white',fontSize:16}}>✕</button>
-        </div>
-        <div style={{padding:'5px 16px',background:'#f8fafc',borderBottom:'1px solid #e2e8f0',fontSize:10,color:'#64748b',display:'flex',gap:16}}>
-          <span><kbd style={{background:'#e2e8f0',borderRadius:3,padding:'1px 5px',fontSize:10}}>Tab</kbd> naviga</span>
-          <span><kbd style={{background:'#e2e8f0',borderRadius:3,padding:'1px 5px',fontSize:10}}>Enter</kbd> nuova riga</span>
-          <span><kbd style={{background:'#e2e8f0',borderRadius:3,padding:'1px 5px',fontSize:10}}>Ctrl+Canc</kbd> elimina</span>
-          <span>🖱️ Tasto destro → menu</span>
-          <span style={{color:'#3b82f6'}}>💡 Nelle celle: <strong>14+16+3</strong> calcola automaticamente</span>
-        </div>
-        {loading?<div style={{padding:32,textAlign:'center'}}><div className="spinner" style={{margin:'0 auto'}}/></div>:(
-          <div style={{overflowX:'auto',maxHeight:'58vh',overflowY:'auto'}}>
-            <table style={{width:'100%',borderCollapse:'collapse',minWidth:720}}>
-              <thead style={{position:'sticky',top:0,zIndex:2}}>
-                <tr style={{background:'#1e3a5f'}}>
-                  {[{l:'N°',w:36},{l:'NOTA / POSIZIONE',w:undefined},{l:'NR',w:72},{l:'A (Lunghezza)',w:140},{l:'B (Larghezza)',w:90},{l:'H / Peso',w:90},{l:'Q. PARZIALE',w:105}].map((h,i)=>(
-                    <th key={i} style={{padding:'7px 8px',fontSize:9,fontWeight:700,color:'#94c5f8',textTransform:'uppercase',textAlign:i>=2?'right':'left',width:h.w,borderRight:'1px solid rgba(255,255,255,0.1)',whiteSpace:'nowrap'}}>{h.l}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {misure.map((m,idx)=>(
-                  <tr key={idx} onContextMenu={e=>{e.preventDefault();setContextMenu({x:e.clientX,y:e.clientY,idx})}}
-                    style={{background:m.is_titolo?'#eff6ff':idx%2===0?'white':'#fafafa'}}>
-                    <td style={{...cs(m.is_titolo,'right'),width:36,padding:'0 6px',fontSize:10,color:'#94a3b8',fontFamily:'monospace'}}>{idx+1}</td>
-                    <td style={cs(m.is_titolo,'left')}><input value={m.nota} onChange={e=>aggiorna(idx,'nota',e.target.value)} onKeyDown={e=>hkd(e,idx,'nota')} placeholder={m.is_titolo?'Titolo sezione...':'Note / posizione'} style={is(m.is_titolo,'left')}/></td>
-                    <td style={cs(m.is_titolo)}>{!m.is_titolo&&<input value={m.nr_expr} onChange={e=>aggiorna(idx,'nr_expr',e.target.value)} onKeyDown={e=>hkd(e,idx,'nr_expr')} style={is(false)}/>}</td>
-                    <td style={cs(m.is_titolo)}>{!m.is_titolo&&<input value={m.a_expr} onChange={e=>aggiorna(idx,'a_expr',e.target.value)} onKeyDown={e=>hkd(e,idx,'a_expr')} placeholder="es. 14+16+3" style={is(false)}/>}</td>
-                    <td style={cs(m.is_titolo)}>{!m.is_titolo&&<input value={m.b_expr} onChange={e=>aggiorna(idx,'b_expr',e.target.value)} onKeyDown={e=>hkd(e,idx,'b_expr')} style={is(false)}/>}</td>
-                    <td style={cs(m.is_titolo)}>{!m.is_titolo&&<input value={m.h_expr} onChange={e=>aggiorna(idx,'h_expr',e.target.value)} onKeyDown={e=>hkd(e,idx,'h_expr')} style={is(false)}/>}</td>
-                    <td style={{...cs(m.is_titolo),paddingRight:8,fontSize:12,fontFamily:'monospace',fontWeight:600,color:m.is_titolo?'transparent':'#1e3a5f'}}>{!m.is_titolo&&f3(calcolaQparz(m))}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot style={{position:'sticky',bottom:0}}>
-                <tr style={{background:'#1e3a5f',borderTop:'2px solid #0f2441'}}>
-                  <td colSpan={5} style={{padding:'9px 12px',fontSize:11,fontWeight:700,color:'#94c5f8'}}>QUANTITÀ TOTALE</td>
-                  <td colSpan={2} style={{padding:'9px 10px',fontSize:20,fontWeight:900,color:'white',fontFamily:'monospace',textAlign:'right'}}>
-                    {totM.toLocaleString('it-IT',{minimumFractionDigits:3,maximumFractionDigits:3})} {voceInfo.um}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
-        <div style={{padding:'10px 16px',borderTop:'1px solid #e2e8f0',display:'flex',justifyContent:'space-between',alignItems:'center',background:'#f8fafc'}}>
-          <div style={{display:'flex',gap:8}}>
-            <button onClick={()=>inserisciRiga(misure.length-1,false)} style={{padding:'6px 12px',borderRadius:6,border:'1px dashed #94a3b8',background:'white',fontSize:11,cursor:'pointer',color:'#334155'}}>+ Riga misura</button>
-            <button onClick={()=>inserisciRiga(misure.length-1,true)} style={{padding:'6px 12px',borderRadius:6,border:'1px dashed #3b82f6',background:'#eff6ff',fontSize:11,cursor:'pointer',color:'#1e40af'}}>+ Riga titolo</button>
-          </div>
-          <div style={{display:'flex',gap:10}}>
-            <button onClick={onClose} style={{padding:'7px 16px',borderRadius:7,border:'1px solid #e2e8f0',background:'white',fontSize:12,cursor:'pointer'}}>Annulla</button>
-            <button onClick={salva} disabled={saving} style={{padding:'7px 20px',borderRadius:7,border:'none',background:'#1e3a5f',color:'white',fontSize:12,fontWeight:700,cursor:'pointer'}}>
-              💾 {saving?'Salvataggio...':'Salva misure'}
-            </button>
-          </div>
-        </div>
-        {contextMenu&&(
-          <div style={{position:'fixed',top:contextMenu.y,left:contextMenu.x,background:'white',border:'1px solid #d1d5db',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.15)',zIndex:9999,minWidth:210,padding:'4px 0'}} onClick={e=>e.stopPropagation()}>
-            <div style={{padding:'3px 10px 6px',fontSize:9,color:'#94a3b8',fontWeight:700,textTransform:'uppercase',borderBottom:'1px solid #f1f5f9'}}>Riga {contextMenu.idx+1}</div>
-            {[
-              {label:'↓ Inserisci riga misura',action:()=>inserisciRiga(contextMenu.idx,false)},
-              {label:'↓ Inserisci riga titolo',action:()=>inserisciRiga(contextMenu.idx,true)},
-              {label:misure[contextMenu.idx]?.is_titolo?'↔ Converti in misura':'↔ Converti in titolo',action:()=>convertiTitolo(contextMenu.idx)},
-              {label:'🗑 Elimina riga',action:()=>eliminaRiga(contextMenu.idx),danger:true},
-            ].map((item,i)=>(
-              <button key={i} onClick={item.action} style={{display:'block',width:'100%',padding:'8px 14px',border:'none',background:'none',cursor:'pointer',textAlign:'left',fontSize:12,color:(item as {danger?:boolean}).danger?'#ef4444':'#1e293b'}}
-                onMouseEnter={e=>(e.currentTarget.style.background=(item as {danger?:boolean}).danger?'#fef2f2':'#f8fafc')}
-                onMouseLeave={e=>(e.currentTarget.style.background='none')}>
-                {item.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
+interface CtxMenu {
+  x: number; y: number
+  voci: string[]
+  totale: number
 }
 
 export default function ComputoPage() {
-  const {id:commessaId}=useParams() as {id:string}
-  const [computo,setComputo]=useState<Computo|null>(null)
-  const [voci,setVoci]=useState<VoceComputo[]>([])
-  const [loading,setLoading]=useState(true)
-  const [search,setSearch]=useState('')
-  const [filtroCapitolo,setFiltroCapitolo]=useState('TUTTI')
-  const [showImport,setShowImport]=useState(false)
-  const [showForm,setShowForm]=useState(false)
-  const [showMisure,setShowMisure]=useState<string|null>(null)
-  const [showRdo,setShowRdo]=useState(false)
-  const [showDescr,setShowDescr]=useState<string|null>(null)
-  const [form,setForm]=useState<FormVoce>({...FORM_VUOTO})
-  const [editingId,setEditingId]=useState<string|null>(null)
-  const [saving,setSaving]=useState(false)
-  const [importing,setImporting]=useState(false)
-  const [importMsg,setImportMsg]=useState('')
-  const [importErr,setImportErr]=useState('')
-  const fileRef=useRef<HTMLInputElement>(null)
-  const [selezionate,setSelezionate]=useState<Set<string>>(new Set())
+  const { id } = useParams() as { id: string }
+  const [voci, setVoci] = useState<VoceComputo[]>([])
+  const [commessa, setCommessa] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null)
+  const [filterCapitolo, setFilterCapitolo] = useState<string | null>(null)
+  const [showRibassoModal, setShowRibassoModal] = useState(false)
+  const [ribasso, setRibasso] = useState(0)
+  const lastClickedRef = useRef<string | null>(null)
+  const editorRef = useRef<HTMLDivElement>(null)
 
-  useEffect(()=>{carica()},[commessaId])
-
-  async function carica(){
+  const load = useCallback(async () => {
     setLoading(true)
-    const {data:comp}=await supabase.from('computo_metrico').select('*').eq('commessa_id',commessaId).eq('tipo_uso','AGGIUDICATA').single()
-    if(comp){
-      setComputo(comp)
-      const {data:v}=await supabase.from('voci_computo').select('*').eq('computo_id',comp.id).order('capitolo').order('codice')
-      if(v) setVoci(v as VoceComputo[])
-    }
+    const [{ data: v }, { data: c }] = await Promise.all([
+      supabase.from('voci_computo')
+        .select('*')
+        .eq('computo_id', (await supabase.from('computo_metrico').select('id').eq('commessa_id', id).single()).data?.id)
+        .order('ordine_albero', { ascending: true })
+        .order('capitolo', { ascending: true })
+        .order('sottocapitolo', { ascending: true }),
+      supabase.from('commesse').select('*').eq('id', id).single()
+    ])
+    setVoci(v || [])
+    setCommessa(c)
+    setRibasso(c?.ribasso_pct || 0)
+    // Espandi tutti i capitoli di default
+    const caps = new Set<string>()
+    ;(v || []).forEach((vo: VoceComputo) => {
+      if (vo.capitolo) caps.add('cap_' + vo.capitolo)
+      if (vo.capitolo && vo.sottocapitolo) caps.add('sub_' + vo.capitolo + '_' + vo.sottocapitolo)
+    })
+    setExpanded(caps)
     setLoading(false)
-  }
+  }, [id])
 
-  async function getOrCreateComputoId():Promise<string|null>{
-    if(computo?.id) return computo.id
-    const {data}=await supabase.from('computo_metrico').insert([{commessa_id:commessaId,tipo_uso:'AGGIUDICATA',fonte:'MANUALE',data_import:new Date().toISOString().slice(0,10)}]).select().single()
-    if(data){setComputo(data as Computo);return data.id as string}
-    return null
-  }
+  useEffect(() => { load() }, [load])
 
-  async function handleFileImport(file:File){
-    setImporting(true);setImportMsg('Analisi file...');setImportErr('')
-    try{
-      const isXpwe=/\.(xpwe|xml)$/i.test(file.name)
-      const computoId=await getOrCreateComputoId()
-      if(!computoId){setImportErr('Errore creazione computo');setImporting(false);return}
-      if(isXpwe){
-        setImportMsg('Lettura Primus XPWE...')
-        const fd=new FormData();fd.append('file',file)
-        const res=await fetch('/api/xpwe-parse',{method:'POST',body:fd})
-        const json=await res.json() as {ok:boolean;voci?:Array<Record<string,unknown>>;errore?:string;totale?:number;totale_misure?:number}
-        if(!json.ok||!json.voci){setImportErr('Errore XPWE: '+(json.errore||'formato non riconosciuto'));setImporting(false);return}
-        setImportMsg('Trovate '+json.voci.length+' voci ('+(json.totale_misure||0)+' righe misura). Salvataggio...')
-        let tot=0
-        const voceIdMap:Array<{voceId:string;misure:Array<Record<string,unknown>>}>=[]
-        for(let i=0;i<json.voci.length;i+=50){
-          const chunk=json.voci.slice(i,i+50)
-          const rows=chunk.map((v:Record<string,unknown>)=>({
-            computo_id:computoId,
-            capitolo:String(v.capitolo||'Importato').slice(0,500),
-            codice:String(v.codice||'').slice(0,100),
-            codice_prezzario:String(v.codice||'').slice(0,100),
-            descrizione:String(v.descrizione||'').slice(0,5000),
-            um:String(v.um||'nr').slice(0,20),
-            quantita:Number(v.quantita)||0,
-            prezzo_unitario:Number(v.prezzo_unitario)||0,
-            importo:Number(v.importo)||0,
-            pct_manodopera:Number(v.pct_manodopera)||0,
-            pct_materiali:Number(v.pct_materiali)||0,
-            pct_noli:Number(v.pct_noli)||0,
-            tipo_costo:['INT'],selezionata:true
-          }))
-          const {data:sv,error}=await supabase.from('voci_computo').insert(rows).select('id')
-          if(error){setImportErr('Errore DB: '+error.message);setImporting(false);return}
-          if(sv){sv.forEach((s:{id:string},idx:number)=>{
-            const mv=Array.isArray(chunk[idx]?.misure)?chunk[idx].misure as Array<Record<string,unknown>>:[]
-            if(mv.length>0) voceIdMap.push({voceId:s.id,misure:mv})
-          })}
-          tot+=chunk.length
-          setImportMsg('Salvate '+tot+'/'+json.voci.length+' voci...')
-        }
-        if(voceIdMap.length>0){
-          setImportMsg('Salvataggio righe di misura...')
-          const mr:Array<Record<string,unknown>>=[]
-          for(const {voceId,misure} of voceIdMap){
-            misure.forEach((m:Record<string,unknown>,idx:number)=>{
-              mr.push({voce_id:voceId,posizione:idx,nota:String(m.nota||'').slice(0,300),
-                nr_expr:String(m.nr_expr||''),a_expr:String(m.a_expr||''),
-                b_expr:String(m.b_expr||''),h_expr:String(m.h_expr||''),
-                q_parziale:Number(m.q_parziale)||0,is_titolo:Boolean(m.is_titolo),
-                nr:0,a:0,b:0,h:0})
-            })
-          }
-          for(let i=0;i<mr.length;i+=200){await supabase.from('misure_voce').insert(mr.slice(i,i+200))}
-        }
-        setImportMsg('✅ '+tot+' voci con '+voceIdMap.reduce((s,x)=>s+x.misure.length,0)+' righe misura importate!')
-        await carica()
-      } else {
-        const txt=await file.text()
-        const lines=txt.split('\n').filter(l=>l.trim())
-        if(lines.length<2){setImportErr('File vuoto');setImporting(false);return}
-        const sep=txt.includes(';')?';':','
-        const hdr=lines[0].split(sep).map(h=>h.trim().toLowerCase().replace(/[^a-z0-9_]/g,''))
-        const get=(vals:string[],n:string)=>{const i=hdr.findIndex(h=>h.includes(n));return i>=0?vals[i]||'':''}
-        const rows:Record<string,unknown>[]=[]
-        for(let i=1;i<lines.length;i++){
-          const vals=lines[i].split(sep).map(v=>v.trim().replace(/^"|"$/g,''))
-          if(!vals.some(v=>v)) continue
-          const q=parseFloat(get(vals,'quant')||get(vals,'qta')||'0')||0
-          const p=parseFloat(get(vals,'prezz')||get(vals,'pu')||get(vals,'prezzo')||'0')||0
-          rows.push({computo_id:computoId,capitolo:(get(vals,'cap')||'Importato').slice(0,500),codice:(get(vals,'codice')||'CSV'+String(i).padStart(3,'0')).slice(0,100),codice_prezzario:'',descrizione:(get(vals,'descriz')||get(vals,'desc')||vals[0]||'').slice(0,5000),um:(get(vals,'um')||'nr').slice(0,20),quantita:q,prezzo_unitario:p,importo:q*p,pct_manodopera:0,pct_materiali:0,pct_noli:0,tipo_costo:['INT'],selezionata:true})
-        }
-        if(!rows.length){setImportErr('Nessuna voce trovata');setImporting(false);return}
-        let tot=0
-        for(let i=0;i<rows.length;i+=100){
-          const {error}=await supabase.from('voci_computo').insert(rows.slice(i,i+100))
-          if(error){setImportErr('Errore DB: '+error.message);setImporting(false);return}
-          tot+=Math.min(100,rows.length-i)
-          setImportMsg('Salvate '+tot+'/'+rows.length+'...')
-        }
-        setImportMsg('✅ Importate '+tot+' voci!')
-        await carica()
-      }
-    }catch(e){setImportErr('Errore: '+String(e))}
-    setImporting(false)
-    setTimeout(()=>{setShowImport(false);setImportMsg('');setImportErr('')},3500)
-  }
+  // Raggruppa voci in albero
+  const tree: Record<string, Capitolo> = {}
+  const vociFiltered = filterCapitolo
+    ? voci.filter(v => v.capitolo === filterCapitolo)
+    : voci
 
-  async function salvaVoce(){
-    if(!form.descrizione.trim()) return
-    setSaving(true)
-    const computoId=await getOrCreateComputoId()
-    if(!computoId){setSaving(false);return}
-    const payload={...form,importo:form.quantita*form.prezzo_unitario,computo_id:computoId,selezionata:true}
-    if(editingId){
-      const {data}=await supabase.from('voci_computo').update(payload).eq('id',editingId).select().single()
-      if(data) setVoci(prev=>prev.map(v=>v.id===editingId?(data as VoceComputo):v))
-      setEditingId(null)
-    } else {
-      const {data}=await supabase.from('voci_computo').insert([payload]).select().single()
-      if(data) setVoci(prev=>[...prev,data as VoceComputo])
-    }
-    setSaving(false);setShowForm(false);setForm({...FORM_VUOTO})
-  }
-
-  async function eliminaVoce(id:string){
-    if(!confirm('Eliminare questa voce?')) return
-    await supabase.from('voci_computo').delete().eq('id',id)
-    setVoci(prev=>prev.filter(v=>v.id!==id))
-    setSelezionate(prev=>{const s=new Set(prev);s.delete(id);return s})
-  }
-
-  async function eliminaTutte(){
-    if(!computo?.id||!confirm('Svuotare TUTTO il computo?')) return
-    await supabase.from('voci_computo').delete().eq('computo_id',computo.id)
-    setVoci([]);setSelezionate(new Set())
-  }
-
-  async function aggiornaTipo(id:string,tipo:string){
-    const voce=voci.find(v=>v.id===id)
-    if(!voce) return
-    const cur=voce.tipo_costo||['INT']
-    const newT=cur.includes(tipo)?(cur.filter(t=>t!==tipo).length>0?cur.filter(t=>t!==tipo):['INT']):[...cur,tipo]
-    const {data}=await supabase.from('voci_computo').update({tipo_costo:newT}).eq('id',id).select().single()
-    if(data) setVoci(prev=>prev.map(v=>v.id===id?{...v,tipo_costo:newT}:v))
-  }
-
-  function iniziaModifica(voce:VoceComputo){
-    setForm({capitolo:voce.capitolo||'',codice:voce.codice||'',codice_prezzario:voce.codice_prezzario||'',descrizione:voce.descrizione,um:voce.um||'mc',quantita:voce.quantita,prezzo_unitario:voce.prezzo_unitario,pct_manodopera:voce.pct_manodopera||0,pct_materiali:voce.pct_materiali||0,pct_noli:voce.pct_noli||0,tipo_costo:voce.tipo_costo||['INT'],note_approvvigionamento:voce.note_approvvigionamento||''})
-    setEditingId(voce.id);setShowForm(true)
-  }
-
-  const capitoli=[...new Set(voci.map(v=>v.capitolo||'Generale'))].sort()
-  const vociFiltrate=voci.filter(v=>{
-    const mc=filtroCapitolo==='TUTTI'||(v.capitolo||'Generale')===filtroCapitolo
-    const ms=!search||v.descrizione?.toLowerCase().includes(search.toLowerCase())||v.codice?.toLowerCase().includes(search.toLowerCase())
-    return mc&&ms
+  vociFiltered.forEach(v => {
+    const cap = v.capitolo || '(Senza capitolo)'
+    const sub = v.sottocapitolo || ''
+    if (!tree[cap]) tree[cap] = { nome: cap, sottocapitoli: {}, totale: 0 }
+    if (!tree[cap].sottocapitoli[sub]) tree[cap].sottocapitoli[sub] = { nome: sub, voci: [] }
+    tree[cap].sottocapitoli[sub].voci.push(v)
+    tree[cap].totale += v.importo || 0
   })
-  const capitoliFiltrati=[...new Set(vociFiltrate.map(v=>v.capitolo||'Generale'))].sort()
-  const totale=voci.reduce((s,v)=>s+(v.importo||0),0)
-  const totManodopera=voci.reduce((s,v)=>s+(v.importo||0)*(v.pct_manodopera||0)/100,0)
-  const totMateriali=voci.reduce((s,v)=>s+(v.importo||0)*(v.pct_materiali||0)/100,0)
-  const totNoli=voci.reduce((s,v)=>s+(v.importo||0)*(v.pct_noli||0)/100,0)
-  const totSel=voci.filter(v=>selezionate.has(v.id)).reduce((s,v)=>s+(v.importo||0),0)
-  let progressivo=0
 
-  const inp:React.CSSProperties={width:'100%',boxSizing:'border-box' as const,background:'#fff',border:'1px solid #e2e8f0',borderRadius:7,padding:'7px 10px',color:'#1e293b',fontSize:13}
-  const lbl:React.CSSProperties={fontSize:10,color:'#64748b',fontWeight:600,textTransform:'uppercase' as const,letterSpacing:'0.05em',display:'block',marginBottom:3}
-  const thS:React.CSSProperties={padding:'7px 10px',fontSize:9,fontWeight:700,color:'#64748b',textTransform:'uppercase' as const,letterSpacing:'0.05em',textAlign:'left' as const,whiteSpace:'nowrap' as const,borderBottom:'2px solid var(--border)',background:'#f8fafc'}
+  // Totali
+  const totaleBase = voci.filter(v => v.soggetta_ribasso !== false).reduce((s, v) => s + (v.importo || 0), 0)
+  const totaleSic = voci.filter(v => v.tipo_voce === 'SIC' || v.tipo_voce === 'SIC_SPCL').reduce((s, v) => s + (v.importo || 0), 0)
+  const totaleMdo = voci.filter(v => v.tipo_voce === 'MDO').reduce((s, v) => s + (v.importo || 0), 0)
+  const totaleNR = voci.filter(v => v.soggetta_ribasso === false && v.tipo_voce !== 'SIC' && v.tipo_voce !== 'SIC_SPCL' && v.tipo_voce !== 'MDO').reduce((s, v) => s + (v.importo || 0), 0)
+  const baseAsta = totaleBase + totaleSic + totaleMdo + totaleNR
+  const ribassoEuro = totaleBase * (ribasso / 100)
+  const contratto = totaleBase - ribassoEuro + totaleSic + totaleMdo + totaleNR + (commessa?.importo_sic_psc || 0)
+
+  // Voci non assegnate
+  const voceNoWbs = voci.filter(v => !v.wbs_nodo_id).length
+  const voceNoTipo = voci.filter(v => !v.tipo_assegnazione).length
+
+  // Selezione
+  function toggleSelect(voceId: string, e: React.MouseEvent) {
+    const newSel = new Set(selected)
+    if (e.ctrlKey || e.metaKey) {
+      if (newSel.has(voceId)) newSel.delete(voceId)
+      else newSel.add(voceId)
+    } else if (e.shiftKey && lastClickedRef.current) {
+      const flat = vociFiltered.map(v => v.id)
+      const from = flat.indexOf(lastClickedRef.current)
+      const to = flat.indexOf(voceId)
+      const start = Math.min(from, to)
+      const end = Math.max(from, to)
+      for (let i = start; i <= end; i++) newSel.add(flat[i])
+    } else {
+      newSel.clear()
+      newSel.add(voceId)
+    }
+    lastClickedRef.current = voceId
+    setSelected(newSel)
+  }
+
+  function toggleCapitolo(key: string) {
+    setExpanded(prev => {
+      const n = new Set(prev)
+      if (n.has(key)) n.delete(key)
+      else n.add(key)
+      return n
+    })
+  }
+
+  function selectCapitolo(capName: string, e: React.MouseEvent) {
+    e.stopPropagation()
+    const ids = voci.filter(v => v.capitolo === capName).map(v => v.id)
+    setSelected(new Set(ids))
+  }
+
+  function onCtxMenu(e: React.MouseEvent, voceId?: string) {
+    e.preventDefault()
+    const vociSel = voceId && !selected.has(voceId) ? [voceId] : Array.from(selected)
+    if (voceId && !selected.has(voceId)) setSelected(new Set([voceId]))
+    const tot = voci.filter(v => vociSel.includes(v.id)).reduce((s, v) => s + (v.importo || 0), 0)
+    const rect = editorRef.current?.getBoundingClientRect()
+    const rx = rect ? e.clientX - rect.left : e.clientX
+    const ry = rect ? e.clientY - rect.top : e.clientY
+    setCtxMenu({ x: Math.min(rx, (rect?.width || 800) - 270), y: Math.min(ry, (rect?.height || 600) - 420), voci: vociSel, totale: tot })
+  }
+
+  async function batchAssign(field: string, value: string) {
+    setCtxMenu(null)
+    const ids = Array.from(selected)
+    await supabase.from('voci_computo').update({ [field]: value }).in('id', ids)
+    load()
+  }
+
+  async function saveRibasso() {
+    await supabase.from('commesse').update({ ribasso_pct: ribasso }).eq('id', id)
+    setShowRibassoModal(false)
+    load()
+  }
+
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300, gap: 8, color: '#9ca3af' }}>
+      <Loader2 size={20} className="animate-spin" /> Caricamento computo...
+    </div>
+  )
 
   return (
-    <div style={{padding:'20px 24px',background:'var(--bg)',minHeight:'100%'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16,flexWrap:'wrap',gap:10}}>
-        <div>
-          <h2 style={{fontSize:18,fontWeight:800,color:'var(--t1)',margin:0}}>Computo Metrico Estimativo</h2>
-          <p style={{fontSize:12,color:'var(--t3)',marginTop:3}}>
-            {voci.length} voci · {capitoli.length} capitoli · <strong>€ {fmt(totale)}</strong>
-            {selezionate.size>0&&<span style={{color:'#8b5cf6',marginLeft:8}}>· {selezionate.size} sel. € {fmt(totSel)}</span>}
-          </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0, height: 'calc(100vh - 120px)', overflow: 'hidden' }}>
+
+      {/* BARRA SUPERIORE */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid #e5e7eb', background: '#fff', flexShrink: 0, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Computo metrico</span>
+        <div style={{ flex: 1 }} />
+        {/* Alert voci non assegnate */}
+        {voceNoWbs > 0 && (
+          <span style={{ fontSize: 11, padding: '3px 8px', background: '#fef3c7', color: '#92400e', borderRadius: 6, border: '1px solid #fcd34d' }}>
+            ⚠ {voceNoWbs} voci senza WBS
+          </span>
+        )}
+        {voceNoTipo > 0 && (
+          <span style={{ fontSize: 11, padding: '3px 8px', background: '#fef3c7', color: '#92400e', borderRadius: 6, border: '1px solid #fcd34d' }}>
+            ⚠ {voceNoTipo} senza tipo
+          </span>
+        )}
+        <button onClick={() => setShowRibassoModal(true)}
+          style={{ fontSize: 11, padding: '5px 12px', border: '1px solid #e5e7eb', borderRadius: 8, background: ribasso > 0 ? '#eff6ff' : '#fff', color: ribasso > 0 ? '#1e40af' : '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <Settings size={12} />
+          {ribasso > 0 ? 'Ribasso ' + ribasso.toFixed(2) + '%' : 'Configura ribasso'}
+        </button>
+      </div>
+
+      {/* BARRA SELEZIONE MULTIPLA */}
+      {selected.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', background: '#eff6ff', borderBottom: '1px solid #bfdbfe', fontSize: 11, color: '#1e40af', flexShrink: 0 }}>
+          <Check size={13} />
+          <span style={{ fontWeight: 600 }}>{selected.size} voci selezionate</span>
+          <span style={{ color: '#93c5fd' }}>·</span>
+          <span>EUR {fmt(voci.filter(v => selected.has(v.id)).reduce((s, v) => s + (v.importo || 0), 0))}</span>
+          <span style={{ color: '#93c5fd' }}>·</span>
+          <span>{((voci.filter(v => selected.has(v.id)).reduce((s, v) => s + (v.importo || 0), 0) / baseAsta) * 100).toFixed(1)}%</span>
+          <div style={{ flex: 1 }} />
+          <button onClick={() => setCtxMenu({ x: 12, y: 50, voci: Array.from(selected), totale: voci.filter(v => selected.has(v.id)).reduce((s, v) => s + (v.importo || 0), 0) })}
+            style={{ fontSize: 11, padding: '3px 10px', border: '1px solid #93c5fd', borderRadius: 6, background: '#fff', color: '#1e40af', cursor: 'pointer' }}>
+            Crea RDA →
+          </button>
+          <button onClick={() => setCtxMenu({ x: 12, y: 50, voci: Array.from(selected), totale: 0 })}
+            style={{ fontSize: 11, padding: '3px 10px', border: '1px solid #93c5fd', borderRadius: 6, background: '#fff', color: '#1e40af', cursor: 'pointer' }}>
+            Azioni ▾
+          </button>
+          <button onClick={() => setSelected(new Set())}
+            style={{ fontSize: 11, padding: '3px 8px', border: '1px solid #e5e7eb', borderRadius: 6, background: '#fff', color: '#6b7280', cursor: 'pointer' }}>
+            × Deseleziona
+          </button>
         </div>
-        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-          {selezionate.size>0&&<button onClick={()=>setShowRdo(true)} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',borderRadius:8,border:'none',background:'#8b5cf6',color:'white',fontSize:12,fontWeight:700,cursor:'pointer'}}><ShoppingCart size={13}/> RDO ({selezionate.size})</button>}
-          <button onClick={()=>window.print()} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 12px',borderRadius:8,border:'1px solid var(--border)',background:'var(--panel)',color:'var(--t2)',fontSize:12,cursor:'pointer'}}><Printer size={13}/> Stampa</button>
-          {voci.length>0&&<button onClick={eliminaTutte} style={{padding:'8px 12px',borderRadius:8,border:'1px solid #fecaca',background:'#fef2f2',color:'#ef4444',fontSize:11,cursor:'pointer'}}>🗑 Svuota</button>}
-          <button onClick={()=>setShowImport(true)} className="btn-secondary" style={{fontSize:12}}><Upload size={13}/> Importa</button>
-          <button onClick={()=>{setShowForm(true);setEditingId(null);setForm({...FORM_VUOTO})}} className="btn-primary" style={{fontSize:12}}><Plus size={13}/> Nuova voce</button>
+      )}
+
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+
+        {/* PANNELLO STRUTTURA SINISTRA */}
+        <div style={{ width: 200, borderRight: '1px solid #e5e7eb', overflowY: 'auto', background: '#f9fafb', flexShrink: 0, fontSize: 11 }}>
+          <div style={{ padding: '8px 10px', fontSize: 10, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>
+            Struttura
+          </div>
+          <div
+            onClick={() => setFilterCapitolo(null)}
+            style={{ padding: '6px 10px', cursor: 'pointer', background: !filterCapitolo ? '#e0e7ff' : 'transparent', fontWeight: 500, color: !filterCapitolo ? '#3730a3' : '#374151', display: 'flex', justifyContent: 'space-between' }}>
+            <span>Tutto il computo</span>
+            <span style={{ fontSize: 10, color: '#6b7280' }}>{voci.length}</span>
+          </div>
+
+          {Object.entries(tree).map(([capName, cap]) => (
+            <div key={capName}>
+              <div
+                onClick={() => setFilterCapitolo(filterCapitolo === capName ? null : capName)}
+                style={{ padding: '5px 10px', cursor: 'pointer', background: filterCapitolo === capName ? '#eff6ff' : 'transparent', fontWeight: 500, color: filterCapitolo === capName ? '#1e40af' : '#374151', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #e5e7eb' }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{capName}</span>
+                <span style={{ fontSize: 10, color: '#6b7280', flexShrink: 0 }}>€{fmt(cap.totale).split(',')[0]}</span>
+              </div>
+              {Object.entries(cap.sottocapitoli).filter(([s]) => s).map(([subName]) => (
+                <div key={subName}
+                  style={{ padding: '4px 10px 4px 20px', cursor: 'pointer', color: '#6b7280', display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{subName}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+
+          {/* Sezione sicurezza */}
+          {(commessa?.importo_sic_psc > 0 || totaleSic > 0) && (
+            <div style={{ marginTop: 8, padding: '6px 10px', background: '#fef2f2', borderTop: '1px solid #fecaca' }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: '#991b1b', marginBottom: 4 }}>SICUREZZA PSC</div>
+              <div style={{ fontSize: 10, color: '#dc2626' }}>Non soggetta a ribasso</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#dc2626', marginTop: 2 }}>EUR {fmt(totaleSic + (commessa?.importo_sic_psc || 0))}</div>
+            </div>
+          )}
+          {totaleMdo > 0 && (
+            <div style={{ padding: '6px 10px', background: '#f0fdf4', borderTop: '1px solid #bbf7d0' }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: '#166534', marginBottom: 2 }}>MANODOPERA MDO</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#15803d' }}>EUR {fmt(totaleMdo)}</div>
+            </div>
+          )}
+        </div>
+
+        {/* EDITOR COMPUTO */}
+        <div ref={editorRef} style={{ flex: 1, overflowY: 'auto', position: 'relative' }}
+          onContextMenu={e => { if (selected.size === 0) e.preventDefault() }}
+          onClick={() => setCtxMenu(null)}>
+
+          {/* HEADER COLONNE */}
+          <div style={{ display: 'grid', gridTemplateColumns: '24px 60px 1fr 40px 70px 70px 90px 80px 60px 70px', gap: 0, padding: '5px 8px', background: '#f3f4f6', borderBottom: '2px solid #e5e7eb', fontSize: 10, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em', position: 'sticky', top: 0, zIndex: 10 }}>
+            <span></span>
+            <span>Codice</span>
+            <span>Descrizione</span>
+            <span style={{ textAlign: 'center' }}>UM</span>
+            <span style={{ textAlign: 'right' }}>Quantità</span>
+            <span style={{ textAlign: 'right' }}>P.U. €</span>
+            <span style={{ textAlign: 'right' }}>Importo €</span>
+            <span style={{ textAlign: 'center' }}>WBS</span>
+            <span style={{ textAlign: 'center' }}>Tipo</span>
+            <span style={{ textAlign: 'center' }}>Avanz.</span>
+          </div>
+
+          {/* ALBERO VOCI */}
+          {Object.entries(tree).map(([capName, cap]) => {
+            const capKey = 'cap_' + capName
+            const isCapOpen = expanded.has(capKey)
+            return (
+              <div key={capName} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                {/* HEADER CAPITOLO */}
+                <div
+                  onClick={() => toggleCapitolo(capKey)}
+                  style={{ display: 'grid', gridTemplateColumns: '24px 60px 1fr 40px 70px 70px 90px 80px 60px 70px', gap: 0, padding: '7px 8px', background: '#f8faff', cursor: 'pointer', borderBottom: '1px solid #e5e7eb' }}>
+                  <span style={{ fontSize: 11 }}>{isCapOpen ? '▼' : '▶'}</span>
+                  <span>
+                    <input type="checkbox" style={{ width: 13, height: 13, accentColor: '#2563eb' }}
+                      onChange={e => { e.stopPropagation(); selectCapitolo(capName, e as any) }}
+                      onClick={e => e.stopPropagation()} />
+                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#1e3a8a' }}>{capName}</span>
+                  <span></span><span></span><span></span>
+                  <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 700, color: '#1e3a8a' }}>EUR {fmt(cap.totale)}</span>
+                  <span></span>
+                  <span style={{ textAlign: 'center' }}>
+                    <span style={{ fontSize: 9, padding: '1px 5px', background: '#e0e7ff', color: '#3730a3', borderRadius: 3 }}>
+                      {Object.values(cap.sottocapitoli).reduce((s, sub) => s + sub.voci.length, 0)} voci
+                    </span>
+                  </span>
+                  <span></span>
+                </div>
+
+                {isCapOpen && Object.entries(cap.sottocapitoli).map(([subName, sub]) => {
+                  const subKey = 'sub_' + capName + '_' + subName
+                  const isSubOpen = expanded.has(subKey)
+                  const subTot = sub.voci.reduce((s, v) => s + (v.importo || 0), 0)
+                  return (
+                    <div key={subName}>
+                      {/* SOTTOCAPITOLO */}
+                      {subName && (
+                        <div onClick={() => toggleCapitolo(subKey)}
+                          style={{ display: 'grid', gridTemplateColumns: '24px 60px 1fr 40px 70px 70px 90px 80px 60px 70px', gap: 0, padding: '5px 8px 5px 20px', background: '#fafbff', cursor: 'pointer', borderBottom: '1px solid #f3f4f6' }}>
+                          <span style={{ fontSize: 10, color: '#9ca3af' }}>{isSubOpen ? '▼' : '▶'}</span>
+                          <span></span>
+                          <span style={{ fontSize: 11, fontWeight: 500, color: '#374151' }}>{subName}</span>
+                          <span></span><span></span><span></span>
+                          <span style={{ textAlign: 'right', fontSize: 11, fontWeight: 600, color: '#4b5563' }}>EUR {fmt(subTot)}</span>
+                          <span></span><span></span><span></span>
+                        </div>
+                      )}
+
+                      {/* VOCI */}
+                      {(!subName || isSubOpen) && sub.voci.map(v => {
+                        const isSel = selected.has(v.id)
+                        const tipo = TIPO_BADGE[v.tipo_assegnazione || '']
+                        const tipoVoce = TIPO_VOCE_BADGE[v.tipo_voce || 'LAVORO']
+                        const hasSic = v.tipo_voce === 'SIC' || v.tipo_voce === 'SIC_SPCL'
+                        const avanz = v.avanzamento_pct || 0
+                        return (
+                          <div key={v.id}>
+                            <div
+                              onClick={e => toggleSelect(v.id, e)}
+                              onContextMenu={e => onCtxMenu(e, v.id)}
+                              style={{
+                                display: 'grid', gridTemplateColumns: '24px 60px 1fr 40px 70px 70px 90px 80px 60px 70px', gap: 0,
+                                padding: '5px 8px 5px ' + (subName ? '28px' : '16px'),
+                                background: isSel ? '#eff6ff' : hasSic ? '#fff5f5' : '#fff',
+                                borderLeft: isSel ? '3px solid #2563eb' : hasSic ? '3px solid #fecaca' : '3px solid transparent',
+                                borderBottom: '1px solid #f3f4f6',
+                                cursor: 'pointer',
+                                transition: 'background 0.1s',
+                              }}>
+                              <span>
+                                <input type="checkbox" checked={isSel} onChange={() => {}}
+                                  onClick={e => { e.stopPropagation(); const ns = new Set(selected); if(ns.has(v.id)) ns.delete(v.id); else ns.add(v.id); setSelected(ns) }}
+                                  style={{ width: 13, height: 13, accentColor: '#2563eb', cursor: 'pointer' }} />
+                              </span>
+
+                              <span style={{ fontFamily: 'monospace', fontSize: 10, color: '#6b7280', paddingTop: 1 }}>
+                                {v.codice || v.codice_prezzario || '—'}
+                              </span>
+
+                              {/* DESCRIZIONE — completa, visibile */}
+                              <div style={{ fontSize: 12, color: '#111827', lineHeight: 1.4, paddingRight: 8 }}>
+                                <div style={{ fontWeight: 400 }}>{v.descrizione}</div>
+                                {hasSic && (
+                                  <span style={{ fontSize: 10, padding: '1px 5px', background: '#fee2e2', color: '#991b1b', borderRadius: 3, marginTop: 2, display: 'inline-block' }}>
+                                    SIC — non soggetta a ribasso
+                                  </span>
+                                )}
+                                {v.pct_manodopera && v.pct_manodopera > 0 && (
+                                  <span style={{ fontSize: 10, color: '#6b7280', marginTop: 2, display: 'inline-block', marginLeft: 4 }}>
+                                    MDO: {v.pct_manodopera}%
+                                  </span>
+                                )}
+                              </div>
+
+                              <span style={{ fontSize: 11, textAlign: 'center', color: '#6b7280' }}>{v.um}</span>
+                              <span style={{ fontSize: 11, textAlign: 'right', color: '#374151' }}>{fmtQty(v.quantita)}</span>
+                              <span style={{ fontSize: 11, textAlign: 'right', color: '#374151' }}>{fmt(v.prezzo_unitario)}</span>
+                              <span style={{ fontSize: 12, textAlign: 'right', fontWeight: 600, color: hasSic ? '#dc2626' : '#111827' }}>
+                                {fmt(v.importo)}
+                              </span>
+
+                              {/* WBS badge */}
+                              <span style={{ textAlign: 'center' }}>
+                                {v.wbs_nodo_id ? (
+                                  <span style={{ fontSize: 9, padding: '2px 5px', background: '#fefce8', color: '#713f12', borderRadius: 3, cursor: 'pointer' }}>WBS</span>
+                                ) : (
+                                  <span style={{ fontSize: 9, padding: '2px 5px', background: '#fef2f2', color: '#991b1b', borderRadius: 3, cursor: 'pointer' }}>
+                                    ⚠ WBS
+                                  </span>
+                                )}
+                              </span>
+
+                              {/* Tipo acquisto badge */}
+                              <span style={{ textAlign: 'center' }}>
+                                {tipo ? (
+                                  <span style={{ fontSize: 9, padding: '2px 5px', background: tipo.bg, color: tipo.color, borderRadius: 3 }}>{tipo.label}</span>
+                                ) : (
+                                  <span style={{ fontSize: 9, padding: '2px 5px', background: '#fef2f2', color: '#991b1b', borderRadius: 3 }}>NC</span>
+                                )}
+                              </span>
+
+                              {/* Avanzamento */}
+                              <span style={{ textAlign: 'center' }}>
+                                <div style={{ height: 4, background: '#e5e7eb', borderRadius: 2, overflow: 'hidden', margin: '0 4px' }}>
+                                  <div style={{ height: '100%', width: avanz + '%', background: avanz >= 100 ? '#059669' : avanz > 0 ? '#2563eb' : '#e5e7eb', borderRadius: 2 }} />
+                                </div>
+                                <span style={{ fontSize: 9, color: avanz > 0 ? '#2563eb' : '#9ca3af' }}>{avanz}%</span>
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+
+          {/* MENU CONTESTUALE TASTO DESTRO */}
+          {ctxMenu && (
+            <div onClick={e => e.stopPropagation()} onContextMenu={e => e.preventDefault()}
+              style={{ position: 'absolute', top: ctxMenu.y, left: ctxMenu.x, zIndex: 1000, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', width: 265, overflow: 'hidden' }}>
+
+              {/* Header selezione */}
+              <div style={{ padding: '8px 12px', background: '#eff6ff', borderBottom: '1px solid #bfdbfe', fontSize: 11, color: '#1e40af', fontWeight: 600 }}>
+                {ctxMenu.voci.length} {ctxMenu.voci.length === 1 ? 'voce selezionata' : 'voci selezionate'}
+                {ctxMenu.totale > 0 && <span style={{ fontWeight: 400 }}> · EUR {fmt(ctxMenu.totale)}</span>}
+              </div>
+
+              {/* CREA DOCUMENTI */}
+              <div style={{ borderBottom: '1px solid #f3f4f6', padding: '4px 0' }}>
+                <div style={{ padding: '2px 12px 4px', fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Crea documenti</div>
+                {[
+                  { icon: '📋', label: 'Crea RDA per le ' + ctxMenu.voci.length + ' voci', sub: '→ 1 sola RDA', primary: true },
+                  { icon: '📤', label: 'Crea RDO con richiesta docs', sub: '→ 1 RDO', primary: true },
+                  { icon: '📦', label: 'Crea ODA diretto', sub: '(lavori privati)' },
+                ].map(({ icon, label, sub, primary }) => (
+                  <div key={label} onClick={() => setCtxMenu(null)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', cursor: 'pointer', color: primary ? '#1e40af' : '#374151' }}
+                    onMouseOver={e => (e.currentTarget.style.background = '#f8faff')}
+                    onMouseOut={e => (e.currentTarget.style.background = '')}>
+                    <span style={{ fontSize: 14, width: 18 }}>{icon}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 12, fontWeight: primary ? 500 : 400 }}>{label}</div>
+                    </div>
+                    {sub && <span style={{ fontSize: 10, color: '#9ca3af' }}>{sub}</span>}
+                  </div>
+                ))}
+              </div>
+
+              {/* ASSEGNA A TUTTE */}
+              <div style={{ borderBottom: '1px solid #f3f4f6', padding: '4px 0' }}>
+                <div style={{ padding: '2px 12px 4px', fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Assegna a tutte</div>
+
+                {/* WBS */}
+                <div style={{ padding: '4px 12px', fontSize: 12, color: '#374151' }}>
+                  <div style={{ marginBottom: 4, fontWeight: 500, display: 'flex', gap: 6 }}>
+                    <span>🏗</span> Cambia WBS
+                  </div>
+                  <select onChange={e => batchAssign('wbs_nodo_id', e.target.value)} onClick={e => e.stopPropagation()}
+                    style={{ width: '100%', fontSize: 11, border: '1px solid #e5e7eb', borderRadius: 6, padding: '4px 8px' }}>
+                    <option value="">— seleziona nodo WBS —</option>
+                    <option value="f01">F01 Strutture</option>
+                    <option value="f01_01">F01.01 Fondazioni</option>
+                    <option value="f01_02">F01.02 Elevazione</option>
+                    <option value="f02">F02 Infissi</option>
+                    <option value="f03">F03 Impianti</option>
+                    <option value="f04">F04 Finiture</option>
+                  </select>
+                </div>
+
+                {/* Categoria */}
+                <div style={{ padding: '4px 12px 6px', fontSize: 12, color: '#374151' }}>
+                  <div style={{ marginBottom: 4, fontWeight: 500, display: 'flex', gap: 6 }}>
+                    <span>📁</span> Cambia capitolo
+                  </div>
+                  <input placeholder="es. STRUTTURE, INFISSI..."
+                    onKeyDown={e => { if (e.key === 'Enter') batchAssign('capitolo', (e.target as HTMLInputElement).value) }}
+                    onClick={e => e.stopPropagation()}
+                    style={{ width: '100%', fontSize: 11, border: '1px solid #e5e7eb', borderRadius: 6, padding: '4px 8px', boxSizing: 'border-box' }} />
+                </div>
+
+                {/* Tipo acquisto */}
+                <div style={{ display: 'flex', gap: 4, padding: '4px 12px 6px' }}>
+                  <span style={{ fontSize: 12, color: '#374151', flex: 1, display: 'flex', alignItems: 'center', gap: 4 }}><span>🏷</span> Tipo:</span>
+                  {['INT','SUB','ACQ','NC','NF'].map(t => {
+                    const b = TIPO_BADGE[t]
+                    return (
+                      <button key={t} onClick={() => batchAssign('tipo_assegnazione', t)}
+                        style={{ fontSize: 10, padding: '3px 7px', border: '1px solid ' + b.color, borderRadius: 4, background: b.bg, color: b.color, cursor: 'pointer' }}>
+                        {b.label}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Flag sicurezza */}
+                <div style={{ display: 'flex', gap: 4, padding: '0 12px 6px' }}>
+                  <span style={{ fontSize: 12, color: '#374151', flex: 1, display: 'flex', alignItems: 'center', gap: 4 }}><span>🔒</span> Sicurezza:</span>
+                  {['LAVORO','SIC','SIC_SPCL','MDO'].map(t => {
+                    const b = TIPO_VOCE_BADGE[t]
+                    return (
+                      <button key={t} onClick={() => batchAssign('tipo_voce', t)}
+                        style={{ fontSize: 10, padding: '3px 5px', border: '1px solid ' + b.color, borderRadius: 4, background: b.bg, color: b.color, cursor: 'pointer' }}>
+                        {b.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* GESTIONE */}
+              <div style={{ padding: '4px 0' }}>
+                <div style={{ padding: '2px 12px 4px', fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Gestione</div>
+                {[
+                  { icon: '📊', label: 'Esporta selezione Excel' },
+                  { icon: '🖨', label: 'Stampa voci selezionate' },
+                ].map(({ icon, label }) => (
+                  <div key={label} onClick={() => setCtxMenu(null)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 12, color: '#374151' }}
+                    onMouseOver={e => (e.currentTarget.style.background = '#f9fafb')}
+                    onMouseOut={e => (e.currentTarget.style.background = '')}>
+                    <span style={{ fontSize: 14, width: 18 }}>{icon}</span>
+                    {label}
+                  </div>
+                ))}
+              </div>
+
+            </div>
+          )}
         </div>
       </div>
-      {voci.length>0&&(
-        <div style={{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap',alignItems:'center'}}>
-          <div style={{position:'relative',flex:1,minWidth:220}}>
-            <Search size={12} style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:'var(--t4)'}}/>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cerca codice o descrizione..." style={{width:'100%',background:'var(--panel)',border:'1px solid var(--border)',borderRadius:8,padding:'8px 12px 8px 30px',fontSize:12,color:'var(--t1)',boxSizing:'border-box' as const}}/>
-          </div>
-          <select value={filtroCapitolo} onChange={e=>setFiltroCapitolo(e.target.value)} style={{padding:'8px 12px',borderRadius:8,border:'1px solid var(--border)',background:'var(--panel)',fontSize:12,color:'var(--t1)',cursor:'pointer'}}>
-            <option value="TUTTI">Tutti i capitoli ({capitoli.length})</option>
-            {capitoli.map(c=><option key={c} value={c}>{c.length>50?c.slice(0,50)+'…':c}</option>)}
-          </select>
-          {selezionate.size>0&&<button onClick={()=>setSelezionate(new Set())} style={{padding:'8px 10px',borderRadius:8,border:'1px solid var(--border)',background:'var(--panel)',fontSize:11,color:'var(--t3)',cursor:'pointer'}}>✕ Deseleziona</button>}
+
+      {/* FOOTER FISSO CON TOTALI */}
+      <div style={{ borderTop: '2px solid #e5e7eb', background: '#f8faff', padding: '8px 12px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, flexShrink: 0 }}>
+        <div style={{ fontSize: 11 }}>
+          <div style={{ color: '#6b7280', fontSize: 10, marginBottom: 3 }}>Lavori soggetti a ribasso</div>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>EUR {fmt(totaleBase)}</div>
+          {ribasso > 0 && <div style={{ color: '#dc2626', fontSize: 11 }}>- {ribasso}% = EUR {fmt(ribassoEuro)}</div>}
+          {totaleSic > 0 && <div style={{ color: '#dc2626', fontSize: 10, marginTop: 2 }}>+ Sic. PSC: EUR {fmt(totaleSic)} (no ribasso)</div>}
+          {totaleMdo > 0 && <div style={{ color: '#059669', fontSize: 10 }}>+ MDO: EUR {fmt(totaleMdo)} (no ribasso)</div>}
         </div>
-      )}
-      {loading?<div style={{textAlign:'center',padding:48}}><div className="spinner" style={{margin:'0 auto'}}/></div>
-      :voci.length===0?(
-        <div style={{textAlign:'center',padding:'60px 32px',background:'var(--panel)',border:'2px dashed var(--border)',borderRadius:16}}>
-          <FileText size={40} color="var(--t4)" style={{marginBottom:14}}/>
-          <h3 style={{fontSize:16,fontWeight:700,color:'var(--t2)',margin:'0 0 8px'}}>Computo vuoto</h3>
-          <p style={{fontSize:13,color:'var(--t3)',marginBottom:20}}>Importa da Primus XPWE o inserisci le voci manualmente</p>
-          <div style={{display:'flex',gap:10,justifyContent:'center'}}>
-            <button onClick={()=>setShowImport(true)} className="btn-secondary"><Upload size={14}/> Importa XPWE / CSV</button>
-            <button onClick={()=>setShowForm(true)} className="btn-primary"><Plus size={14}/> Inserisci manualmente</button>
-          </div>
+        <div style={{ fontSize: 11, textAlign: 'center' }}>
+          <div style={{ color: '#6b7280', fontSize: 10, marginBottom: 3 }}>Base d'asta totale</div>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>EUR {fmt(baseAsta)}</div>
+          <div style={{ fontSize: 10, color: '#6b7280' }}>{voci.length} voci di computo</div>
         </div>
-      ):(
-        <div style={{background:'var(--panel)',border:'1px solid var(--border)',borderRadius:12,overflow:'hidden'}}>
-          <div style={{overflowX:'auto'}}>
-            <table style={{width:'100%',borderCollapse:'collapse',minWidth:1100}}>
-              <thead>
-                <tr>
-                  <th style={{...thS,width:36,textAlign:'center' as const}}></th>
-                  <th style={{...thS,width:40,textAlign:'center' as const}}>N°</th>
-                  <th style={{...thS,width:100}}>Codice</th>
-                  <th style={{...thS}}>Descrizione lavori</th>
-                  <th style={{...thS,width:55,textAlign:'center' as const}}>U.M.</th>
-                  <th style={{...thS,width:90,textAlign:'right' as const}}>Quantità</th>
-                  <th style={{...thS,width:100,textAlign:'right' as const}}>P.U. (€)</th>
-                  <th style={{...thS,width:110,textAlign:'right' as const}}>Importo (€)</th>
-                  <th style={{...thS,width:45,textAlign:'center' as const}}>Man%</th>
-                  <th style={{...thS,width:45,textAlign:'center' as const}}>Mat%</th>
-                  <th style={{...thS,width:45,textAlign:'center' as const}}>Nol%</th>
-                  <th style={{...thS,width:130,textAlign:'center' as const}}>Tipo costo</th>
-                  <th style={{...thS,width:85}}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {capitoliFiltrati.map(cap=>{
-                  const vociCap=vociFiltrate.filter(v=>(v.capitolo||'Generale')===cap)
-                  const totaleCap=vociCap.reduce((s,v)=>s+(v.importo||0),0)
-                  const tutteSel=vociCap.length>0&&vociCap.every(v=>selezionate.has(v.id))
-                  return [
-                    <tr key={'cap-'+cap} style={{background:'#1e3a5f'}}>
-                      <td style={{padding:'8px 10px',textAlign:'center' as const}}>
-                        <button onClick={()=>{const ids=vociCap.map(v=>v.id);setSelezionate(prev=>{const s=new Set(prev);ids.forEach(id=>tutteSel?s.delete(id):s.add(id));return s})}} style={{background:'none',border:'none',cursor:'pointer',color:tutteSel?'#a78bfa':'#94a3b8',display:'flex',alignItems:'center'}}>{tutteSel?<CheckSquare size={13}/>:<Square size={13}/>}</button>
-                      </td>
-                      <td colSpan={11} style={{padding:'8px 12px'}}>
-                        <span style={{fontSize:11,fontWeight:800,color:'#ffffff',textTransform:'uppercase' as const,letterSpacing:'0.08em'}}>{cap}</span>
-                        <span style={{fontSize:10,color:'#94a3b8',marginLeft:12}}>{vociCap.length} voci</span>
-                      </td>
-                      <td style={{padding:'8px 12px',textAlign:'right' as const}}>
-                        <span style={{fontSize:12,fontWeight:800,color:'#60a5fa',fontFamily:'var(--font-mono)'}}>€ {fmt(totaleCap)}</span>
-                      </td>
-                    </tr>,
-                    ...vociCap.map(voce=>{
-                      progressivo++
-                      const isSel=selezionate.has(voce.id)
-                      return (
-                        <tr key={voce.id} style={{borderBottom:'1px solid var(--border)',background:isSel?'rgba(139,92,246,0.04)':'transparent'}}>
-                          <td style={{padding:'6px 10px',textAlign:'center' as const}}>
-                            <button onClick={()=>{const s=new Set(selezionate);s.has(voce.id)?s.delete(voce.id):s.add(voce.id);setSelezionate(s)}} style={{background:'none',border:'none',cursor:'pointer',color:isSel?'#8b5cf6':'var(--t4)',display:'flex',alignItems:'center'}}>{isSel?<CheckSquare size={13}/>:<Square size={13}/>}</button>
-                          </td>
-                          <td style={{padding:'6px 8px',fontSize:10,color:'var(--t4)',textAlign:'center' as const,fontFamily:'var(--font-mono)'}}>{progressivo}</td>
-                          <td style={{padding:'6px 10px',fontSize:11,fontFamily:'var(--font-mono)',color:'var(--t3)',whiteSpace:'nowrap' as const}}>{voce.codice||'—'}</td>
-                          <td style={{padding:'6px 10px',fontSize:12,color:'var(--t1)',lineHeight:1.45,maxWidth:400}}>
-                            <div style={{cursor:'pointer'}} onClick={()=>setShowDescr(showDescr===voce.id?null:voce.id)}>
-                              {showDescr===voce.id?<div style={{whiteSpace:'pre-wrap' as const,fontSize:12,lineHeight:1.5}}>{voce.descrizione}</div>:<div style={{overflow:'hidden',textOverflow:'ellipsis',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical' as const}}>{voce.descrizione}</div>}
-                            </div>
-                          </td>
-                          <td style={{padding:'6px 10px',fontSize:11,color:'var(--t3)',textAlign:'center' as const}}>{voce.um}</td>
-                          <td style={{padding:'6px 10px',fontSize:11,fontFamily:'var(--font-mono)',textAlign:'right' as const,color:'var(--accent)',cursor:'pointer',textDecoration:'underline dotted'}} onClick={()=>setShowMisure(voce.id)} title="Apri foglio misure">
-                            {fmtQ(voce.quantita)}
-                          </td>
-                          <td style={{padding:'6px 10px',fontSize:12,fontFamily:'var(--font-mono)',textAlign:'right' as const,color:'var(--t2)'}}>{fmt(voce.prezzo_unitario)}</td>
-                          <td style={{padding:'6px 10px',fontSize:13,fontFamily:'var(--font-mono)',textAlign:'right' as const,fontWeight:700,color:'var(--t1)'}}>{fmt(voce.importo)}</td>
-                          <td style={{padding:'6px 6px',fontSize:10,textAlign:'center' as const,color:'#10b981'}}>{voce.pct_manodopera||0}%</td>
-                          <td style={{padding:'6px 6px',fontSize:10,textAlign:'center' as const,color:'#3b82f6'}}>{voce.pct_materiali||0}%</td>
-                          <td style={{padding:'6px 6px',fontSize:10,textAlign:'center' as const,color:'#f59e0b'}}>{voce.pct_noli||0}%</td>
-                          <td style={{padding:'6px 8px'}}>
-                            <div style={{display:'flex',gap:2,flexWrap:'wrap',justifyContent:'center'}}>
-                              {TIPI_COSTO.map(t=>{const on=(voce.tipo_costo||['INT']).includes(t.id);return <button key={t.id} onClick={()=>aggiornaTipo(voce.id,t.id)} title={t.label} style={{padding:'2px 5px',borderRadius:4,border:'1px solid '+(on?t.color:'var(--border)'),background:on?(t.color+'22'):'transparent',color:on?t.color:'var(--t4)',fontSize:9,fontWeight:700,cursor:'pointer'}}>{t.id}</button>})}
-                            </div>
-                          </td>
-                          <td style={{padding:'6px 8px',whiteSpace:'nowrap' as const}}>
-                            <div style={{display:'flex',gap:3}}>
-                              <button onClick={()=>setShowMisure(voce.id)} title="Foglio misure" style={{background:'none',border:'1px solid var(--border)',borderRadius:5,padding:'3px 6px',cursor:'pointer',color:'var(--accent)',display:'flex',alignItems:'center'}}><Calculator size={10}/></button>
-                              <button onClick={()=>iniziaModifica(voce)} title="Modifica" style={{background:'none',border:'1px solid var(--border)',borderRadius:5,padding:'3px 6px',cursor:'pointer',color:'var(--t3)',display:'flex',alignItems:'center'}}><Edit2 size={10}/></button>
-                              <button onClick={()=>eliminaVoce(voce.id)} title="Elimina" style={{background:'none',border:'1px solid rgba(239,68,68,0.2)',borderRadius:5,padding:'3px 6px',cursor:'pointer',color:'#ef4444',display:'flex',alignItems:'center'}}><Trash2 size={10}/></button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    }),
-                    <tr key={'tot-'+cap} style={{background:'rgba(30,58,95,0.06)',borderTop:'2px solid rgba(30,58,95,0.15)',borderBottom:'3px solid rgba(30,58,95,0.2)'}}>
-                      <td colSpan={7} style={{padding:'7px 12px',fontSize:11,fontWeight:700,color:'#1e3a5f'}}>Totale — {cap.length>60?cap.slice(0,60)+'…':cap}</td>
-                      <td style={{padding:'7px 10px',fontSize:14,fontFamily:'var(--font-mono)',fontWeight:800,color:'#1e3a5f',textAlign:'right' as const}}>{fmt(totaleCap)}</td>
-                      <td colSpan={5}/>
-                    </tr>
-                  ]
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div style={{borderTop:'3px solid var(--border)',background:'#f8fafc',padding:'16px 24px'}}>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 2fr',gap:16,alignItems:'end'}}>
-              {[
-                {label:'Incid. Manodopera',val:'€ '+fmt(totManodopera),sub:(totale>0?(totManodopera/totale*100):0).toFixed(1)+'%',color:'#10b981'},
-                {label:'Incid. Materiali',val:'€ '+fmt(totMateriali),sub:(totale>0?(totMateriali/totale*100):0).toFixed(1)+'%',color:'#3b82f6'},
-                {label:'Incid. Noli',val:'€ '+fmt(totNoli),sub:(totale>0?(totNoli/totale*100):0).toFixed(1)+'%',color:'#f59e0b'},
-                {label:'N° Voci / Capitoli',val:voci.length+' / '+capitoli.length,sub:'voci importate',color:'#8b5cf6'},
-              ].map((k,i)=>(
-                <div key={i} style={{background:'white',borderRadius:8,padding:'10px 14px',border:'1px solid var(--border)'}}>
-                  <div style={{fontSize:9,color:'var(--t4)',textTransform:'uppercase' as const,marginBottom:4,letterSpacing:'0.06em'}}>{k.label}</div>
-                  <div style={{fontSize:16,fontWeight:800,color:k.color,fontFamily:'var(--font-mono)'}}>{k.val}</div>
-                  <div style={{fontSize:10,color:'var(--t3)',marginTop:2}}>{k.sub}</div>
-                </div>
-              ))}
-              <div style={{background:'#1e3a5f',borderRadius:10,padding:'14px 20px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <span style={{fontSize:13,fontWeight:700,color:'#94c5f8'}}>TOTALE COMPUTO</span>
-                <span style={{fontSize:26,fontWeight:900,color:'#ffffff',fontFamily:'var(--font-mono)'}}>€ {fmt(totale)}</span>
-              </div>
+        <div style={{ fontSize: 11, textAlign: 'right' }}>
+          <div style={{ color: '#6b7280', fontSize: 10, marginBottom: 3 }}>Importo contratto</div>
+          <div style={{ fontWeight: 700, fontSize: 16, color: '#059669' }}>EUR {fmt(contratto)}</div>
+          {ribasso > 0 && <div style={{ fontSize: 10, color: '#6b7280' }}>Dopo ribasso {ribasso.toFixed(2)}%</div>}
+        </div>
+      </div>
+
+      {/* MODAL RIBASSO */}
+      {showRibassoModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 16px' }}>Configurazione commessa</h3>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>Ribasso d'asta offerto (%)</label>
+              <input type="number" step="0.001" min="0" max="100" value={ribasso}
+                onChange={e => setRibasso(parseFloat(e.target.value) || 0)}
+                style={{ width: '100%', fontSize: 14, border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 12px', boxSizing: 'border-box' }} />
+            </div>
+            <div style={{ padding: 12, background: '#f0fdf4', borderRadius: 8, marginBottom: 16, fontSize: 12 }}>
+              <div>Base d'asta: EUR {fmt(totaleBase)}</div>
+              <div style={{ color: '#dc2626' }}>Ribasso {ribasso.toFixed(3)}%: - EUR {fmt(totaleBase * ribasso / 100)}</div>
+              <div style={{ fontWeight: 600, marginTop: 4 }}>Contratto lavori: EUR {fmt(totaleBase * (1 - ribasso/100))}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowRibassoModal(false)}
+                style={{ padding: '8px 16px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', cursor: 'pointer' }}>
+                Annulla
+              </button>
+              <button onClick={saveRibasso}
+                style={{ padding: '8px 16px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 500 }}>
+                Salva
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {showMisure&&(()=>{
-        const voce=voci.find(v=>v.id===showMisure)
-        if(!voce) return null
-        return <FoglioMisure voceId={showMisure} voceInfo={{codice:voce.codice,descrizione:voce.descrizione,um:voce.um}} onClose={()=>setShowMisure(null)} onSaved={(q,i)=>{setVoci(prev=>prev.map(v=>v.id===showMisure?{...v,quantita:q,importo:i}:v));setShowMisure(null)}}/>
-      })()}
-
-      {showImport&&(
-        <div className="modal-overlay"><div className="modal-box" style={{maxWidth:520}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
-            <div><h2 style={{fontSize:18,fontWeight:800,color:'#1e293b',margin:0}}>Importa Computo</h2><p style={{fontSize:11,color:'#64748b',marginTop:3}}>Primus XPWE · CSV</p></div>
-            <button onClick={()=>{setShowImport(false);setImportMsg('');setImportErr('')}} style={{background:'#f1f5f9',border:'none',borderRadius:8,padding:8,cursor:'pointer'}}><X size={15} color="#64748b"/></button>
-          </div>
-          {importErr&&<div style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.25)',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:12,color:'#ef4444',display:'flex',gap:8}}><AlertTriangle size={14} style={{flexShrink:0}}/>{importErr}</div>}
-          {importing?<div style={{textAlign:'center',padding:'32px 0'}}><div className="spinner" style={{margin:'0 auto 14px'}}/><div style={{fontSize:13,color:'#64748b'}}>{importMsg}</div></div>
-          :importMsg.startsWith('✅')?<div style={{background:'rgba(16,185,129,0.08)',border:'1px solid rgba(16,185,129,0.3)',borderRadius:10,padding:20,textAlign:'center',color:'#10b981',fontSize:14,fontWeight:700}}>{importMsg}</div>
-          :(<>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
-              {[{icon:'🏗',t:'Primus XPWE',s:'.xpwe / .xml',c:'#6366f1'},{icon:'📊',t:'CSV / TXT',s:'separatore ; o ,',c:'#10b981'}].map((b,i)=>(
-                <div key={i} onClick={()=>fileRef.current?.click()} style={{border:'2px dashed '+b.c+'50',borderRadius:10,padding:'20px 14px',textAlign:'center',cursor:'pointer',background:b.c+'08'}}>
-                  <div style={{fontSize:28,marginBottom:6}}>{b.icon}</div>
-                  <div style={{fontSize:13,fontWeight:700,color:b.c}}>{b.t}</div>
-                  <div style={{fontSize:10,color:'#94a3b8',marginTop:2}}>{b.s}</div>
-                </div>
-              ))}
-            </div>
-            <div onClick={()=>fileRef.current?.click()} style={{border:'2px dashed var(--border)',borderRadius:10,padding:18,textAlign:'center',cursor:'pointer',background:'var(--bg)'}}>
-              <Upload size={20} color="var(--t4)" style={{marginBottom:6}}/><div style={{fontSize:12,fontWeight:600,color:'var(--t2)'}}>Clicca o trascina il file</div>
-            </div>
-            <input ref={fileRef} type="file" accept=".csv,.txt,.xpwe,.xml" style={{display:'none'}} onChange={e=>{const f=e.target.files?.[0];if(f){handleFileImport(f);e.target.value=''}}}/>
-          </>)}
-        </div></div>
-      )}
-
-      {showRdo&&(
-        <div className="modal-overlay"><div className="modal-box" style={{maxWidth:500}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
-            <div><h2 style={{fontSize:18,fontWeight:800,color:'#1e293b',margin:0}}>Richiesta d'Offerta</h2><p style={{fontSize:11,color:'#64748b',marginTop:3}}>{selezionate.size} voci · € {fmt(totSel)}</p></div>
-            <button onClick={()=>setShowRdo(false)} style={{background:'#f1f5f9',border:'none',borderRadius:8,padding:8,cursor:'pointer'}}><X size={15} color="#64748b"/></button>
-          </div>
-          <div style={{background:'#f8fafc',borderRadius:10,padding:16,fontSize:12,color:'#64748b',textAlign:'center'}}>
-            <div style={{fontSize:20,marginBottom:8}}>🚀</div>
-            <div style={{fontWeight:700,color:'#334155',marginBottom:6}}>Modulo RDO — In sviluppo</div>
-          </div>
-          <div style={{marginTop:16,display:'flex',justifyContent:'flex-end'}}><button onClick={()=>setShowRdo(false)} className="btn-secondary">Chiudi</button></div>
-        </div></div>
-      )}
-
-      {showForm&&(
-        <div className="modal-overlay"><div className="modal-box" style={{maxWidth:680}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:18}}>
-            <h2 style={{fontSize:18,fontWeight:800,color:'#1e293b',margin:0}}>{editingId?'Modifica voce':'Nuova voce'}</h2>
-            <button onClick={()=>{setShowForm(false);setEditingId(null)}} style={{background:'#f1f5f9',border:'none',borderRadius:8,padding:8,cursor:'pointer'}}><X size={15} color="#64748b"/></button>
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,maxHeight:'70vh',overflowY:'auto',paddingRight:2}}>
-            <div><label style={lbl}>Capitolo</label><input value={form.capitolo} onChange={e=>setForm(p=>({...p,capitolo:e.target.value}))} style={inp}/></div>
-            <div><label style={lbl}>Codice tariffa</label><input value={form.codice} onChange={e=>setForm(p=>({...p,codice:e.target.value}))} style={{...inp,fontFamily:'monospace'}}/></div>
-            <div><label style={lbl}>U.M.</label><select value={form.um} onChange={e=>setForm(p=>({...p,um:e.target.value}))} style={{...inp,width:'100%'}}>{UM_LIST.map(u=><option key={u}>{u}</option>)}</select></div>
-            <div><label style={lbl}>Prezzo unitario (€)</label><input type="number" step="0.01" value={form.prezzo_unitario||''} onChange={e=>setForm(p=>({...p,prezzo_unitario:parseFloat(e.target.value)||0}))} style={{...inp,fontFamily:'monospace'}}/></div>
-            <div style={{gridColumn:'span 2'}}><label style={lbl}>Descrizione *</label><textarea value={form.descrizione} onChange={e=>setForm(p=>({...p,descrizione:e.target.value}))} rows={4} style={{...inp,resize:'vertical',minHeight:80,width:'100%'}}/></div>
-            <div><label style={lbl}>Quantità</label><input type="number" step="0.001" value={form.quantita||''} onChange={e=>setForm(p=>({...p,quantita:parseFloat(e.target.value)||0}))} style={{...inp,fontFamily:'monospace'}}/></div>
-            <div style={{display:'flex',flexDirection:'column' as const,justifyContent:'flex-end'}}>
-              <div style={{background:'rgba(30,58,95,0.06)',border:'1px solid rgba(30,58,95,0.15)',borderRadius:9,padding:'10px 14px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <span style={{fontSize:12,color:'#1e3a5f'}}>Importo</span>
-                <span style={{fontSize:18,fontWeight:900,color:'#1e3a5f',fontFamily:'monospace'}}>€ {fmt(form.quantita*form.prezzo_unitario)}</span>
-              </div>
-            </div>
-            <div style={{gridColumn:'span 2'}}>
-              <label style={lbl}>Tipo costo</label>
-              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:4}}>
-                {TIPI_COSTO.map(t=>{const on=form.tipo_costo.includes(t.id);return <button key={t.id} type="button" onClick={()=>{const cur=form.tipo_costo;const newT=cur.includes(t.id)?(cur.filter(x=>x!==t.id).length>0?cur.filter(x=>x!==t.id):['INT']):[...cur,t.id];setForm(p=>({...p,tipo_costo:newT}))}} style={{display:'flex',flexDirection:'column' as const,alignItems:'center',padding:'8px 16px',borderRadius:8,border:'2px solid '+(on?t.color:'var(--border)'),background:on?(t.color+'15'):'var(--bg)',cursor:'pointer'}}><span style={{fontSize:14,fontWeight:800,color:on?t.color:'var(--t3)'}}>{t.id}</span><span style={{fontSize:9,color:on?(t.color+'cc'):'var(--t4)'}}>{t.label}</span></button>})}
-              </div>
-            </div>
-          </div>
-          <div style={{marginTop:18,display:'flex',justifyContent:'flex-end',gap:10}}>
-            <button onClick={()=>{setShowForm(false);setEditingId(null)}} className="btn-secondary">Annulla</button>
-            <button onClick={salvaVoce} disabled={saving||!form.descrizione.trim()} className="btn-primary"><Save size={14}/>{saving?'Salvataggio...':editingId?'Aggiorna':'Aggiungi voce'}</button>
-          </div>
-        </div></div>
-      )}
     </div>
   )
 }
