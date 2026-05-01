@@ -4,9 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Plus, Search, Loader2, Building2, RefreshCw, AlertTriangle, CheckCircle2, Clock, XCircle, FileText } from 'lucide-react'
-
 const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })
-
 const STATI_CFG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   AGGIUDICATA:    { label: 'Aggiudicata',    color: '#d97706', bg: '#fffbeb', icon: FileText },
   IN_ESECUZIONE:  { label: 'In esecuzione',  color: '#059669', bg: '#f0fdf4', icon: CheckCircle2 },
