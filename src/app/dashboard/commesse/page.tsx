@@ -667,8 +667,9 @@ export default function CommessePage() {
                     </span>
                     {isScaduta && <span style={{ fontSize: 10, padding: '2px 6px', background: '#fee2e2', color: '#dc2626', borderRadius: 4, fontWeight: 700 }}>SCADUTA {Math.abs(gg!)}gg</span>}
                     {isScadente && !isScaduta && <span style={{ fontSize: 10, padding: '2px 6px', background: '#fef3c7', color: '#d97706', borderRadius: 4, fontWeight: 600 }}>⚠ {gg}gg rimanenti</span>}
+                 </div>
                   <p style={{ fontSize: 14, fontWeight: 600, margin: '0 0 2px', color: '#111827' }}>{c.nome}</p>
-                  }              <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>
+                  <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>
                     {c.committente}
                     {c.data_fine_contrattuale && <span style={{ marginLeft: 10 }}>· Fine lavori: {new Date(c.data_fine_contrattuale).toLocaleDateString('it-IT')}</span>}
                   </p>
