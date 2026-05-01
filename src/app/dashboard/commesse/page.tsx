@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Plus, Search, Loader2, Building2, RefreshCw, AlertTriangle, CheckCircle2, Clock, XCircle, FileText } from 'lucide-react'
+import { AIImportButton } from '@/components/AIImportButton'
 
 const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })
 
@@ -11,7 +12,7 @@ const STATI_CFG: Record<string, { label: string; color: string; bg: string; icon
   AGGIUDICATA:    { label: 'Aggiudicata',    color: '#d97706', bg: '#fffbeb', icon: FileText },
   IN_ESECUZIONE:  { label: 'In esecuzione',  color: '#059669', bg: '#f0fdf4', icon: CheckCircle2 },
   SOSPESA:        { label: 'Sospesa',        color: '#dc2626', bg: '#fef2f2', icon: AlertTriangle },
-  ULTIMATA:       { label: 'Ultimata',       color: '#7c3aed', bg: '#f5f3ff', icon: CheckCircle2 },
+  ULTIMATA:       { label: 'Ultimata',       color: '#7c3aed', bg: '#f5f3ff', ichon: CheckCircle2 },
   IN_COLLAUDO:    { label: 'In collaudo',    color: '#2563eb', bg: '#eff6ff', icon: Clock },
   CHIUSA:         { label: 'Chiusa',         color: '#6b7280', bg: '#f3f4f6', icon: XCircle },
   RESCISSA:       { label: 'Rescissa',       color: '#dc2626', bg: '#fef2f2', icon: XCircle },
