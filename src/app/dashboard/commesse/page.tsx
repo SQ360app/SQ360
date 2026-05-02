@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { Plus, Search, Loader2, Building2, RefreshCw, AlertTriangle, CheckCircle2, Clock, XCircle, FileText } from 
+import { Plus, Search, Loader2, Building2, RefreshCw, AlertTriangle, CheckCircle2, Clock, XCircle, FileText } from  'lucide-react'
 import { AIImportButton } from '@/components/AIImportButton'
 const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })
 const STATI_CFG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
