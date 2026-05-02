@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { Plus, Search, Loader2, Building2, RefreshCw, AlertTriangle, CheckCircle2, Clock, XCircle, FileText } from 'lucide-react'
+import { Plus, Search, Loader2, Building2, RefreshCw, AlertTriangle, CheckCircle2, Clock, XCircle, FileText } from 'lucide-react'import { AIImportButton } from '@/components/AIImportButton'
 const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })
 const STATI_CFG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   AGGIUDICATA:    { label: 'Aggiudicata',    color: '#d97706', bg: '#fffbeb', icon: FileText },
@@ -218,6 +218,7 @@ function NuovaCommessaModal({ onClose, onCreated }: { onClose: () => void; onCre
         {/* Body scrollabile */}
         <div style={{ overflowY: 'auto', flex: 1, padding: '20px 24px' }}>
 
+          <AIImportButton endpoint='/api/ai-import-contratto' label='Importa contratto PDF/Word' onDati={d=>{const s=v=>v?String(v):'';set('nome',s(d.nome));set('committente',s(d.committente));set('cig',s(d.cig));set('cup',s(d.cup));if(d.importo_base)set('importo_base',s(d.importo_base));if(d.importo_aggiudicato)set('importo_contratto',s(d.importo_aggiudicato));if(d.ribasso_pct)set('ribasso_pct',s(d.ribasso_pct));if(d.oneri_sicurezza)set('oneri_sicurezza',s(d.oneri_sicurezza));if(d.provincia)set('provincia',s(d.provincia));if(d.citta_cantiere)set('comune_cantiere',s(d.citta_cantiere));if(d.data_aggiudicazione)set('data_aggiudicazione',s(d.data_aggiudicazione));if(d.durata_gg)set('giorni_contrattuali',s(d.durata_gg));}} />
           {/* STEP 0 — Identificativi */}
           {step === 0 && (
             <>
