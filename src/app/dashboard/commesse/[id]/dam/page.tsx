@@ -1,251 +1,366 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { useParams } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import { Plus, Loader2, CheckCircle2, XCircle, Clock, FileCheck, Shield, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
+import { useState, useEffect, useCallback, use } from 'react'
+import { createClient } from '@supabase/supabase-js'
 
-const STATI_DAM: Record<string, { label: string; color: string; bg: string }> = {
-  BOZZA:                  { label: 'Bozza',               color: '#6b7280', bg: '#f3f4f6' },
-  DOCUMENTAZIONE_INVIATA: { label: 'Doc. ricevuta',        color: '#7c3aed', bg: '#f5f3ff' },
-  INVIATA_A_DL:           { label: 'Inviata a DL',         color: '#d97706', bg: '#fffbeb' },
-  IN_REVISIONE_DL:        { label: 'In revisione DL',      color: '#2563eb', bg: '#eff6ff' },
-  ACCETTATA:              { label: 'Accettata',             color: '#059669', bg: '#f0fdf4' },
-  ACCETTATA_CON_RISERVA:  { label: 'Accettata c.riserva',  color: '#d97706', bg: '#fffbeb' },
-  RIFIUTATA:              { label: 'Rifiutata',             color: '#dc2626', bg: '#fef2f2' },
-  SCADUTA:                { label: 'Scaduta',               color: '#6b7280', bg: '#f3f4f6' },
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
+const fi = (n: number, d = 2) => n?.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? '—'
+
+const STATI_DAM = ['bozza','inviata_dl','approvata','rifiutata','integrazione']
+const STATO_COLOR: Record<string,string> = {
+  bozza:'#f59e0b', inviata_dl:'#3b82f6', approvata:'#10b981', rifiutata:'#ef4444', integrazione:'#8b5cf6'
+}
+const STATO_LBL: Record<string,string> = {
+  bozza:'Bozza', inviata_dl:'Inviata DL', approvata:'Approvata', rifiutata:'Rifiutata', integrazione:'Integrazione richiesta'
 }
 
-const TRANSIZIONI: Record<string, string[]> = {
-  BOZZA:                  ['DOCUMENTAZIONE_INVIATA'],
-  DOCUMENTAZIONE_INVIATA: ['INVIATA_A_DL', 'BOZZA'],
-  INVIATA_A_DL:           ['IN_REVISIONE_DL', 'DOCUMENTAZIONE_INVIATA'],
-  IN_REVISIONE_DL:        ['ACCETTATA', 'ACCETTATA_CON_RISERVA', 'RIFIUTATA'],
-  ACCETTATA:              ['ACCETTATA_CON_RISERVA', 'SCADUTA'],
-  ACCETTATA_CON_RISERVA:  ['ACCETTATA', 'RIFIUTATA', 'SCADUTA'],
-  RIFIUTATA:              ['BOZZA'],
-  SCADUTA:                ['BOZZA'],
+interface DAM {
+  id: string; codice: string; commessa_id: string; revisione: number
+  materiale: string; descrizione: string; quantita: number; um: string
+  marca_modello: string; norma_riferimento: string; classe_prestazionale: string
+  cam_compliant: boolean; campione_richiesto: boolean; campione_inviato: boolean
+  scheda_tecnica: boolean; dichiarazione_prestazione: boolean; certificato_ce: boolean
+  stato: string; dl_nome: string; dl_email: string
+  note_dl: string; note_interne: string
+  data_emissione: string; data_invio_dl: string; data_risposta_dl: string
+  motivo_rifiuto: string; fornitore_id: string
 }
 
-function CheckRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div onClick={() => onChange(!checked)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 6, cursor: 'pointer', background: checked ? '#f0fdf4' : '#f9fafb', border: '1px solid ' + (checked ? '#bbf7d0' : '#e5e7eb') }}>
-      {checked ? <CheckCircle2 size={16} style={{ color: '#059669', flexShrink: 0 }} /> : <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid #d1d5db', flexShrink: 0 }} />}
-      <span style={{ fontSize: 12, color: checked ? '#065f46' : '#6b7280', fontWeight: checked ? 500 : 400 }}>{label}</span>
-    </div>
-  )
+interface Fornitore {
+  id: string; ragione_sociale?: string; nome?: string; cognome?: string
 }
 
-function DAMCard({ dam, fornitori, onRefresh }: { dam: any; fornitori: any[]; onRefresh: () => void }) {
-  const [exp, setExp] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [dlNome, setDlNome] = useState(dam.dl_nome || '')
-  const [noteDL, setNoteDL] = useState(dam.note_dl || '')
-  const [motivoRifiuto, setMotivoRifiuto] = useState(dam.motivo_rifiuto || '')
-  const si = STATI_DAM[dam.stato] || STATI_DAM.BOZZA
-  const fornitore = fornitori.find((f: any) => f.id === dam.fornitore_id)
-
-  async function cambiaStato(nuovoStato: string) {
-    setSaving(true)
-    const update: any = { stato: nuovoStato }
-    if (['ACCETTATA', 'ACCETTATA_CON_RISERVA', 'RIFIUTATA'].includes(nuovoStato)) {
-      update.data_risposta_dl = new Date().toISOString().split('T')[0]
-    }
-    if (['INVIATA_A_DL', 'IN_REVISIONE_DL'].includes(nuovoStato)) {
-      update.data_invio_dl = new Date().toISOString().split('T')[0]
-    }
-    if (dlNome) update.dl_nome = dlNome
-    if (noteDL) update.note_dl = noteDL
-    if (motivoRifiuto && nuovoStato === 'RIFIUTATA') update.motivo_rifiuto = motivoRifiuto
-    await supabase.from('dam').update(update).eq('id', dam.id)
-    if (nuovoStato === 'ACCETTATA' && dam.oda_id) {
-      await supabase.from('oda').update({ stato: 'EMESSO' }).eq('id', dam.oda_id)
-    }
-    if (nuovoStato === 'RIFIUTATA' && dam.oda_id) {
-      await supabase.from('oda').update({ stato: 'SOSPESO' }).eq('id', dam.oda_id)
-    }
-    setSaving(false); onRefresh()
-  }
-
-  async function toggleDoc(field: string, value: boolean) {
-    await supabase.from('dam').update({ [field]: value }).eq('id', dam.id)
-    onRefresh()
-  }
-
-  return (
-    <div style={{ border: '2px solid ' + si.color + '30', borderRadius: 12, overflow: 'hidden' }}>
-      <div onClick={() => setExp(!exp)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer', background: exp ? si.bg : '#fff' }}>
-        {exp ? <ChevronDown size={14} style={{ color: '#9ca3af', flexShrink: 0 }} /> : <ChevronRight size={14} style={{ color: '#9ca3af', flexShrink: 0 }} />}
-        {['ACCETTATA', 'ACCETTATA_CON_RISERVA'].includes(dam.stato) ? <CheckCircle2 size={18} style={{ color: '#059669', flexShrink: 0 }} /> : dam.stato === 'RIFIUTATA' ? <XCircle size={18} style={{ color: '#dc2626', flexShrink: 0 }} /> : <Clock size={18} style={{ color: si.color, flexShrink: 0 }} />}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>{dam.denominazione_materiale}</p>
-          <p style={{ fontSize: 11, color: '#6b7280', margin: '2px 0 0' }}>{fornitore?.ragione_sociale || 'Fornitore da assegnare'}{dam.classe_prestazionale && ' - ' + dam.classe_prestazionale}</p>
-        </div>
-        <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 12, fontWeight: 600, background: si.bg, color: si.color, flexShrink: 0 }}>{si.label}</span>
-        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-          {[['ST', 'scheda_tecnica'], ['DoP', 'dichiarazione_prestazione'], ['CE', 'certificato_ce'], ['CAM', 'cam_compliant']].map(([abbr, field]) => (
-            <span key={field} style={{ fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 4, background: dam[field] ? '#d1fae5' : '#fee2e2', color: dam[field] ? '#059669' : '#dc2626' }}>{abbr}</span>
-          ))}
-        </div>
-      </div>
-      {exp && (
-        <div style={{ borderTop: '1px solid ' + si.color + '20', background: si.bg + '60', padding: 16 }}>
-          {dam.stato === 'ACCETTATA' && (
-            <div style={{ display: 'flex', gap: 8, padding: '10px 12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, marginBottom: 12, fontSize: 12, color: '#065f46' }}>
-              <CheckCircle2 size={14} style={{ flexShrink: 0 }} />
-              <div><strong>Materiale accettato dalla DL</strong>{dam.dl_nome && ' - firmato da ' + dam.dl_nome}{dam.data_risposta_dl && ' il ' + dam.data_risposta_dl}{dam.note_dl && <><br /><em>Note: {dam.note_dl}</em></>}{dam.oda_id && <><br />ODA collegato portato automaticamente a stato EMESSO.</>}</div>
-            </div>
-          )}
-          {dam.stato === 'RIFIUTATA' && (
-            <div style={{ display: 'flex', gap: 8, padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, marginBottom: 12, fontSize: 12, color: '#991b1b' }}>
-              <XCircle size={14} style={{ flexShrink: 0 }} />
-              <div><strong>Materiale RIFIUTATO dalla DL</strong>{dam.dl_nome && ' - ' + dam.dl_nome}{dam.motivo_rifiuto && <><br /><strong>Motivo:</strong> {dam.motivo_rifiuto}</>}{dam.oda_id && <><br />ODA collegato SOSPESO. Proporre materiale alternativo con nuovo DAM.</>}</div>
-            </div>
-          )}
-          <div style={{ marginBottom: 14 }}>
-            <h4 style={{ fontSize: 12, fontWeight: 600, color: '#374151', margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Shield size={13} /> Documentazione fornitore (prerequisiti D.Lgs. 36/2023)
-            </h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-              <CheckRow label="Scheda tecnica del prodotto" checked={!!dam.scheda_tecnica} onChange={v => toggleDoc('scheda_tecnica', v)} />
-              <CheckRow label="Dichiarazione di Prestazione (DoP)" checked={!!dam.dichiarazione_prestazione} onChange={v => toggleDoc('dichiarazione_prestazione', v)} />
-              <CheckRow label="Certificato CE / marcatura CE" checked={!!dam.certificato_ce} onChange={v => toggleDoc('certificato_ce', v)} />
-              <CheckRow label="CAM - Criteri Ambientali Minimi" checked={!!dam.cam_compliant} onChange={v => toggleDoc('cam_compliant', v)} />
-              <CheckRow label="Campione richiesto da DL" checked={!!dam.campione_richiesto} onChange={v => toggleDoc('campione_richiesto', v)} />
-              {dam.campione_richiesto && <CheckRow label="Campione inviato alla DL" checked={!!dam.campione_inviato} onChange={v => toggleDoc('campione_inviato', v)} />}
-            </div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 12 }}>
-            {[['Invio DL', dam.data_invio_dl], ['Risposta DL', dam.data_risposta_dl], ['DL / RUP', dam.dl_nome], ['Norma', dam.norma_riferimento]].map(([l, v]) => (
-              <div key={String(l)} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '6px 8px' }}>
-                <p style={{ fontSize: 9, color: '#9ca3af', margin: '0 0 2px', textTransform: 'uppercase' }}>{l}</p>
-                <p style={{ fontSize: 11, margin: 0 }}>{String(v) || '-'}</p>
-              </div>
-            ))}
-          </div>
-          {['IN_REVISIONE_DL', 'INVIATA_A_DL'].includes(dam.stato) && (
-            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: 12, marginBottom: 12 }}>
-              <p style={{ fontSize: 12, fontWeight: 600, margin: '0 0 10px' }}>Registra risposta DL</p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-                <div><label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>Nome DL / RUP</label><input value={dlNome} onChange={e => setDlNome(e.target.value)} style={{ width: '100%', fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 6, padding: '6px 8px', boxSizing: 'border-box' }} /></div>
-                <div><label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>Note / Osservazioni</label><input value={noteDL} onChange={e => setNoteDL(e.target.value)} style={{ width: '100%', fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 6, padding: '6px 8px', boxSizing: 'border-box' }} /></div>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => cambiaStato('ACCETTATA')} disabled={saving} style={{ flex: 1, padding: '8px', fontSize: 12, background: '#059669', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>DL ACCETTA</button>
-                <button onClick={() => cambiaStato('ACCETTATA_CON_RISERVA')} disabled={saving} style={{ flex: 1, padding: '8px', fontSize: 12, background: '#d97706', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Accetta c.riserva</button>
-                <button onClick={() => cambiaStato('RIFIUTATA')} disabled={saving} style={{ flex: 1, padding: '8px', fontSize: 12, background: '#dc2626', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>DL RIFIUTA</button>
-              </div>
-              {dam.stato !== 'RIFIUTATA' && <div style={{ marginTop: 8 }}><label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>Motivo rifiuto (se rifiutato)</label><input value={motivoRifiuto} onChange={e => setMotivoRifiuto(e.target.value)} style={{ width: '100%', fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 6, padding: '6px 8px', boxSizing: 'border-box' }} /></div>}
-            </div>
-          )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 11, color: '#6b7280' }}>Avanza stato:</span>
-            {(TRANSIZIONI[dam.stato] || []).map(ns => {
-              const si2 = STATI_DAM[ns]
-              return <button key={ns} onClick={() => cambiaStato(ns)} disabled={saving} style={{ fontSize: 11, padding: '4px 12px', border: '1px solid ' + si2.color, borderRadius: 6, background: si2.bg, color: si2.color, cursor: 'pointer' }}>{si2.label}</button>
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  )
+const S = {
+  page:  { minHeight:'100%', background:'var(--bg)', padding:16, display:'flex', flexDirection:'column' as const, gap:12 },
+  card:  { background:'var(--panel)', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden', boxShadow:'var(--shadow-sm)' } as React.CSSProperties,
+  hdr:   { display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 16px', borderBottom:'1px solid var(--border)', background:'var(--bg)' },
+  hl:    { fontSize:12, fontWeight:700, color:'var(--t2)', textTransform:'uppercase' as const, letterSpacing:'0.04em' },
+  th:    { padding:'7px 10px', fontSize:10, fontWeight:700, color:'var(--t3)', textTransform:'uppercase' as const, background:'var(--bg)', borderBottom:'1px solid var(--border)', textAlign:'left' as const, whiteSpace:'nowrap' as const },
+  td:    { padding:'9px 10px', fontSize:12, color:'var(--t2)', borderBottom:'1px solid var(--border)', verticalAlign:'top' as const },
+  inp:   { width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid var(--border)', fontSize:12, outline:'none', background:'var(--panel)', color:'var(--t1)' },
+  row:   (cols: number) => ({ display:'grid', gridTemplateColumns:`repeat(${cols},1fr)`, gap:12 }),
+  lbl:   { fontSize:11, fontWeight:600, color:'var(--t2)', marginBottom:4, display:'block' },
+  btn:   (c: string) => ({ padding:'8px 16px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:700, background:c, color:'#fff' }),
+  chkRow:{ display:'flex', alignItems:'center', gap:8, padding:'6px 0' },
 }
 
-export default function DAMPage() {
-  const { id } = useParams() as { id: string }
-  const [dams, setDams] = useState<any[]>([])
-  const [fornitori, setFornitori] = useState<any[]>([])
-  const [odaList, setOdaList] = useState<any[]>([])
+const CheckIcon = ({ ok }: { ok: boolean }) => (
+  <span style={{ fontSize:14, color: ok ? 'var(--success)' : 'var(--border)' }}>{ok ? '✓' : '○'}</span>
+)
+
+export default function DAMPage({ params: p }: { params: Promise<{ id: string }> }) {
+  const { id } = use(p)
+  const [damList, setDamList] = useState<DAM[]>([])
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ denominazione: '', fornitore_id: '', oda_id: '', norma: '', marca: '', classe: '' })
+  const [form, setForm] = useState(false)
+  const [editDam, setEditDam] = useState<Partial<DAM> | null>(null)
+  const [filtroStato, setFiltroStato] = useState('tutti')
+  const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
-  const [err, setErr] = useState('')
+  const [toast, setToast] = useState('')
+  const [fSearch, setFSearch] = useState('')
+  const [fResults, setFResults] = useState<Fornitore[]>([])
 
-  const load = useCallback(async () => {
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
+
+  const carica = useCallback(async () => {
     setLoading(true)
-    const [{ data: d }, { data: f }, { data: o }] = await Promise.all([
-      supabase.from('dam').select('*, oda:oda(id,numero,stato,oggetto)').eq('commessa_id', id).order('created_at', { ascending: false }),
-      supabase.from('fornitori').select('id,ragione_sociale').order('ragione_sociale'),
-      supabase.from('oda').select('id,numero,stato,oggetto').eq('commessa_id', id),
-    ])
-    setDams(d || [])
-    setFornitori(f || [])
-    setOdaList(o || [])
+    const { data } = await supabase.from('dam').select('*').eq('commessa_id', id).order('created_at', { ascending: false })
+    setDamList((data as DAM[]) || [])
     setLoading(false)
   }, [id])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { carica() }, [carica])
 
-  async function handleSave() {
-    if (!form.denominazione.trim()) { setErr('Denominazione obbligatoria'); return }
+  useEffect(() => {
+    if (!fSearch || fSearch.length < 2) { setFResults([]); return }
+    const t = setTimeout(async () => {
+      const { data } = await supabase.from('professionisti_fornitori')
+        .select('id,ragione_sociale,nome,cognome')
+        .or(`ragione_sociale.ilike.%${fSearch}%,nome.ilike.%${fSearch}%,cognome.ilike.%${fSearch}%`)
+        .limit(6)
+      setFResults((data as Fornitore[]) || [])
+    }, 300)
+    return () => clearTimeout(t)
+  }, [fSearch])
+
+  const fLabel = (f: Fornitore) => f.ragione_sociale || `${f.nome||''} ${f.cognome||''}`.trim()
+
+  const salva = async () => {
+    if (!editDam?.materiale) { showToast('Inserisci il materiale'); return }
     setSaving(true)
-    const { error } = await supabase.from('dam').insert({
-      commessa_id: id, denominazione_materiale: form.denominazione.trim(),
-      fornitore_id: form.fornitore_id || null, oda_id: form.oda_id || null,
-      norma_riferimento: form.norma || null, marca_modello: form.marca || null,
-      classe_prestazionale: form.classe || null, stato: 'BOZZA',
-      scheda_tecnica: false, dichiarazione_prestazione: false, certificato_ce: false, cam_compliant: false,
-    })
-    if (error) { setErr(error.message); setSaving(false); return }
-    setSaving(false); setShowForm(false)
-    setForm({ denominazione: '', fornitore_id: '', oda_id: '', norma: '', marca: '', classe: '' })
-    await load()
+    try {
+      const nextRev = editDam.revisione || 0
+      const payload = {
+        commessa_id: id,
+        azienda_id: null,
+        revisione: nextRev,
+        materiale: editDam.materiale || '',
+        descrizione: editDam.descrizione || '',
+        quantita: editDam.quantita || 0,
+        um: editDam.um || 'nr',
+        marca_modello: editDam.marca_modello || '',
+        norma_riferimento: editDam.norma_riferimento || '',
+        classe_prestazionale: editDam.classe_prestazionale || '',
+        cam_compliant: editDam.cam_compliant || false,
+        campione_richiesto: editDam.campione_richiesto || false,
+        campione_inviato: editDam.campione_inviato || false,
+        scheda_tecnica: editDam.scheda_tecnica || false,
+        dichiarazione_prestazione: editDam.dichiarazione_prestazione || false,
+        certificato_ce: editDam.certificato_ce || false,
+        stato: editDam.stato || 'bozza',
+        dl_nome: editDam.dl_nome || '',
+        dl_email: editDam.dl_email || '',
+        note_dl: editDam.note_dl || '',
+        note_interne: editDam.note_interne || '',
+        data_emissione: editDam.data_emissione || new Date().toISOString().split('T')[0],
+        motivo_rifiuto: editDam.motivo_rifiuto || '',
+      }
+      if (editDam.id) {
+        await supabase.from('dam').update(payload).eq('id', editDam.id)
+        showToast('DAM aggiornata')
+      } else {
+        const codice = 'DAM-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.floor(Math.random()*1000).toString().padStart(3,'0')
+        await supabase.from('dam').insert({ ...payload, codice })
+        showToast('DAM creata')
+      }
+      setForm(false); setEditDam(null); carica()
+    } finally { setSaving(false) }
   }
 
-  const accettati = dams.filter(d => ['ACCETTATA', 'ACCETTATA_CON_RISERVA'].includes(d.stato)).length
-  const rifiutati = dams.filter(d => d.stato === 'RIFIUTATA').length
-  const inCorso   = dams.filter(d => ['INVIATA_A_DL', 'IN_REVISIONE_DL', 'DOCUMENTAZIONE_INVIATA'].includes(d.stato)).length
+  const cambiaStato = async (dam: DAM, stato: string) => {
+    await supabase.from('dam').update({ stato }).eq('id', dam.id)
+    showToast(`DAM ${dam.codice} → ${STATO_LBL[stato]}`); carica()
+  }
+
+  const damFiltrate = damList.filter(d => {
+    if (filtroStato !== 'tutti' && d.stato !== filtroStato) return false
+    if (search && !d.materiale?.toLowerCase().includes(search.toLowerCase()) && !d.codice?.toLowerCase().includes(search.toLowerCase())) return false
+    return true
+  })
+
+  // KPI
+  const kpi = STATI_DAM.map(s => ({ stato: s, n: damList.filter(d => d.stato === s).length }))
+
+  const DocCheck = ({ label, val, key_ }: { label: string; val: boolean; key_: keyof DAM }) => (
+    <div style={S.chkRow}>
+      <input type="checkbox" checked={val} onChange={e=>setEditDam(prev=>({...prev!, [key_]:e.target.checked}))}
+        style={{ width:15, height:15, accentColor:'var(--accent)', cursor:'pointer', flexShrink:0 }} />
+      <span style={{ fontSize:12, color:'var(--t2)' }}>{label}</span>
+    </div>
+  )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
-        {[['Totale DAM', dams.length, '#374151'], ['In corso', inCorso, '#d97706'], ['Accettati DL', accettati, '#059669'], ['Rifiutati DL', rifiutati, '#dc2626']].map(([l, v, c]) => (
-          <div key={String(l)} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
-            <p style={{ fontSize: 11, color: '#6b7280', margin: '0 0 4px' }}>{l}</p>
-            <p style={{ fontSize: 16, fontWeight: 600, color: String(c), margin: 0 }}>{String(v)}</p>
+    <div style={S.page} className="fade-in">
+
+      {/* KPI stati */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:8 }}>
+        {kpi.map(k => (
+          <div key={k.stato} style={{ ...S.card, padding:'12px 16px', cursor:'pointer', outline: filtroStato===k.stato ? '2px solid var(--accent)' : 'none' }}
+            onClick={() => setFiltroStato(filtroStato===k.stato ? 'tutti' : k.stato)}>
+            <div style={{ width:8, height:8, borderRadius:'50%', background:STATO_COLOR[k.stato], marginBottom:8 }} />
+            <p style={{ fontSize:20, fontWeight:800, color:'var(--t1)' }}>{k.n}</p>
+            <p style={{ fontSize:10, color:'var(--t3)', marginTop:2 }}>{STATO_LBL[k.stato]}</p>
           </div>
         ))}
       </div>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div>
-          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>DAM - Documenti di Accettazione Materiali</h2>
-          <p style={{ fontSize: 12, color: '#6b7280', margin: '4px 0 0' }}>Il DAM deve essere accettato dalla DL PRIMA dell'emissione dell'ODA e di qualsiasi consegna.</p>
+
+      {/* Lista DAM */}
+      <div style={S.card}>
+        <div style={S.hdr}>
+          <span style={S.hl}>Dossier Accettazione Materiali</span>
+          <div style={{ display:'flex', gap:8 }}>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cerca materiale..." style={{ ...S.inp, width:200 }} />
+            <button className="btn-primary" style={{ fontSize:12, padding:'8px 14px', whiteSpace:'nowrap' as const }}
+              onClick={() => { setEditDam({ stato:'bozza', revisione:0, quantita:1, um:'nr' }); setFSearch(''); setForm(true) }}>
+              + Nuova DAM
+            </button>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={load} style={{ padding: '8px 12px', fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, color: '#6b7280' }}><RefreshCw size={12} /> Aggiorna</button>
-          <button onClick={() => setShowForm(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontWeight: 500 }}><Plus size={14} /> Nuovo DAM</button>
-        </div>
+
+        {loading ? (
+          <div style={{ padding:40, textAlign:'center' }}><span className="spinner" /></div>
+        ) : damFiltrate.length === 0 ? (
+          <div style={{ padding:40, textAlign:'center', color:'var(--t3)', fontSize:13 }}>Nessuna DAM trovata</div>
+        ) : (
+          <div style={{ overflowX:'auto' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse' }}>
+              <thead>
+                <tr>
+                  {['Codice','Materiale','Qty / UM','Marca / Modello','Norma','Documenti','Stato',''].map(h => (
+                    <th key={h} style={S.th}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {damFiltrate.map(d => (
+                  <tr key={d.id}
+                    onMouseEnter={e=>(e.currentTarget.style.background='var(--accent-light)')}
+                    onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
+                    <td style={{ ...S.td, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>
+                      {d.codice}<br/>
+                      <span style={{ fontSize:10, color:'var(--t4)' }}>Rev.{d.revisione}</span>
+                    </td>
+                    <td style={S.td}>
+                      <p style={{ fontWeight:700, fontSize:12 }}>{d.materiale}</p>
+                      {d.descrizione && <p style={{ fontSize:11, color:'var(--t3)', marginTop:2 }}>{d.descrizione.slice(0,80)}</p>}
+                    </td>
+                    <td style={{ ...S.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums' as const }}>
+                      {fi(d.quantita)}<br/><span style={{ fontSize:10, color:'var(--t3)' }}>{d.um}</span>
+                    </td>
+                    <td style={{ ...S.td, fontSize:11 }}>{d.marca_modello || '—'}</td>
+                    <td style={{ ...S.td, fontSize:11 }}>{d.norma_riferimento || '—'}</td>
+                    <td style={S.td}>
+                      <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const }}>
+                        {[
+                          ['ST', d.scheda_tecnica],
+                          ['DoP', d.dichiarazione_prestazione],
+                          ['CE', d.certificato_ce],
+                          ['CAM', d.cam_compliant],
+                        ].map(([lb, ok]) => (
+                          <span key={lb as string} style={{ fontSize:9, fontWeight:700, padding:'1px 5px', borderRadius:3,
+                            background: ok ? 'rgba(16,185,129,0.15)' : 'var(--bg)',
+                            color: ok ? 'var(--success)' : 'var(--t4)',
+                            border: `1px solid ${ok ? 'rgba(16,185,129,0.3)' : 'var(--border)'}` }}>
+                            {lb as string}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td style={S.td}>
+                      <select value={d.stato} onChange={e=>cambiaStato(d, e.target.value)}
+                        style={{ padding:'3px 6px', borderRadius:6, border:`1px solid ${STATO_COLOR[d.stato]||'#ccc'}44`, background:(STATO_COLOR[d.stato]||'#ccc')+'22', color:STATO_COLOR[d.stato]||'#666', fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                        {STATI_DAM.map(s => <option key={s} value={s}>{STATO_LBL[s]}</option>)}
+                      </select>
+                    </td>
+                    <td style={S.td}>
+                      <button style={{ ...S.btn('#3b82f6'), padding:'4px 10px', fontSize:11 }}
+                        onClick={() => { setEditDam(d); setFSearch(''); setForm(true) }}>✎</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
-      <div style={{ display: 'flex', gap: 10, padding: '12px 14px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, fontSize: 12, color: '#1e40af' }}>
-        <FileCheck size={16} style={{ color: '#2563eb', flexShrink: 0, marginTop: 1 }} />
-        <div><strong>Flusso corretto (D.Lgs. 36/2023 art. 101):</strong> Fornitore invia ST+DoP+CE+CAM - Impresa prepara DAM - DL esamina - <strong style={{ color: '#059669' }}>ACCETTA: ODA sbloccato</strong> oppure <strong style={{ color: '#dc2626' }}>RIFIUTA: ODA sospeso, fornitore alternativo</strong></div>
-      </div>
-      {loading ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 120, gap: 8, color: '#9ca3af' }}><Loader2 size={16} className="animate-spin" /> Caricamento...</div>
-        : dams.length === 0 ? <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 160, color: '#9ca3af', border: '2px dashed #e5e7eb', borderRadius: 12 }}><Shield size={40} style={{ marginBottom: 12, opacity: 0.3 }} /><p style={{ fontSize: 14 }}>Nessun DAM - crea il primo documento di accettazione materiali</p></div>
-        : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{dams.map(d => <DAMCard key={d.id} dam={d} fornitori={fornitori} onRefresh={load} />)}</div>
-      }
-      {showForm && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', padding: 16 }}>
-          <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', width: '100%', maxWidth: 500, padding: 24 }}>
-            <h2 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 4px' }}>Nuovo DAM</h2>
-            <p style={{ fontSize: 11, color: '#6b7280', margin: '0 0 16px' }}>Il DAM deve essere accettato dalla DL PRIMA che l'ODA venga confermato.</p>
-            <div style={{ marginBottom: 12 }}><label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>Denominazione materiale *</label><input value={form.denominazione} onChange={e => setForm(p => ({ ...p, denominazione: e.target.value }))} placeholder="es. Calcestruzzo C25/30..." style={{ width: '100%', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px', boxSizing: 'border-box' }} /></div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-              <div><label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>Fornitore</label><select value={form.fornitore_id} onChange={e => setForm(p => ({ ...p, fornitore_id: e.target.value }))} style={{ width: '100%', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px' }}><option value="">Da assegnare</option>{fornitori.map(f => <option key={f.id} value={f.id}>{f.ragione_sociale}</option>)}</select></div>
-              <div><label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>ODA collegato</label><select value={form.oda_id} onChange={e => setForm(p => ({ ...p, oda_id: e.target.value }))} style={{ width: '100%', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px' }}><option value="">Nessuno</option>{odaList.map(o => <option key={o.id} value={o.id}>{o.numero}</option>)}</select></div>
+
+      {/* Modal */}
+      {form && editDam && (
+        <div className="modal-overlay" onClick={e=>{ if(e.target===e.currentTarget){setForm(false);setEditDam(null)} }}>
+          <div className="modal-box" style={{ maxWidth:700, width:'94%', maxHeight:'90vh', overflowY:'auto' as const }}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:16, position:'sticky' as const, top:0, background:'var(--panel)', zIndex:1, paddingBottom:12, borderBottom:'1px solid var(--border)' }}>
+              <h3 style={{ fontSize:14, fontWeight:700 }}>DAM — {editDam.id ? `Modifica ${editDam.codice}` : 'Nuova Scheda'}</h3>
+              <button onClick={()=>{setForm(false);setEditDam(null)}} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'var(--t3)' }}>✕</button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
-              <div><label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>Norma</label><input value={form.norma} onChange={e => setForm(p => ({ ...p, norma: e.target.value }))} placeholder="UNI EN 206" style={{ width: '100%', fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 6, padding: '6px 8px', boxSizing: 'border-box' }} /></div>
-              <div><label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>Marca</label><input value={form.marca} onChange={e => setForm(p => ({ ...p, marca: e.target.value }))} style={{ width: '100%', fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 6, padding: '6px 8px', boxSizing: 'border-box' }} /></div>
-              <div><label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>Classe</label><input value={form.classe} onChange={e => setForm(p => ({ ...p, classe: e.target.value }))} placeholder="C25/30" style={{ width: '100%', fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 6, padding: '6px 8px', boxSizing: 'border-box' }} /></div>
-            </div>
-            {err && <p style={{ fontSize: 12, color: '#dc2626', margin: '0 0 8px' }}>{err}</p>}
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setShowForm(false)} style={{ flex: 1, padding: 10, fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', cursor: 'pointer' }}>Annulla</button>
-              <button onClick={handleSave} disabled={saving} style={{ flex: 1, padding: 10, fontSize: 13, background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: saving ? 0.6 : 1 }}>{saving && <Loader2 size={13} className="animate-spin" />} Crea DAM</button>
+            <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+
+              {/* Sezione materiale */}
+              <p style={{ fontSize:11, fontWeight:700, color:'var(--t3)', textTransform:'uppercase', letterSpacing:'0.04em' }}>Materiale</p>
+              <div>
+                <label style={S.lbl}>Materiale / Voce di lavorazione *</label>
+                <input style={S.inp} value={editDam.materiale||''} onChange={e=>setEditDam({...editDam, materiale:e.target.value})} placeholder="Es. Acciaio B450C, Calcestruzzo C25/30..." />
+              </div>
+              <div>
+                <label style={S.lbl}>Descrizione estesa</label>
+                <textarea style={{ ...S.inp, resize:'vertical' as const, minHeight:60 }} value={editDam.descrizione||''} onChange={e=>setEditDam({...editDam, descrizione:e.target.value})} />
+              </div>
+              <div style={S.row(3)}>
+                <div>
+                  <label style={S.lbl}>Quantità</label>
+                  <input type="number" step="0.01" style={S.inp} value={editDam.quantita||0} onChange={e=>setEditDam({...editDam, quantita:parseFloat(e.target.value)||0})} />
+                </div>
+                <div>
+                  <label style={S.lbl}>UM</label>
+                  <input style={S.inp} value={editDam.um||'nr'} onChange={e=>setEditDam({...editDam, um:e.target.value})} />
+                </div>
+                <div>
+                  <label style={S.lbl}>Revisione</label>
+                  <input type="number" style={S.inp} value={editDam.revisione||0} onChange={e=>setEditDam({...editDam, revisione:parseInt(e.target.value)||0})} />
+                </div>
+              </div>
+              <div style={S.row(2)}>
+                <div>
+                  <label style={S.lbl}>Marca / Modello</label>
+                  <input style={S.inp} value={editDam.marca_modello||''} onChange={e=>setEditDam({...editDam, marca_modello:e.target.value})} placeholder="Es. Ferriere Nord, BetonBasalt..." />
+                </div>
+                <div>
+                  <label style={S.lbl}>Norma di riferimento</label>
+                  <input style={S.inp} value={editDam.norma_riferimento||''} onChange={e=>setEditDam({...editDam, norma_riferimento:e.target.value})} placeholder="Es. EN 10025, UNI EN 206..." />
+                </div>
+              </div>
+              <div style={S.row(2)}>
+                <div>
+                  <label style={S.lbl}>Classe prestazionale</label>
+                  <input style={S.inp} value={editDam.classe_prestazionale||''} onChange={e=>setEditDam({...editDam, classe_prestazionale:e.target.value})} />
+                </div>
+                <div>
+                  <label style={S.lbl}>Data emissione</label>
+                  <input type="date" style={S.inp} value={editDam.data_emissione||''} onChange={e=>setEditDam({...editDam, data_emissione:e.target.value})} />
+                </div>
+              </div>
+
+              {/* Checklist documenti */}
+              <p style={{ fontSize:11, fontWeight:700, color:'var(--t3)', textTransform:'uppercase', letterSpacing:'0.04em', marginTop:4 }}>Documenti allegati</p>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:4, background:'var(--bg)', borderRadius:8, padding:12, border:'1px solid var(--border)' }}>
+                <DocCheck label="Scheda tecnica" val={editDam.scheda_tecnica||false} key_="scheda_tecnica" />
+                <DocCheck label="Dichiarazione di prestazione (DoP)" val={editDam.dichiarazione_prestazione||false} key_="dichiarazione_prestazione" />
+                <DocCheck label="Certificato CE" val={editDam.certificato_ce||false} key_="certificato_ce" />
+                <DocCheck label="Conformità CAM" val={editDam.cam_compliant||false} key_="cam_compliant" />
+                <DocCheck label="Campione richiesto" val={editDam.campione_richiesto||false} key_="campione_richiesto" />
+                <DocCheck label="Campione inviato" val={editDam.campione_inviato||false} key_="campione_inviato" />
+              </div>
+
+              {/* DL */}
+              <p style={{ fontSize:11, fontWeight:700, color:'var(--t3)', textTransform:'uppercase', letterSpacing:'0.04em', marginTop:4 }}>Direzione Lavori</p>
+              <div style={S.row(2)}>
+                <div>
+                  <label style={S.lbl}>Nome DL</label>
+                  <input style={S.inp} value={editDam.dl_nome||''} onChange={e=>setEditDam({...editDam, dl_nome:e.target.value})} />
+                </div>
+                <div>
+                  <label style={S.lbl}>Email DL</label>
+                  <input type="email" style={S.inp} value={editDam.dl_email||''} onChange={e=>setEditDam({...editDam, dl_email:e.target.value})} />
+                </div>
+              </div>
+              <div style={S.row(2)}>
+                <div>
+                  <label style={S.lbl}>Stato</label>
+                  <select style={S.inp} value={editDam.stato||'bozza'} onChange={e=>setEditDam({...editDam, stato:e.target.value})}>
+                    {STATI_DAM.map(s => <option key={s} value={s}>{STATO_LBL[s]}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={S.lbl}>Note DL</label>
+                  <input style={S.inp} value={editDam.note_dl||''} onChange={e=>setEditDam({...editDam, note_dl:e.target.value})} />
+                </div>
+              </div>
+              {editDam.stato === 'rifiutata' && (
+                <div>
+                  <label style={S.lbl}>Motivo rifiuto</label>
+                  <textarea style={{ ...S.inp, resize:'vertical' as const, minHeight:60 }} value={editDam.motivo_rifiuto||''} onChange={e=>setEditDam({...editDam, motivo_rifiuto:e.target.value})} />
+                </div>
+              )}
+              <div>
+                <label style={S.lbl}>Note interne</label>
+                <textarea style={{ ...S.inp, resize:'vertical' as const, minHeight:50 }} value={editDam.note_interne||''} onChange={e=>setEditDam({...editDam, note_interne:e.target.value})} />
+              </div>
+              <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8, position:'sticky' as const, bottom:0, background:'var(--panel)', paddingTop:12, borderTop:'1px solid var(--border)' }}>
+                <button style={S.btn('#6b7280')} onClick={()=>{setForm(false);setEditDam(null)}}>Annulla</button>
+                <button style={S.btn('var(--accent)')} onClick={salva} disabled={saving}>{saving ? '...' : 'Salva DAM'}</button>
+              </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div style={{ position:'fixed', bottom:20, right:20, background:'#14532d', color:'#fff', padding:'10px 18px', borderRadius:10, fontSize:12, fontWeight:700, zIndex:1000, boxShadow:'var(--shadow-lg)' }}>
+          {toast}
         </div>
       )}
     </div>
