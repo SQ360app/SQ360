@@ -6,135 +6,61 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-// ─── Tipi XPWE ────────────────────────────────────────────────────────────────
+// ─── Parser XML per XPWE Primus ──────────────────────────────────────────────
+// Struttura REALE verificata su file CM_Variante_CPM.xpwe:
+// - EPItem usa ATTRIBUTO ID="614" e ELEMENTI FIGLI <Tariffa>, <DesEstesa>, ecc.
+// - VCItem usa ATTRIBUTO ID="3"  e ELEMENTI FIGLI <IDEP>, <Quantita>, <IDSpCat>, ecc.
+// - SuperCategorie: <DGSuperCategorieItem ID="1"><DesSintetica>...</DesSintetica>
+// - Categorie:      <DGCategorieItem ID="1"><DesSintetica>...</DesSintetica>
 
-interface EPItem {
-  ID: string
-  Tariffa: string
-  DesEstesa: string
-  DesSintetica?: string
-  UnMisura: string
-  Prezzo1: string
-  IncMDO?: string   // incidenza manodopera
-  IncMAT?: string   // incidenza materiali
-  IncATTR?: string  // incidenza attrezzatura
-  IncSIC?: string   // incidenza sicurezza interna ← chiave per formula ribasso
-  TipoVoce?: string // 'L'=Lavoro, 'S'=Sicurezza, 'E'=Economia, 'N'=Nolo
-}
-
-interface VCItem {
-  IDEP: string
-  Quantita: string
-  IDSpCat?: string  // supercategoria
-  IDCat?: string    // categoria
-  IDSbCat?: string  // subcategoria
-  NrOrdinale?: string
-}
-
-interface Capitolo {
-  ID: string
-  DesSintetica: string
-}
-
-// ─── Parser XML manuale (no librerie) ─────────────────────────────────────────
-
-function extractAll(xml: string, tag: string): string[] {
-  const results: string[] = []
-  const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'gi')
-  let m
-  while ((m = re.exec(xml)) !== null) results.push(m[0])
-  return results
-}
-
-function attr(xml: string, name: string): string {
-  const m = new RegExp(`${name}="([^"]*)"`, 'i').exec(xml)
+function getAttr(tag: string, name: string): string {
+  const m = new RegExp(`\\s${name}="([^"]*)"`, 'i').exec(tag)
   return m ? m[1].trim() : ''
 }
 
-function innerText(xml: string, tag: string): string {
-  const m = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i').exec(xml)
-  return m ? m[1].replace(/<[^>]+>/g, '').trim() : ''
+function getChild(xml: string, tag: string): string {
+  const m = new RegExp(`<${tag}[^>]*>([^<]*)</${tag}>`, 'i').exec(xml)
+  if (!m) return ''
+  return m[1]
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .trim()
 }
 
-function parseXPWE(xml: string) {
-  // ── Supercategorie
-  const superCatMap: Record<string, string> = {}
-  const scBlock = xml.match(/<SuperCategorie[\s\S]*?<\/SuperCategorie>/)
-  if (scBlock) {
-    const scItems = extractAll(scBlock[0], 'SupCat')
-    for (const sc of scItems) {
-      const id = attr(sc, 'ID') || innerText(sc, 'ID')
-      const des = attr(sc, 'DesSintetica') || innerText(sc, 'DesSintetica')
-      if (id) superCatMap[id] = des
-    }
-  }
-
-  // ── Categorie
-  const catMap: Record<string, string> = {}
-  const catBlock = xml.match(/<Categorie[\s\S]*?<\/Categorie>/)
-  if (catBlock) {
-    const catItems = extractAll(catBlock[0], 'Cat')
-    for (const c of catItems) {
-      const id = attr(c, 'ID') || innerText(c, 'ID')
-      const des = attr(c, 'DesSintetica') || innerText(c, 'DesSintetica')
-      if (id) catMap[id] = des
-    }
-  }
-
-  // ── Elenco Prezzi
-  const epMap: Record<string, EPItem> = {}
-  const epBlock = xml.match(/<PweElencoPrezzi[\s\S]*?<\/PweElencoPrezzi>/)
-  if (epBlock) {
-    const epItems = extractAll(epBlock[0], 'EPItem')
-    for (const ep of epItems) {
-      const item: EPItem = {
-        ID:          attr(ep, 'ID')          || innerText(ep, 'ID'),
-        Tariffa:     attr(ep, 'Tariffa')     || innerText(ep, 'Tariffa'),
-        DesEstesa:   attr(ep, 'DesEstesa')   || innerText(ep, 'DesEstesa'),
-        DesSintetica:attr(ep, 'DesSintetica')|| innerText(ep, 'DesSintetica'),
-        UnMisura:    attr(ep, 'UnMisura')    || innerText(ep, 'UnMisura'),
-        Prezzo1:     attr(ep, 'Prezzo1')     || innerText(ep, 'Prezzo1'),
-        IncMDO:      attr(ep, 'IncMDO')      || innerText(ep, 'IncMDO'),
-        IncMAT:      attr(ep, 'IncMAT')      || innerText(ep, 'IncMAT'),
-        IncATTR:     attr(ep, 'IncATTR')     || innerText(ep, 'IncATTR'),
-        IncSIC:      attr(ep, 'IncSIC')      || innerText(ep, 'IncSIC'),
-        TipoVoce:    attr(ep, 'TipoVoce')    || innerText(ep, 'TipoVoce'),
-      }
-      if (item.ID) epMap[item.ID] = item
-    }
-  }
-
-  // ── Voci Computo
-  const voci: VCItem[] = []
-  const vcBlock = xml.match(/<PweVociComputo[\s\S]*?<\/PweVociComputo>/)
-  if (vcBlock) {
-    const vcItems = extractAll(vcBlock[0], 'VCItem')
-    for (const vc of vcItems) {
-      voci.push({
-        IDEP:      attr(vc, 'IDEP')      || innerText(vc, 'IDEP'),
-        Quantita:  attr(vc, 'Quantita')  || innerText(vc, 'Quantita'),
-        IDSpCat:   attr(vc, 'IDSpCat')   || innerText(vc, 'IDSpCat'),
-        IDCat:     attr(vc, 'IDCat')     || innerText(vc, 'IDCat'),
-        IDSbCat:   attr(vc, 'IDSbCat')   || innerText(vc, 'IDSbCat'),
-        NrOrdinale:attr(vc, 'NrOrdinale')|| innerText(vc, 'NrOrdinale'),
-      })
-    }
-  }
-
-  return { superCatMap, catMap, epMap, voci }
+function getChildLong(xml: string, tag: string): string {
+  const m = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, 'i').exec(xml)
+  if (!m) return ''
+  return m[1]
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
-// ─── Determina sezione dalla TipoVoce ─────────────────────────────────────────
-
-function getSezione(tipoVoce?: string): string {
-  if (!tipoVoce) return 'LAVORI'
-  const t = tipoVoce.toUpperCase()
-  if (t === 'S') return 'SICUREZZA'
-  if (t === 'E') return 'ECONOMIA'
-  return 'LAVORI'
+function findAllElements(xml: string, tag: string): string[] {
+  const results: string[] = []
+  const openTag = `<${tag} `
+  let pos = 0
+  while (true) {
+    const start = xml.indexOf(openTag, pos)
+    if (start === -1) break
+    const closeTag = `</${tag}>`
+    const end = xml.indexOf(closeTag, start)
+    if (end === -1) break
+    results.push(xml.slice(start, end + closeTag.length))
+    pos = end + closeTag.length
+  }
+  return results
 }
 
-// ─── Handler ──────────────────────────────────────────────────────────────────
+// ─── Handler ─────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
@@ -146,142 +72,218 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'file e commessa_id obbligatori' }, { status: 400 })
     }
 
+    // Leggo il file
     const xml = await file.text()
 
-    if (!xml.includes('PweDocumento') && !xml.includes('PweVociComputo')) {
-      return NextResponse.json({ error: 'File non riconosciuto come XPWE/PWE Primus' }, { status: 400 })
+    // Validazione formato
+    if (!xml.includes('PweDocumento') || !xml.includes('EPItem')) {
+      return NextResponse.json({
+        error: 'File non riconosciuto come XPWE Primus. Assicurati di esportare da PriMus ACCA in formato .xpwe'
+      }, { status: 400 })
     }
 
-    const { superCatMap, catMap, epMap, voci } = parseXPWE(xml)
+    // ── 1. Parse SuperCategorie ──────────────────────────────────────────────
+    const superCatMap: Record<string, string> = {}
+    const scItems = findAllElements(xml, 'DGSuperCategorieItem')
+    for (const sc of scItems) {
+      const id = getAttr(sc, 'ID')
+      const des = getChild(sc, 'DesSintetica')
+      if (id) superCatMap[id] = des
+    }
 
-    // 1. Crea o aggiorna il computo_metrico
-    const { data: computo, error: computoErr } = await supabase
+    // ── 2. Parse Categorie ───────────────────────────────────────────────────
+    const catMap: Record<string, string> = {}
+    const catItems = findAllElements(xml, 'DGCategorieItem')
+    for (const cat of catItems) {
+      const id = getAttr(cat, 'ID')
+      const des = getChild(cat, 'DesSintetica')
+      if (id) catMap[id] = des
+    }
+
+    // ── 3. Parse EPItem (Elenco Prezzi) ──────────────────────────────────────
+    interface EPParsed {
+      xpweId: string
+      tariffa: string
+      descrizione: string
+      um: string
+      prezzo: number
+      incSic: number
+      incMdo: number
+      incMat: number
+      incAttr: number
+      tipoEP: string
+    }
+    const epList: EPParsed[] = []
+    const epById: Record<string, EPParsed> = {}
+    const epItems = findAllElements(xml, 'EPItem')
+
+    for (const ep of epItems) {
+      const xpweId = getAttr(ep, 'ID')
+      if (!xpweId) continue
+
+      const tariffa  = getChild(ep, 'Tariffa') || xpweId
+      const desEst   = getChildLong(ep, 'DesEstesa') || getChild(ep, 'DesRidotta') || ''
+      const um       = getChild(ep, 'UnMisura') || 'a corpo'
+      const prezzoStr = getChild(ep, 'Prezzo1') || '0'
+      const incSicStr = getChild(ep, 'IncSIC')  || '0'
+      const incMdoStr = getChild(ep, 'IncMDO')  || '0'
+      const incMatStr = getChild(ep, 'IncMAT')  || '0'
+      const incAttrStr = getChild(ep, 'IncATTR') || '0'
+      const tipoEP   = getChild(ep, 'TipoEP')   || '0'
+
+      const parsed: EPParsed = {
+        xpweId,
+        tariffa,
+        descrizione: desEst.slice(0, 2000),
+        um: um.slice(0, 20),
+        prezzo:   parseFloat(prezzoStr.replace(',', '.'))  || 0,
+        incSic:   parseFloat(incSicStr.replace(',', '.'))  || 0,
+        incMdo:   parseFloat(incMdoStr.replace(',', '.'))  || 0,
+        incMat:   parseFloat(incMatStr.replace(',', '.'))  || 0,
+        incAttr:  parseFloat(incAttrStr.replace(',', '.')) || 0,
+        tipoEP,
+      }
+      epList.push(parsed)
+      epById[xpweId] = parsed
+    }
+
+    // ── 4. Parse VCItem (Voci Computo) ───────────────────────────────────────
+    interface VCParsed {
+      idep: string
+      quantita: number
+      idSpCat: string
+      idCat: string
+      idSbCat: string
+    }
+    const vcList: VCParsed[] = []
+    const vcItems = findAllElements(xml, 'VCItem')
+
+    for (const vc of vcItems) {
+      const idep = getChild(vc, 'IDEP')
+      if (!idep) continue
+      const qStr = getChild(vc, 'Quantita') || '0'
+      vcList.push({
+        idep,
+        quantita:  parseFloat(qStr.replace(',', '.')) || 0,
+        idSpCat:   getChild(vc, 'IDSpCat') || '0',
+        idCat:     getChild(vc, 'IDCat')   || '0',
+        idSbCat:   getChild(vc, 'IDSbCat') || '0',
+      })
+    }
+
+    // ── 5. Gestisci computo_metrico ──────────────────────────────────────────
+    // Delete + insert per evitare problemi di constraint
+    await supabase.from('computo_metrico').delete().eq('commessa_id', commessaId)
+
+    const { data: computo, error: errComputo } = await supabase
       .from('computo_metrico')
-      .upsert({
+      .insert({
         commessa_id: commessaId,
         fonte: 'XPWE',
         data_import: new Date().toISOString().split('T')[0],
-        note: `Importato da ${file.name}`,
-      }, { onConflict: 'commessa_id' })
-      .select()
+        note: `${file.name} · ${epList.length} tariffe · ${vcList.length} voci`,
+      })
+      .select('id')
       .single()
 
-    if (computoErr) throw computoErr
+    if (errComputo || !computo) {
+      throw new Error(`Errore creazione computo: ${errComputo?.message}`)
+    }
+    const computoId = computo.id
 
-    // 2. Cancella le tariffe esistenti di questa commessa
+    // ── 6. Insert tariffe in batch ───────────────────────────────────────────
     await supabase.from('tariffe').delete().eq('commessa_id', commessaId)
+    await supabase.from('voci_computo').delete().eq('computo_id', computoId)
 
-    // 3. Cancella le voci computo esistenti
-    await supabase.from('voci_computo').delete().eq('computo_id', computo.id)
+    const BATCH = 50
+    for (let i = 0; i < epList.length; i += BATCH) {
+      const batch = epList.slice(i, i + BATCH).map(ep => ({
+        commessa_id:                 commessaId,
+        codice_tariffa:              ep.tariffa.slice(0, 200),
+        descrizione:                 ep.descrizione || '(senza descrizione)',
+        unita_misura:                ep.um,
+        prezzo_unitario:             ep.prezzo,
+        prezzo_unitario_lista:       ep.prezzo,
+        incidenza_sicurezza_interna: ep.incSic / 100, // da % a decimale
+        voce_sicurezza:              ep.tipoEP === '2',
+        voce_sicurezza_speciale:     ep.tipoEP === '2',
+        sezione:                     ep.tipoEP === '2' ? 'SICUREZZA' : ep.tipoEP === '3' ? 'ECONOMIA' : 'LAVORI',
+        ribassabile:                 ep.tipoEP !== '2',
+        fonte:                       'XPWE',
+      }))
 
-    // 4. Insert tariffe (elenco prezzi)
-    const tariffeInsert = Object.values(epMap).map(ep => ({
-      commessa_id:                commessaId,
-      codice_tariffa:             ep.Tariffa || ep.ID,
-      descrizione:                ep.DesEstesa || ep.DesSintetica || '(senza descrizione)',
-      unita_misura:               ep.UnMisura || 'a corpo',
-      prezzo_unitario:            parseFloat(ep.Prezzo1?.replace(',', '.') || '0') || 0,
-      prezzo_unitario_lista:      parseFloat(ep.Prezzo1?.replace(',', '.') || '0') || 0,
-      // Incidenze per formula ribasso
-      incidenza_sicurezza_interna: parseFloat(ep.IncSIC?.replace(',', '.') || '0') / 100 || 0,
-      pct_manodopera:             parseFloat(ep.IncMDO?.replace(',', '.') || '0') / 100 || 0,
-      pct_materiali:              parseFloat(ep.IncMAT?.replace(',', '.') || '0') / 100 || 0,
-      // Flag
-      voce_sicurezza:             getSezione(ep.TipoVoce) === 'SICUREZZA',
-      voce_sicurezza_speciale:    getSezione(ep.TipoVoce) === 'SICUREZZA',
-      sezione:                    getSezione(ep.TipoVoce),
-      ribassabile:                getSezione(ep.TipoVoce) !== 'SICUREZZA',
-      fonte:                      'XPWE',
-      // ID interno per join con voci
-      _xpwe_id:                   ep.ID,
-    }))
-
-    // Insert in batch da 100
-    const BATCH = 100
-    const tariffeInserted: { id: string; _xpwe_id: string }[] = []
-    for (let i = 0; i < tariffeInsert.length; i += BATCH) {
-      const { data, error } = await supabase
-        .from('tariffe')
-        .insert(tariffeInsert.slice(i, i + BATCH))
-        .select('id, codice_tariffa')
-      if (error) throw error
-      // Non possiamo fare join su _xpwe_id che non esiste nel DB
-      // Creiamo una mappa codice_tariffa → id
+      const { error: errT } = await supabase.from('tariffe').insert(batch)
+      if (errT) throw new Error(`Errore insert tariffe: ${errT.message}`)
     }
 
-    // Rileggo le tariffe inserite per fare join
+    // ── 7. Leggo tariffe inserite per costruire mappa codice → id ────────────
     const { data: tariffeDB } = await supabase
       .from('tariffe')
       .select('id, codice_tariffa')
       .eq('commessa_id', commessaId)
 
-    const tariffeMap: Record<string, string> = {}
+    // Mappa codice_tariffa → db_id
+    const tariffeByCode: Record<string, string> = {}
     for (const t of (tariffeDB || [])) {
-      // Mappa codice_tariffa → uuid (per la join con IDEP delle voci)
-      // IDEP in VCItem corrisponde all'ID interno Primus, non alla tariffa
-      // Dobbiamo usare l'ordine di inserimento
+      tariffeByCode[t.codice_tariffa] = t.id
     }
 
-    // Mappa XPWE ID → tariffa DB id
-    const xpweIdToDbId: Record<string, string> = {}
-    const { data: tariffeAll } = await supabase
-      .from('tariffe')
-      .select('id, codice_tariffa')
-      .eq('commessa_id', commessaId)
-
-    // Ricostruiamo la mappa basandoci su codice_tariffa = Tariffa o ID XPWE
-    for (const ep of Object.values(epMap)) {
-      const codice = ep.Tariffa || ep.ID
-      const found = tariffeAll?.find(t => t.codice_tariffa === codice)
-      if (found) xpweIdToDbId[ep.ID] = found.id
+    // Mappa xpwe_id → db_id (via codice_tariffa)
+    const tariffeByXpweId: Record<string, string> = {}
+    for (const ep of epList) {
+      const dbId = tariffeByCode[ep.tariffa.slice(0, 200)]
+      if (dbId) tariffeByXpweId[ep.xpweId] = dbId
     }
 
-    // 5. Insert voci computo
-    const vociInsert = voci
-      .filter(vc => vc.IDEP && xpweIdToDbId[vc.IDEP])
+    // ── 8. Insert voci computo ───────────────────────────────────────────────
+    const vociInsert = vcList
+      .filter(vc => tariffeByXpweId[vc.idep])
       .map(vc => {
-        const ep = epMap[vc.IDEP]
-        const prezzoUnit = parseFloat(ep?.Prezzo1?.replace(',', '.') || '0') || 0
-        const quantita = parseFloat(vc.Quantita?.replace(',', '.') || '0') || 0
-        const supCat = vc.IDSpCat ? (superCatMap[vc.IDSpCat] || vc.IDSpCat) : null
-        const cat = vc.IDCat ? (catMap[vc.IDCat] || vc.IDCat) : null
+        const ep = epById[vc.idep]
+        const prezzo = ep?.prezzo || 0
+        const quantita = vc.quantita
+        const importo = parseFloat((quantita * prezzo).toFixed(2))
+
+        // Nomi capitolo/categoria
+        const superCat = vc.idSpCat !== '0' ? (superCatMap[vc.idSpCat] || `SC${vc.idSpCat}`) : null
+        const cat      = vc.idCat   !== '0' ? (catMap[vc.idCat]        || `C${vc.idCat}`)    : null
+        const capitolo = superCat || cat || 'Generale'
 
         return {
-          computo_id:      computo.id,
-          codice:          ep?.Tariffa || vc.IDEP,
-          codice_prezzario:ep?.Tariffa || vc.IDEP,
-          descrizione:     ep?.DesEstesa || ep?.DesSintetica || '(senza descrizione)',
-          um:              ep?.UnMisura || 'a corpo',
+          computo_id:      computoId,
+          codice:          (ep?.tariffa || vc.idep).slice(0, 200),
+          codice_prezzario:(ep?.tariffa || vc.idep).slice(0, 200),
+          descrizione:     ep?.descrizione || '(senza descrizione)',
+          um:              (ep?.um || 'a corpo').slice(0, 20),
           quantita,
-          prezzo_unitario: prezzoUnit,
-          importo:         quantita * prezzoUnit,
-          capitolo:        supCat || cat || 'Generale',
+          prezzo_unitario: prezzo,
+          importo,
+          capitolo:        capitolo.slice(0, 200),
           categoria:       (cat || '').slice(0, 30),
-          note:            `Cat: ${cat || '—'} | SpCat: ${supCat || '—'}`,
+          note:            cat ? `${superCat || ''} > ${cat}` : '',
         }
       })
 
     for (let i = 0; i < vociInsert.length; i += BATCH) {
-      const { error } = await supabase
+      const { error: errV } = await supabase
         .from('voci_computo')
         .insert(vociInsert.slice(i, i + BATCH))
-      if (error) throw error
+      if (errV) throw new Error(`Errore insert voci: ${errV.message}`)
     }
 
-    // 6. Aggiorna importo_contrattuale sulla commessa
-    const importoTotale = vociInsert.reduce((acc, v) => acc + (v.importo || 0), 0)
-    await supabase
-      .from('commesse')
-      .update({ importo_contrattuale: importoTotale })
+    // ── 9. Aggiorna importo_contrattuale su commessa ─────────────────────────
+    const importoTotale = vociInsert.reduce((s, v) => s + v.importo, 0)
+    await supabase.from('commesse')
+      .update({ importo_contrattuale: parseFloat(importoTotale.toFixed(2)) })
       .eq('id', commessaId)
 
     return NextResponse.json({
       ok: true,
-      tariffe: tariffeInsert.length,
-      voci: vociInsert.length,
+      tariffe:       epList.length,
+      voci:          vociInsert.length,
       importo_totale: importoTotale,
       supercategorie: Object.keys(superCatMap).length,
-      categorie: Object.keys(catMap).length,
+      categorie:     Object.keys(catMap).length,
     })
 
   } catch (e) {
