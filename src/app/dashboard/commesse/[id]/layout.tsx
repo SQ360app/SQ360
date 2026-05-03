@@ -11,7 +11,7 @@ interface Commessa {
 }
 
 const TABS = [
-  { key: 'anagrafica',    label: 'Anagrafica',      path: '' },
+  { key: 'anagrafica',    label: 'Anagrafica',      path: '/anagrafica' },
   { key: 'documenti',     label: 'Documenti',        path: '/documenti' },
   { key: 'computo',       label: 'Computo',          path: '/computo' },
   { key: 'rda',           label: 'RDA',              path: '/rda' },
