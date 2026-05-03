@@ -654,7 +654,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                           <td style={{ fontSize: 10, color: '#1d4ed8', fontFamily: 'monospace' }}>{v.codice}</td>
                           <td style={{ fontSize: 10, maxWidth: 0 }}>
                             <span className="cmp-des-first">{first}</span>
-                            {rest && <span className="cmp-des-rest">{rest.slice(0, 120)}</span>}
+                            {rest && <span className="cmp-des-rest" title={rest}>{rest.slice(0, 260)}</span>}
                             {/* WBS badge cliccabile */}
                             <span
                               className={`cmp-wbadge ${hasWBS ? 'set' : 'unset'}`}
@@ -750,9 +750,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
           <div className="cmp-ctx" style={{ left: ctx.x, top: ctx.y }} onClick={e => e.stopPropagation()}>
             <div className="cmp-ctxh">Voce EP</div>
             <div className="cmp-ctxi" style={{ color: '#7c3aed', fontWeight: 600 }} onClick={() => {
-              const v = voci.find(x => x.id === ctx.id)
-              const el = document.getElementById(`wbs_${ctx.id}`)
-              if (el) { const r = el.getBoundingClientRect(); setWbsPicker({ voceId: ctx.id, x: r.left, y: r.bottom + 4 }) }
+              setWbsPicker({ voceId: ctx.id, x: ctx.x, y: Math.min(ctx.y, window.innerHeight - 360) })
               setCtx(null)
             }}>📐 Assegna WBS</div>
             <div className="cmp-ctxi acc" onClick={() => {
