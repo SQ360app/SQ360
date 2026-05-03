@@ -1,323 +1,334 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { useParams } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import { Plus, Loader2, ChevronDown, ChevronRight, CheckCircle2, XCircle, AlertTriangle, FileCheck, Shield, Send, Trophy, FileText, ArrowRight, Star } from 'lucide-react'
+import { useState, useEffect, useCallback, use } from 'react'
+import { createClient } from '@supabase/supabase-js'
 
-const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
-const STATI_RDO: Record<string, { label: string; color: string; bg: string }> = {
-  BOZZA:       { label: 'Bozza',            color: '#6b7280', bg: '#f3f4f6' },
-  INVIATA:     { label: 'Inviata',           color: '#d97706', bg: '#fffbeb' },
-  OFFERTE_RIC: { label: 'Offerte ricevute',  color: '#2563eb', bg: '#eff6ff' },
-  VALUTAZIONE: { label: 'In valutazione',    color: '#7c3aed', bg: '#f5f3ff' },
-  AGGIUDICATA: { label: 'Aggiudicata',       color: '#059669', bg: '#f0fdf4' },
-  DESERTA:     { label: 'Deserta',           color: '#dc2626', bg: '#fef2f2' },
-  ANNULLATA:   { label: 'Annullata',         color: '#6b7280', bg: '#f3f4f6' },
+const fi = (n: number, d = 2) => n?.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? '—'
+
+const STATI_RDO = ['bozza','inviata','risposta_ricevuta','comparativa','aggiudicata','annullata']
+const STATO_COLOR: Record<string,string> = {
+  bozza:'#f59e0b', inviata:'#3b82f6', risposta_ricevuta:'#8b5cf6', comparativa:'#f97316', aggiudicata:'#10b981', annullata:'#6b7280'
 }
 
-const STATI_OFFERTA: Record<string, { label: string; color: string; bg: string }> = {
-  RICEVUTA:   { label: 'Ricevuta',       color: '#6b7280', bg: '#f3f4f6' },
-  IDONEA:     { label: 'Idonea',         color: '#059669', bg: '#f0fdf4' },
-  NON_IDONEA: { label: 'Non idonea',     color: '#dc2626', bg: '#fef2f2' },
-  VINCITRICE: { label: 'Vincitrice',     color: '#059669', bg: '#f0fdf4' },
-  ESCLUSA:    { label: 'Esclusa',        color: '#dc2626', bg: '#fef2f2' },
+interface RDO {
+  id: string; rda_id?: string; commessa_id: string; codice: string
+  fornitore: string; email_fornitore: string
+  data_invio: string; data_scadenza: string
+  importo_offerta: number; stato: string; note: string
+  pdf_url?: string
 }
 
-function DocChecklist({ offerta, onUpdate }: { offerta: any; onUpdate: () => void }) {
-  const docs = [
-    { field: 'scheda_tecnica_ok', label: 'Scheda tecnica prodotto' },
-    { field: 'dichiarazione_prestaz_ok', label: 'DoP — Dichiarazione Prestazione (Reg. UE 305/2011)' },
-    { field: 'certificato_ce_ok', label: 'Marcatura CE / Certificato conformita' },
-    { field: 'cam_ok', label: 'CAM — Criteri Ambientali Minimi' },
-    { field: 'durc_ok', label: 'DURC in corso di validita (subappalti)' },
-    { field: 'iscrizione_albo_ok', label: 'Iscrizione albo / qualificazione SOA' },
-  ]
-  async function toggle(field: string, current: boolean) {
-    await supabase.from('rdo_offerte').update({ [field]: !current }).eq('id', offerta.id)
-    onUpdate()
-  }
-  const totOk = docs.filter(d => offerta[d.field]).length
-  const pct = Math.round(totOk / docs.length * 100)
-  return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-        <span style={{ fontSize: 11, fontWeight: 600 }}>Documentazione allegata all'offerta ({totOk}/{docs.length})</span>
-        <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: pct === 100 ? '#d1fae5' : pct >= 50 ? '#fef3c7' : '#fee2e2', color: pct === 100 ? '#059669' : pct >= 50 ? '#d97706' : '#dc2626' }}>{pct}%</span>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
-        {docs.map(({ field, label }) => {
-          const ok = !!offerta[field]
-          return (
-            <div key={field} onClick={() => toggle(field, ok)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', borderRadius: 6, cursor: 'pointer', background: ok ? '#f0fdf4' : '#f9fafb', border: '1px solid ' + (ok ? '#bbf7d0' : '#e5e7eb') }}>
-              {ok ? <CheckCircle2 size={12} style={{ color: '#059669', flexShrink: 0 }} /> : <div style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid #d1d5db', flexShrink: 0 }} />}
-              <span style={{ fontSize: 11, color: ok ? '#065f46' : '#6b7280' }}>{label}</span>
-            </div>
-          )
-        })}
-      </div>
-      {pct < 100 && <div style={{ fontSize: 10, color: '#dc2626', marginTop: 5, padding: '3px 8px', background: '#fef2f2', borderRadius: 4 }}>Documentazione incompleta — offerta non selezionabile come vincitrice</div>}
-    </div>
-  )
+interface RDA {
+  id: string; codice: string; oggetto: string; tipo: string; stato: string
 }
 
-function OffertaCard({ offerta, rank, isVincitrice, onUpdate, onSetVincitrice, onGeneraDAM }: { offerta: any; rank: number; isVincitrice: boolean; onUpdate: () => void; onSetVincitrice: (id: string) => void; onGeneraDAM: (o: any) => void }) {
-  const [exp, setExp] = useState(false)
-  const [ptTecnico, setPtTecnico] = useState(String(offerta.punteggio_tecnico || ''))
-  const [ptEconom, setPtEconom] = useState(String(offerta.punteggio_economico || ''))
-  const [noteVal, setNoteVal] = useState(offerta.note_valutazione || '')
-  const [saving, setSaving] = useState(false)
-  const si = STATI_OFFERTA[offerta.stato_offerta] || STATI_OFFERTA.RICEVUTA
-  const ptT = parseFloat(ptTecnico) || 0
-  const ptE = parseFloat(ptEconom) || 0
-  const ptTot = ptT * 0.7 + ptE * 0.3
-  const docsOk = offerta.scheda_tecnica_ok && offerta.dichiarazione_prestaz_ok && offerta.certificato_ce_ok
-
-  async function salvaValutaz() {
-    setSaving(true)
-    await supabase.from('rdo_offerte').update({ punteggio_tecnico: ptT || null, punteggio_economico: ptE || null, punteggio_totale: ptTot || null, note_valutazione: noteVal || null }).eq('id', offerta.id)
-    setSaving(false); onUpdate()
-  }
-  async function cambiaStato(stato: string) {
-    await supabase.from('rdo_offerte').update({ stato_offerta: stato }).eq('id', offerta.id); onUpdate()
-  }
-
-  return (
-    <div style={{ border: '2px solid ' + (isVincitrice ? '#059669' : si.color + '30'), borderRadius: 10, overflow: 'hidden' }}>
-      <div onClick={() => setExp(!exp)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', cursor: 'pointer', background: isVincitrice ? '#f0fdf4' : '#fff' }}>
-        <div style={{ width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: rank === 1 ? '#fef3c7' : '#f9fafb', flexShrink: 0 }}>
-          {rank === 1 ? <Trophy size={13} style={{ color: '#d97706' }} /> : <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280' }}>{rank}</span>}
-        </div>
-        {exp ? <ChevronDown size={13} style={{ color: '#9ca3af', flexShrink: 0 }} /> : <ChevronRight size={13} style={{ color: '#9ca3af', flexShrink: 0 }} />}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>{offerta.fornitore?.ragione_sociale || offerta.fornitore_nome_libero || 'Fornitore'}</p>
-          <p style={{ fontSize: 11, color: '#6b7280', margin: '2px 0 0' }}>{offerta.condizioni_pagamento || ''}</p>
-        </div>
-        <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-          {[['ST', 'scheda_tecnica_ok'], ['DoP', 'dichiarazione_prestaz_ok'], ['CE', 'certificato_ce_ok'], ['CAM', 'cam_ok']].map(([a, f]) => (
-            <span key={f} style={{ fontSize: 9, fontWeight: 700, padding: '2px 4px', borderRadius: 3, background: offerta[f] ? '#d1fae5' : '#fee2e2', color: offerta[f] ? '#059669' : '#dc2626' }}>{a}</span>
-          ))}
-        </div>
-        {offerta.prezzo_offerto && <span style={{ fontSize: 13, fontWeight: 700, flexShrink: 0, color: rank === 1 ? '#059669' : '#374151' }}>EUR {fmt(offerta.prezzo_offerto)}</span>}
-        {(offerta.punteggio_totale || ptTot) > 0 && <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 8, background: '#eff6ff', color: '#2563eb', flexShrink: 0 }}>{(offerta.punteggio_totale || ptTot).toFixed(1)} pt</span>}
-        <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, fontWeight: 600, background: si.bg, color: si.color, flexShrink: 0 }}>{si.label}</span>
-        {isVincitrice && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: '#d1fae5', color: '#059669' }}>VINCITRICE</span>}
-      </div>
-      {exp && (
-        <div style={{ borderTop: '1px solid #e5e7eb', background: '#fafafa', padding: 14 }}>
-          {!docsOk && <div style={{ display: 'flex', gap: 8, padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, marginBottom: 10, fontSize: 11, color: '#991b1b' }}><AlertTriangle size={12} style={{ flexShrink: 0 }} />Documentazione incompleta — non selezionabile come vincitrice</div>}
-          <div style={{ marginBottom: 12 }}><DocChecklist offerta={offerta} onUpdate={onUpdate} /></div>
-          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: 12, marginBottom: 10 }}>
-            <p style={{ fontSize: 11, fontWeight: 600, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 5 }}><Star size={12} /> Valutazione OEPV (70% tecnico + 30% economico)</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
-              <div><label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 2 }}>Tecnico (0-70)</label><input type="number" min="0" max="70" value={ptTecnico} onChange={e => setPtTecnico(e.target.value)} style={{ width: '100%', fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 6px', textAlign: 'right', boxSizing: 'border-box' }} /></div>
-              <div><label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 2 }}>Economico (0-30)</label><input type="number" min="0" max="30" value={ptEconom} onChange={e => setPtEconom(e.target.value)} style={{ width: '100%', fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 6px', textAlign: 'right', boxSizing: 'border-box' }} /></div>
-              <div><label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 2 }}>Totale</label><div style={{ fontSize: 14, fontWeight: 700, border: '2px solid #2563eb', borderRadius: 6, padding: '4px 6px', textAlign: 'right', color: '#2563eb' }}>{ptTot.toFixed(1)}</div></div>
-            </div>
-            <textarea value={noteVal} onChange={e => setNoteVal(e.target.value)} rows={1} placeholder="Note valutazione..." style={{ width: '100%', fontSize: 11, border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 8px', resize: 'none', boxSizing: 'border-box', marginBottom: 6 }} />
-            <button onClick={salvaValutaz} disabled={saving} style={{ padding: '5px 12px', fontSize: 11, background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, opacity: saving ? 0.6 : 1 }}>{saving && <Loader2 size={10} className="animate-spin" />}Salva punteggi</button>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            {offerta.stato_offerta !== 'ESCLUSA' && !docsOk && <button onClick={() => cambiaStato('ESCLUSA')} style={{ fontSize: 11, padding: '3px 10px', border: '1px solid #fca5a5', borderRadius: 6, background: '#fef2f2', color: '#dc2626', cursor: 'pointer' }}>Escludi (doc. incompleta)</button>}
-            {docsOk && offerta.stato_offerta !== 'IDONEA' && <button onClick={() => cambiaStato('IDONEA')} style={{ fontSize: 11, padding: '3px 10px', border: '1px solid #bbf7d0', borderRadius: 6, background: '#f0fdf4', color: '#059669', cursor: 'pointer' }}>Segna idonea</button>}
-            {!isVincitrice && offerta.stato_offerta === 'IDONEA' && docsOk && <button onClick={() => onSetVincitrice(offerta.id)} style={{ fontSize: 11, padding: '3px 12px', border: '2px solid #059669', borderRadius: 6, background: '#f0fdf4', color: '#059669', cursor: 'pointer', fontWeight: 600 }}>Seleziona VINCITRICE</button>}
-            {isVincitrice && !offerta.dam_generato && <button onClick={() => onGeneraDAM(offerta)} style={{ fontSize: 11, padding: '3px 12px', border: '2px solid #2563eb', borderRadius: 6, background: '#eff6ff', color: '#2563eb', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}><FileCheck size={11} />Genera DAM da questa offerta</button>}
-            {offerta.dam_generato && <span style={{ fontSize: 11, padding: '3px 10px', border: '1px solid #bbf7d0', borderRadius: 6, background: '#f0fdf4', color: '#059669', display: 'flex', alignItems: 'center', gap: 4 }}><CheckCircle2 size={11} />DAM generato</span>}
-          </div>
-        </div>
-      )}
-    </div>
-  )
+interface Fornitore {
+  id: string; ragione_sociale?: string; nome?: string; cognome?: string
+  email?: string; pec?: string; categoria_soa?: string
 }
 
-function RDOCard({ rdo, fornitori, onRefresh }: { rdo: any; fornitori: any[]; onRefresh: () => void }) {
-  const [exp, setExp] = useState(false)
-  const [offerte, setOfferte] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
-  const [showAdd, setShowAdd] = useState(false)
-  const [forn, setForn] = useState(''); const [fornLib, setFornLib] = useState(''); const [prezzo, setPrezzo] = useState(''); const [cond, setCond] = useState('60 gg. d.f.f.m.'); const [noteO, setNoteO] = useState(''); const [saving, setSaving] = useState(false)
-  const si = STATI_RDO[rdo.stato] || STATI_RDO.BOZZA
-
-  async function loadOfferte() {
-    setLoading(true)
-    const { data } = await supabase.from('rdo_offerte').select('*, fornitore:fornitori(ragione_sociale)').eq('rdo_id', rdo.id).order('punteggio_totale', { ascending: false, nullsFirst: false })
-    setOfferte(data || [])
-    setLoading(false)
-  }
-
-  useEffect(() => { if (exp) loadOfferte() }, [exp])
-
-  async function addOfferta() {
-    if (!forn && !fornLib) return
-    setSaving(true)
-    await supabase.from('rdo_offerte').insert({ rdo_id: rdo.id, fornitore_id: forn || null, fornitore_nome_libero: fornLib || null, prezzo_offerto: parseFloat(prezzo) || null, condizioni_pagamento: cond || null, note_offerta: noteO || null, stato_offerta: 'RICEVUTA', scheda_tecnica_ok: false, dichiarazione_prestaz_ok: false, certificato_ce_ok: false, cam_ok: false, durc_ok: false, iscrizione_albo_ok: false })
-    setSaving(false); setForn(''); setFornLib(''); setPrezzo(''); setNoteO(''); setShowAdd(false)
-    await loadOfferte()
-  }
-
-  async function setVincitrice(offertaId: string) {
-    for (const o of offerte) {
-      if (o.id === offertaId) await supabase.from('rdo_offerte').update({ stato_offerta: 'VINCITRICE' }).eq('id', o.id)
-      else if (o.stato_offerta === 'VINCITRICE') await supabase.from('rdo_offerte').update({ stato_offerta: 'IDONEA' }).eq('id', o.id)
-    }
-    await supabase.from('rdo').update({ stato: 'AGGIUDICATA' }).eq('id', rdo.id)
-    await loadOfferte(); onRefresh()
-  }
-
-  async function generaDAM(offerta: any) {
-    const { data: dam } = await supabase.from('dam').insert({ commessa_id: rdo.commessa_id, fornitore_id: offerta.fornitore_id || null, rdo_id: rdo.id, offerta_rdo_id: offerta.id, denominazione_materiale: rdo.oggetto || 'Materiale da RDO', stato: 'BOZZA', num_revisione: 0, scheda_tecnica: offerta.scheda_tecnica_ok || false, dichiarazione_prestazione: offerta.dichiarazione_prestaz_ok || false, certificato_ce: offerta.certificato_ce_ok || false, cam_compliant: offerta.cam_ok || false }).select().single()
-    if (dam) { await supabase.from('rdo_offerte').update({ dam_generato: true }).eq('id', offerta.id); await loadOfferte() }
-  }
-
-  async function cambiaStatoRDO(stato: string) {
-    await supabase.from('rdo').update({ stato }).eq('id', rdo.id); onRefresh()
-  }
-
-  const vincitrice = offerte.find(o => o.stato_offerta === 'VINCITRICE')
-  const offerteOrd = [...offerte].sort((a, b) => (b.punteggio_totale || 0) - (a.punteggio_totale || 0))
-
-  return (
-    <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden' }}>
-      <div onClick={() => setExp(!exp)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer', background: exp ? '#f9fafb' : '#fff' }}>
-        {exp ? <ChevronDown size={14} style={{ color: '#9ca3af', flexShrink: 0 }} /> : <ChevronRight size={14} style={{ color: '#9ca3af', flexShrink: 0 }} />}
-        <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#9ca3af', width: 100, flexShrink: 0 }}>{rdo.numero || 'RDO'}</span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 13, fontWeight: 600, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rdo.oggetto}</p>
-          <p style={{ fontSize: 11, color: '#6b7280', margin: '2px 0 0' }}>{rdo.tipo_fornitura || ''}{rdo.data_scadenza ? ' — Scad. ' + rdo.data_scadenza : ''}</p>
-        </div>
-        <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: '#f3f4f6', color: '#374151', flexShrink: 0 }}>{offerte.length} offerte</span>
-        {vincitrice && <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#059669', flexShrink: 0 }}><Trophy size={11} />{vincitrice.fornitore?.ragione_sociale || vincitrice.fornitore_nome_libero}</div>}
-        <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 10px', borderRadius: 10, background: si.bg, color: si.color, flexShrink: 0 }}>{si.label}</span>
-      </div>
-      {exp && (
-        <div style={{ borderTop: '1px solid #e5e7eb', background: '#fafafa', padding: 16 }}>
-          <div style={{ display: 'flex', gap: 8, padding: '8px 12px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, marginBottom: 12, fontSize: 11, color: '#1e40af' }}>
-            <FileText size={13} style={{ flexShrink: 0 }} />
-            <div><strong>Regola capitolato:</strong> I fornitori invitati devono allegare all'offerta tutta la documentazione tecnica (ST, DoP, CE, CAM). La valutazione e tecnico-economica (OEPV: 70% tecnico + 30% prezzo). Il DAM si genera automaticamente dall'offerta vincente.{rdo.note_capitolato && <><br /><em>{rdo.note_capitolato}</em></>}</div>
-          </div>
-          {loading ? <div style={{ textAlign: 'center', padding: 12 }}><Loader2 size={15} className="animate-spin" /></div>
-            : offerteOrd.length === 0 ? <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: 12, border: '2px dashed #e5e7eb', borderRadius: 8, marginBottom: 10 }}>Nessuna offerta — aggiungi le offerte pervenute dai fornitori</div>
-            : <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>{offerteOrd.map((o, i) => <OffertaCard key={o.id} offerta={o} rank={i + 1} isVincitrice={o.stato_offerta === 'VINCITRICE'} onUpdate={loadOfferte} onSetVincitrice={setVincitrice} onGeneraDAM={generaDAM} />)}</div>
-          }
-          {showAdd ? (
-            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: 12, marginBottom: 10 }}>
-              <p style={{ fontSize: 12, fontWeight: 600, margin: '0 0 8px' }}>Registra offerta ricevuta</p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-                <div><label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 2 }}>Fornitore archivio</label><select value={forn} onChange={e => setForn(e.target.value)} style={{ width: '100%', fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 8px' }}><option value="">Seleziona...</option>{fornitori.map(f => <option key={f.id} value={f.id}>{f.ragione_sociale}</option>)}</select></div>
-                <div><label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 2 }}>Oppure nome libero</label><input value={fornLib} onChange={e => setFornLib(e.target.value)} style={{ width: '100%', fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 8px', boxSizing: 'border-box' }} /></div>
-                <div><label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 2 }}>Prezzo offerto EUR</label><input type="number" step="0.01" value={prezzo} onChange={e => setPrezzo(e.target.value)} style={{ width: '100%', fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 8px', textAlign: 'right', boxSizing: 'border-box' }} /></div>
-                <div><label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 2 }}>Condizioni pagamento</label><input value={cond} onChange={e => setCond(e.target.value)} style={{ width: '100%', fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 8px', boxSizing: 'border-box' }} /></div>
-              </div>
-              <div style={{ fontSize: 10, padding: '5px 8px', background: '#fef3c7', borderRadius: 4, marginBottom: 8, color: '#92400e' }}>Dopo aver registrato l'offerta, spuntare la documentazione ricevuta allegata (ST, DoP, CE, CAM)</div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => setShowAdd(false)} style={{ padding: '5px 10px', fontSize: 11, border: '1px solid #e5e7eb', borderRadius: 6, background: '#fff', cursor: 'pointer' }}>Annulla</button>
-                <button onClick={addOfferta} disabled={saving || (!forn && !fornLib)} style={{ padding: '5px 12px', fontSize: 11, background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', opacity: (!forn && !fornLib) ? 0.5 : 1 }}>Registra offerta</button>
-              </div>
-            </div>
-          ) : (
-            <button onClick={() => setShowAdd(true)} style={{ fontSize: 11, padding: '5px 12px', border: '1px dashed #d1d5db', borderRadius: 6, background: '#fff', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', gap: 5, marginBottom: 10 }}><Plus size={11} />Aggiungi offerta ricevuta</button>
-          )}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', paddingTop: 8, borderTop: '1px solid #e5e7eb' }}>
-            <span style={{ fontSize: 11, color: '#6b7280' }}>Stato:</span>
-            {rdo.stato === 'BOZZA' && <button onClick={() => cambiaStatoRDO('INVIATA')} style={{ fontSize: 11, padding: '3px 10px', border: '1px solid #fcd34d', borderRadius: 6, background: '#fffbeb', color: '#d97706', cursor: 'pointer' }}>Segna Inviata</button>}
-            {rdo.stato === 'INVIATA' && <button onClick={() => cambiaStatoRDO('OFFERTE_RIC')} style={{ fontSize: 11, padding: '3px 10px', border: '1px solid #93c5fd', borderRadius: 6, background: '#eff6ff', color: '#2563eb', cursor: 'pointer' }}>Offerte ricevute</button>}
-            {rdo.stato === 'OFFERTE_RIC' && <button onClick={() => cambiaStatoRDO('VALUTAZIONE')} style={{ fontSize: 11, padding: '3px 10px', border: '1px solid #c4b5fd', borderRadius: 6, background: '#f5f3ff', color: '#7c3aed', cursor: 'pointer' }}>Avvia valutazione</button>}
-            {vincitrice && rdo.stato !== 'AGGIUDICATA' && <button onClick={() => cambiaStatoRDO('AGGIUDICATA')} style={{ fontSize: 11, padding: '3px 12px', border: '2px solid #059669', borderRadius: 6, background: '#f0fdf4', color: '#059669', cursor: 'pointer', fontWeight: 600 }}>Aggiudica RDO</button>}
-            {rdo.stato !== 'DESERTA' && <button onClick={() => cambiaStatoRDO('DESERTA')} style={{ fontSize: 11, padding: '3px 10px', border: '1px solid #fca5a5', borderRadius: 6, background: '#fff', color: '#dc2626', cursor: 'pointer' }}>Deserta</button>}
-          </div>
-        </div>
-      )}
-    </div>
-  )
+const S = {
+  page:  { minHeight:'100%', background:'var(--bg)', padding:16, display:'flex', flexDirection:'column' as const, gap:12 },
+  card:  { background:'var(--panel)', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden', boxShadow:'var(--shadow-sm)' } as React.CSSProperties,
+  hdr:   { display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 16px', borderBottom:'1px solid var(--border)', background:'var(--bg)' },
+  hl:    { fontSize:12, fontWeight:700, color:'var(--t2)', textTransform:'uppercase' as const, letterSpacing:'0.04em' },
+  th:    { padding:'7px 10px', fontSize:10, fontWeight:700, color:'var(--t3)', textTransform:'uppercase' as const, background:'var(--bg)', borderBottom:'1px solid var(--border)', textAlign:'left' as const, whiteSpace:'nowrap' as const },
+  td:    { padding:'10px 10px', fontSize:12, color:'var(--t2)', borderBottom:'1px solid var(--border)' },
+  inp:   { width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid var(--border)', fontSize:12, outline:'none', background:'var(--panel)', color:'var(--t1)' },
+  row:   (cols: number) => ({ display:'grid', gridTemplateColumns:`repeat(${cols},1fr)`, gap:12 }),
+  lbl:   { fontSize:11, fontWeight:600, color:'var(--t2)', marginBottom:4, display:'block' },
+  btn:   (c: string) => ({ padding:'8px 16px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:700, background:c, color:'#fff' }),
 }
 
-export default function RDOPage() {
-  const { id } = useParams() as { id: string }
-  const [rdoList, setRdoList] = useState<any[]>([])
-  const [fornitori, setFornitori] = useState<any[]>([])
+export default function RDOPage({ params: p }: { params: Promise<{ id: string }> }) {
+  const { id } = use(p)
+  const [rdoList, setRdoList] = useState<RDO[]>([])
+  const [rdaList, setRdaList] = useState<RDA[]>([])
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ oggetto: '', tipo_fornitura: 'MATERIALE', data_scadenza: '', numero_inviti: '3', note_capitolato: '' })
+  const [form, setForm] = useState(false)
+  const [editRdo, setEditRdo] = useState<Partial<RDO> | null>(null)
+  const [filtroStato, setFiltroStato] = useState('tutti')
   const [saving, setSaving] = useState(false)
-  const [err, setErr] = useState('')
+  const [toast, setToast] = useState('')
+  const [fSearch, setFSearch] = useState('')
+  const [fResults, setFResults] = useState<Fornitore[]>([])
 
-  const load = useCallback(async () => {
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
+
+  const carica = useCallback(async () => {
     setLoading(true)
-    const [{ data: r }, { data: f }] = await Promise.all([
+    const [{ data: rdo }, { data: rda }] = await Promise.all([
       supabase.from('rdo').select('*').eq('commessa_id', id).order('created_at', { ascending: false }),
-      supabase.from('fornitori').select('id,ragione_sociale').order('ragione_sociale'),
+      supabase.from('rda').select('id,codice,oggetto,tipo,stato').eq('commessa_id', id).in('stato', ['approvata','inviata'])
     ])
-    setRdoList(r || [])
-    setFornitori(f || [])
+    setRdoList((rdo as RDO[]) || [])
+    setRdaList((rda as RDA[]) || [])
     setLoading(false)
   }, [id])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { carica() }, [carica])
 
-  async function handleSave() {
-    if (!form.oggetto.trim()) { setErr('Oggetto obbligatorio'); return }
+  useEffect(() => {
+    if (!fSearch || fSearch.length < 2) { setFResults([]); return }
+    const t = setTimeout(async () => {
+      const { data } = await supabase.from('professionisti_fornitori')
+        .select('id,ragione_sociale,nome,cognome,email,pec,categoria_soa')
+        .or(`ragione_sociale.ilike.%${fSearch}%,nome.ilike.%${fSearch}%,cognome.ilike.%${fSearch}%`)
+        .limit(8)
+      setFResults((data as Fornitore[]) || [])
+    }, 300)
+    return () => clearTimeout(t)
+  }, [fSearch])
+
+  const fLabel = (f: Fornitore) => f.ragione_sociale || `${f.nome||''} ${f.cognome||''}`.trim()
+
+  const salva = async () => {
+    if (!editRdo?.fornitore) { showToast('Inserisci almeno un fornitore'); return }
     setSaving(true)
-    const { count } = await supabase.from('rdo').select('*', { count: 'exact', head: true }).eq('commessa_id', id)
-    const numero = 'RDO-' + new Date().getFullYear() + '-' + String((count || 0) + 1).padStart(3, '0')
-    const { error } = await supabase.from('rdo').insert({ commessa_id: id, numero, oggetto: form.oggetto.trim(), tipo_fornitura: form.tipo_fornitura, data_scadenza: form.data_scadenza || null, numero_inviti: parseInt(form.numero_inviti) || 3, note_capitolato: form.note_capitolato || null, stato: 'BOZZA' })
-    if (error) { setErr(error.message); setSaving(false); return }
-    setSaving(false); setShowForm(false)
-    setForm({ oggetto: '', tipo_fornitura: 'MATERIALE', data_scadenza: '', numero_inviti: '3', note_capitolato: '' })
-    await load()
+    try {
+      const codice = 'RDO-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.floor(Math.random()*1000).toString().padStart(3,'0')
+      const payload = {
+        commessa_id: id,
+        rda_id: editRdo.rda_id || null,
+        codice: editRdo.id ? (editRdo.codice||codice) : codice,
+        fornitore: editRdo.fornitore || '',
+        email_fornitore: editRdo.email_fornitore || '',
+        data_invio: editRdo.data_invio || null,
+        data_scadenza: editRdo.data_scadenza || null,
+        importo_offerta: editRdo.importo_offerta || 0,
+        stato: editRdo.stato || 'bozza',
+        note: editRdo.note || '',
+      }
+      if (editRdo.id) {
+        await supabase.from('rdo').update(payload).eq('id', editRdo.id)
+        showToast('RDO aggiornata')
+      } else {
+        await supabase.from('rdo').insert(payload)
+        showToast('RDO creata')
+      }
+      setForm(false); setEditRdo(null); carica()
+    } finally { setSaving(false) }
   }
 
-  const aggiudicate = rdoList.filter(r => r.stato === 'AGGIUDICATA').length
-  const inCorso = rdoList.filter(r => ['INVIATA', 'OFFERTE_RIC', 'VALUTAZIONE'].includes(r.stato)).length
+  const cambiaStato = async (rdo: RDO, stato: string) => {
+    await supabase.from('rdo').update({ stato }).eq('id', rdo.id)
+    showToast(`RDO → ${stato}`); carica()
+  }
+
+  const rdoFiltrate = rdoList.filter(r => filtroStato === 'tutti' || r.stato === filtroStato)
+
+  // Quadro comparativo: raggruppa RDO per rda_id
+  const compareGroups = rdoList.reduce((acc, r) => {
+    const key = r.rda_id || 'standalone'
+    if (!acc[key]) acc[key] = []
+    acc[key].push(r)
+    return acc
+  }, {} as Record<string, RDO[]>)
+
+  const bestOffer = (group: RDO[]) => {
+    const withOffer = group.filter(r => r.importo_offerta > 0)
+    if (!withOffer.length) return null
+    return withOffer.reduce((min, r) => r.importo_offerta < min.importo_offerta ? r : min)
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
-        {[['Totale RDO', rdoList.length, '#374151'], ['In corso', inCorso, '#d97706'], ['Aggiudicate', aggiudicate, '#059669'], ['Deserte', rdoList.filter(r => r.stato === 'DESERTA').length, '#dc2626']].map(([l, v, c]) => (
-          <div key={String(l)} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
-            <p style={{ fontSize: 11, color: '#6b7280', margin: '0 0 4px' }}>{l}</p>
-            <p style={{ fontSize: 16, fontWeight: 600, color: String(c), margin: 0 }}>{String(v)}</p>
+    <div style={S.page} className="fade-in">
+
+      {/* KPI */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:8 }}>
+        {STATI_RDO.map(s => (
+          <div key={s} style={{ ...S.card, padding:'10px 14px', cursor:'pointer', outline: filtroStato===s ? '2px solid var(--accent)' : 'none' }}
+            onClick={() => setFiltroStato(filtroStato===s ? 'tutti' : s)}>
+            <div style={{ width:7, height:7, borderRadius:'50%', background:STATO_COLOR[s], marginBottom:6 }} />
+            <p style={{ fontSize:17, fontWeight:800, color:'var(--t1)' }}>{rdoList.filter(r=>r.stato===s).length}</p>
+            <p style={{ fontSize:9, color:'var(--t3)', marginTop:2, textTransform:'uppercase', letterSpacing:'0.03em' }}>{s}</p>
           </div>
         ))}
       </div>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div>
-          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Richieste di Offerta (RDO)</h2>
-          <p style={{ fontSize: 12, color: '#6b7280', margin: '4px 0 0' }}>Fornitori invitati devono allegare tutta la documentazione tecnica all'offerta (ST+DoP+CE+CAM). Valutazione tecnico-economica OEPV. Il DAM si genera automaticamente dall'offerta vincente.</p>
-        </div>
-        <button onClick={() => setShowForm(!showForm)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>
-          <Plus size={14} /> Nuova RDO
-        </button>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 11, color: '#6b7280', flexWrap: 'wrap' }}>
-        {['RDA', 'RDO + Docs', 'Valutazione OEPV', 'Scelta + Clausola DL', 'DAM (da offerta)', 'ODA', 'Contratto'].map((step, i, arr) => (
-          <span key={step} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ fontWeight: i === 1 ? 700 : 400, color: i === 1 ? '#2563eb' : '#374151', padding: '1px 6px', borderRadius: 4, background: i === 1 ? '#eff6ff' : 'transparent' }}>{step}</span>
-            {i < arr.length - 1 && <ArrowRight size={10} style={{ color: '#d1d5db' }} />}
-          </span>
-        ))}
-      </div>
-      {showForm && (
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 18 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 14px' }}>Nuova Richiesta di Offerta</h3>
-          <div style={{ marginBottom: 10 }}><label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 3 }}>Oggetto *</label><input value={form.oggetto} onChange={e => setForm(p => ({ ...p, oggetto: e.target.value }))} placeholder="es. Fornitura calcestruzzo C25/30 per fondazioni" style={{ width: '100%', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px', boxSizing: 'border-box' }} /></div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 10 }}>
-            <div><label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 3 }}>Tipo</label><select value={form.tipo_fornitura} onChange={e => setForm(p => ({ ...p, tipo_fornitura: e.target.value }))} style={{ width: '100%', fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 8, padding: '6px 10px' }}><option value="MATERIALE">Materiale</option><option value="SUBAPPALTO">Subappalto</option><option value="SERVIZIO">Servizio</option><option value="NOLO">Nolo</option></select></div>
-            <div><label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 3 }}>Scadenza offerte</label><input type="date" value={form.data_scadenza} onChange={e => setForm(p => ({ ...p, data_scadenza: e.target.value }))} style={{ width: '100%', fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 8, padding: '6px 10px', boxSizing: 'border-box' }} /></div>
-            <div><label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 3 }}>Fornitori invitati</label><input type="number" min="1" value={form.numero_inviti} onChange={e => setForm(p => ({ ...p, numero_inviti: e.target.value }))} style={{ width: '100%', fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 8, padding: '6px 10px', boxSizing: 'border-box' }} /></div>
+
+      {/* Quadro comparativo offerte */}
+      {Object.keys(compareGroups).length > 0 && (
+        <div style={S.card}>
+          <div style={S.hdr}>
+            <span style={S.hl}>Quadro comparativo offerte</span>
           </div>
-          <div style={{ marginBottom: 12 }}><label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 3 }}>Note capitolato — documentazione obbligatoria richiesta ai fornitori</label><textarea value={form.note_capitolato} onChange={e => setForm(p => ({ ...p, note_capitolato: e.target.value }))} rows={2} placeholder="es. Allegare obbligatoriamente: scheda tecnica, DoP, marcatura CE, certificato aggregati..." style={{ width: '100%', fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px', resize: 'none', boxSizing: 'border-box' }} /></div>
-          {err && <p style={{ fontSize: 12, color: '#dc2626', margin: '0 0 8px' }}>{err}</p>}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setShowForm(false)} style={{ padding: '7px 14px', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', cursor: 'pointer' }}>Annulla</button>
-            <button onClick={handleSave} disabled={saving} style={{ padding: '7px 18px', fontSize: 13, background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: saving ? 0.6 : 1 }}>{saving && <Loader2 size={12} className="animate-spin" />}Crea RDO</button>
+          <div style={{ padding:12 }}>
+            {Object.entries(compareGroups).map(([rdaId, group]) => {
+              const rda = rdaList.find(r => r.id === rdaId)
+              const best = bestOffer(group)
+              return (
+                <div key={rdaId} style={{ marginBottom:16 }}>
+                  <p style={{ fontSize:12, fontWeight:700, color:'var(--t1)', marginBottom:8, padding:'4px 0', borderBottom:'1px solid var(--border)' }}>
+                    {rda ? `${rda.codice} — ${rda.oggetto}` : 'Richiesta standalone'}
+                  </p>
+                  <div style={{ display:'flex', gap:8, flexWrap:'wrap' as const }}>
+                    {group.map(r => (
+                      <div key={r.id} style={{
+                        padding:'10px 14px', borderRadius:8, border:`2px solid ${r.id===best?.id ? 'var(--success)' : 'var(--border)'}`,
+                        background: r.id===best?.id ? 'rgba(16,185,129,0.06)' : 'var(--bg)',
+                        minWidth:180, position:'relative' as const
+                      }}>
+                        {r.id===best?.id && <span style={{ position:'absolute', top:6, right:6, fontSize:9, fontWeight:700, color:'var(--success)' }}>✓ BEST</span>}
+                        <p style={{ fontWeight:700, fontSize:12 }}>{r.fornitore}</p>
+                        <p style={{ fontSize:16, fontWeight:800, color:'var(--t1)', margin:'4px 0', fontVariantNumeric:'tabular-nums' }}>
+                          {r.importo_offerta ? `€ ${fi(r.importo_offerta)}` : '—'}
+                        </p>
+                        <div style={{ width:6, height:6, borderRadius:'50%', background:STATO_COLOR[r.stato]||'#ccc', display:'inline-block', marginRight:4 }} />
+                        <span style={{ fontSize:10, color:'var(--t3)' }}>{r.stato}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
-      {loading ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 120, gap: 8, color: '#9ca3af' }}><Loader2 size={16} className="animate-spin" />Caricamento...</div>
-        : rdoList.length === 0 ? <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 160, color: '#9ca3af', border: '2px dashed #e5e7eb', borderRadius: 12 }}><Send size={40} style={{ marginBottom: 12, opacity: 0.3 }} /><p style={{ fontSize: 14 }}>Nessuna RDO — crea la prima richiesta di offerta</p></div>
-        : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{rdoList.map(r => <RDOCard key={r.id} rdo={r} fornitori={fornitori} onRefresh={load} />)}</div>
-      }
+
+      {/* Lista RDO */}
+      <div style={S.card}>
+        <div style={S.hdr}>
+          <span style={S.hl}>Richieste d'Offerta</span>
+          <button className="btn-primary" style={{ fontSize:12, padding:'8px 14px' }}
+            onClick={() => { setEditRdo({ stato:'bozza', importo_offerta:0 }); setFSearch(''); setForm(true) }}>
+            + Nuova RDO
+          </button>
+        </div>
+
+        {loading ? (
+          <div style={{ padding:40, textAlign:'center' }}><span className="spinner" /></div>
+        ) : rdoFiltrate.length === 0 ? (
+          <div style={{ padding:40, textAlign:'center', color:'var(--t3)', fontSize:13 }}>Nessuna RDO trovata</div>
+        ) : (
+          <table style={{ width:'100%', borderCollapse:'collapse' }}>
+            <thead>
+              <tr>
+                {['Codice','Fornitore','Email','RDA collegata','Scadenza','Offerta (€)','Stato',''].map(h => (
+                  <th key={h} style={S.th}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rdoFiltrate.map(r => {
+                const rda = rdaList.find(x => x.id === r.rda_id)
+                return (
+                  <tr key={r.id}
+                    onMouseEnter={e=>(e.currentTarget.style.background='var(--accent-light)')}
+                    onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
+                    <td style={{ ...S.td, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>{r.codice}</td>
+                    <td style={{ ...S.td, fontWeight:600 }}>{r.fornitore}</td>
+                    <td style={{ ...S.td, fontSize:11 }}>{r.email_fornitore || '—'}</td>
+                    <td style={{ ...S.td, fontSize:11 }}>{rda ? `${rda.codice}` : '—'}</td>
+                    <td style={{ ...S.td, fontSize:11 }}>{r.data_scadenza || '—'}</td>
+                    <td style={{ ...S.td, textAlign:'right' as const, fontWeight:700, fontVariantNumeric:'tabular-nums' as const }}>
+                      {r.importo_offerta ? fi(r.importo_offerta) : '—'}
+                    </td>
+                    <td style={S.td}>
+                      <select value={r.stato} onChange={e=>cambiaStato(r, e.target.value)}
+                        style={{ padding:'3px 6px', borderRadius:6, border:`1px solid ${STATO_COLOR[r.stato]||'#ccc'}44`, background:(STATO_COLOR[r.stato]||'#ccc')+'22', color:STATO_COLOR[r.stato]||'#666', fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                        {STATI_RDO.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </td>
+                    <td style={S.td}>
+                      <button style={{ ...S.btn('#3b82f6'), padding:'4px 10px', fontSize:11 }}
+                        onClick={() => { setEditRdo(r); setFSearch(r.fornitore||''); setForm(true) }}>✎</button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Modal */}
+      {form && editRdo && (
+        <div className="modal-overlay" onClick={e=>{ if(e.target===e.currentTarget){setForm(false);setEditRdo(null)} }}>
+          <div className="modal-box" style={{ maxWidth:560, width:'92%' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:20 }}>
+              <h3 style={{ fontSize:14, fontWeight:700 }}>{editRdo.id ? 'Modifica RDO' : 'Nuova Richiesta d\'Offerta'}</h3>
+              <button onClick={()=>{setForm(false);setEditRdo(null)}} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'var(--t3)' }}>✕</button>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+              {rdaList.length > 0 && (
+                <div>
+                  <label style={S.lbl}>Collega a RDA</label>
+                  <select style={S.inp} value={editRdo.rda_id||''} onChange={e=>setEditRdo({...editRdo, rda_id:e.target.value||undefined})}>
+                    <option value="">— Nessuna RDA collegata —</option>
+                    {rdaList.map(r => <option key={r.id} value={r.id}>{r.codice} — {r.oggetto}</option>)}
+                  </select>
+                </div>
+              )}
+              {/* Fornitore con ricerca live */}
+              <div style={{ position:'relative' }}>
+                <label style={S.lbl}>Fornitore *</label>
+                <input style={S.inp} value={fSearch} onChange={e=>{setFSearch(e.target.value); setEditRdo({...editRdo, fornitore:e.target.value})}} placeholder="Cerca fornitore nel DB..." />
+                {fResults.length > 0 && (
+                  <div style={{ position:'absolute', zIndex:100, width:'100%', background:'var(--panel)', border:'1px solid var(--border)', borderRadius:8, boxShadow:'var(--shadow-md)', maxHeight:200, overflowY:'auto' as const }}>
+                    {fResults.map(f => (
+                      <div key={f.id} style={{ padding:'8px 12px', cursor:'pointer', fontSize:12, borderBottom:'1px solid var(--border)' }}
+                        onMouseEnter={e=>(e.currentTarget.style.background='var(--accent-light)')}
+                        onMouseLeave={e=>(e.currentTarget.style.background='')}
+                        onClick={() => {
+                          const email = f.pec || f.email || ''
+                          setEditRdo({...editRdo, fornitore:fLabel(f), email_fornitore:email})
+                          setFSearch(fLabel(f)); setFResults([])
+                        }}>
+                        <span style={{ fontWeight:600 }}>{fLabel(f)}</span>
+                        {(f.pec||f.email) && <span style={{ fontSize:10, color:'var(--t3)', marginLeft:8 }}>{f.pec||f.email}</span>}
+                        {f.categoria_soa && <span style={{ fontSize:10, color:'var(--accent)', marginLeft:8 }}>SOA: {f.categoria_soa}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label style={S.lbl}>Email fornitore</label>
+                <input type="email" style={S.inp} value={editRdo.email_fornitore||''} onChange={e=>setEditRdo({...editRdo, email_fornitore:e.target.value})} />
+              </div>
+              <div style={S.row(2)}>
+                <div>
+                  <label style={S.lbl}>Data invio</label>
+                  <input type="date" style={S.inp} value={editRdo.data_invio||''} onChange={e=>setEditRdo({...editRdo, data_invio:e.target.value})} />
+                </div>
+                <div>
+                  <label style={S.lbl}>Data scadenza offerta</label>
+                  <input type="date" style={S.inp} value={editRdo.data_scadenza||''} onChange={e=>setEditRdo({...editRdo, data_scadenza:e.target.value})} />
+                </div>
+              </div>
+              <div>
+                <label style={S.lbl}>Importo offerta ricevuta (€)</label>
+                <input type="number" step="0.01" style={S.inp} value={editRdo.importo_offerta||''} onChange={e=>setEditRdo({...editRdo, importo_offerta:parseFloat(e.target.value)||0})} placeholder="0,00" />
+              </div>
+              <div>
+                <label style={S.lbl}>Stato</label>
+                <select style={S.inp} value={editRdo.stato||'bozza'} onChange={e=>setEditRdo({...editRdo, stato:e.target.value})}>
+                  {STATI_RDO.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={S.lbl}>Note</label>
+                <textarea style={{ ...S.inp, resize:'vertical' as const, minHeight:60 }} value={editRdo.note||''} onChange={e=>setEditRdo({...editRdo, note:e.target.value})} />
+              </div>
+              <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
+                <button style={S.btn('#6b7280')} onClick={()=>{setForm(false);setEditRdo(null)}}>Annulla</button>
+                <button style={S.btn('var(--accent)')} onClick={salva} disabled={saving}>{saving ? '...' : 'Salva RDO'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div style={{ position:'fixed', bottom:20, right:20, background:'#14532d', color:'#fff', padding:'10px 18px', borderRadius:10, fontSize:12, fontWeight:700, zIndex:1000, boxShadow:'var(--shadow-lg)' }}>
+          {toast}
+        </div>
+      )}
     </div>
   )
 }
