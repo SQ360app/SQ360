@@ -255,6 +255,14 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
   const generaRDA = async () => {
     const ids = Array.from(multiSel)
     if (!ids.length) { showToast('Seleziona almeno una voce'); return }
+    // Blocca se ci sono voci senza WBS
+    const senzaWBS = ids.filter(vid => !voci.find(v => v.id === vid)?.wbs_id)
+    if (senzaWBS.length > 0) {
+      showToast(`⚠ ${senzaWBS.length} voci senza nodo WBS — assegna WBS prima di generare RDA`)
+      // Evidenzia le voci senza WBS
+      setMultiSel(new Set(senzaWBS))
+      return
+    }
     // Raggruppa per WBS se le voci hanno wbs_id diversi
     const wbsGroups: Record<string, string[]> = {}
     ids.forEach(vid => {
@@ -726,11 +734,12 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
         </div>
 
         {/* WBS PICKER POPUP */}
-       {wbsPicker && (
-  <>
-    <div style={{ position:'fixed', inset:0, zIndex:199 }} onClick={() => setWbsPicker(null)} />
-    <WbsPicker voceId={wbsPicker.voceId}
-            currentWbs={voci.find(v => v.id === wbsPicker.voceId)?.wbs_id} />
+        {wbsPicker && (
+          <>
+            <div style={{ position:'fixed', inset:0, zIndex:199 }} onClick={() => setWbsPicker(null)} />
+            <WbsPicker voceId={wbsPicker.voceId} x={wbsPicker.x} y={wbsPicker.y}
+              currentWbs={voci.find(v => v.id === wbsPicker.voceId)?.wbs_id} />
+          </>
         )}
 
         {/* BULK WBS MODAL */}
@@ -742,8 +751,9 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
             <div className="cmp-ctxh">Voce EP</div>
             <div className="cmp-ctxi" style={{ color: '#7c3aed', fontWeight: 600 }} onClick={() => {
               const v = voci.find(x => x.id === ctx.id)
-             setWbsPicker({ voceId: ctx.id, x: ctx.x, y: Math.min(ctx.y, window.innerHeight - 360) })
-setCtx(null)
+              const el = document.getElementById(`wbs_${ctx.id}`)
+              if (el) { const r = el.getBoundingClientRect(); setWbsPicker({ voceId: ctx.id, x: r.left, y: r.bottom + 4 }) }
+              setCtx(null)
             }}>📐 Assegna WBS</div>
             <div className="cmp-ctxi acc" onClick={() => {
               setMultiSel(new Set([ctx.id])); setCtx(null)
