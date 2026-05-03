@@ -1,198 +1,301 @@
-'use client'
-import { useState, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import { Plus, Loader2, ChevronDown, ChevronRight, ArrowRight, Send } from 'lucide-react'
+\'use client\'
 
-const fmt = (n: number) => (n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+import { useState, useEffect, useCallback, use } from \'react\'
+import { createClient } from \'@supabase/supabase-js\'
 
-const TIPI = ['SUBAPPALTO', 'ACQUISTO', 'NOLO_CON_CONDUCENTE', 'NOLO_A_FREDDO', 'SERVIZIO', 'MISTO']
-const PRIORITA = [{ v: 'BASSA', c: '#6b7280' }, { v: 'NORMALE', c: '#2563eb' }, { v: 'ALTA', c: '#d97706' }, { v: 'URGENTE', c: '#dc2626' }]
-const STATI_RDA = [
-  { v: 'BOZZA',           c: '#9ca3af', bg: '#f3f4f6' },
-  { v: 'IN_APPROVAZIONE', c: '#d97706', bg: '#fffbeb' },
-  { v: 'APPROVATA',       c: '#059669', bg: '#f0fdf4' },
-  { v: 'RIFIUTATA',       c: '#dc2626', bg: '#fef2f2' },
-  { v: 'EVASA',           c: '#2563eb', bg: '#eff6ff' },
-]
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
-export default function RDAPage() {
-  const { id } = useParams() as { id: string }
-  const router = useRouter()
-  const [rda, setRda] = useState<any[]>([])
+const fi = (n: number, d = 2) => n?.toLocaleString(\'it-IT\', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? \'—\'
+
+const STATI = [\'bozza\',\'approvata\',\'inviata\',\'chiusa\',\'annullata\']
+const TIPI  = [\'MAT\',\'MAN\',\'NOL\',\'SUB\',\'MIX\']
+
+const STATO_COLOR: Record<string,string> = {
+  bozza:\'#f59e0b\', approvata:\'#3b82f6\', inviata:\'#8b5cf6\', chiusa:\'#10b981\', annullata:\'#ef4444\'
+}
+
+interface RDA {
+  id: string; codice: string; commessa_id: string
+  tipo: string; oggetto: string; qta_stimata: number; um: string
+  data_necessita: string; stato: string; fornitore_sugg: string
+  note: string; created_at: string; wbs_id?: string
+}
+
+interface Fornitore {
+  id: string; ragione_sociale?: string; nome?: string; cognome?: string
+  categoria_soa?: string; specializzazione?: string
+}
+
+export default function RDAPage({ params: p }: { params: Promise<{ id: string }> }) {
+  const { id } = use(p)
+  const [rdaList, setRdaList] = useState<RDA[]>([])
   const [loading, setLoading] = useState(true)
-  const [expanded, setExpanded] = useState<string | null>(null)
-  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState(false)
+  const [editRda, setEditRda] = useState<Partial<RDA> | null>(null)
+  const [filtroStato, setFiltroStato] = useState(\'tutti\')
+  const [filtroTipo, setFiltroTipo] = useState(\'tutti\')
+  const [search, setSearch] = useState(\'\')
+  const [fornitori, setFornitori] = useState<Fornitore[]>([])
+  const [fSearch, setFSearch] = useState(\'\')
+  const [fResults, setFResults] = useState<Fornitore[]>([])
   const [saving, setSaving] = useState(false)
-  const [err, setErr] = useState('')
-  const [tipo, setTipo] = useState('SUBAPPALTO')
-  const [priorita, setPriorita] = useState('NORMALE')
-  const [oggetto, setOggetto] = useState('')
-  const [importo, setImporto] = useState('')
-  const [dataNecessita, setDataNecessita] = useState('')
-  const [note, setNote] = useState('')
+  const [toast, setToast] = useState(\'\')
 
-  async function load() {
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(\'\'), 3000) }
+
+  const carica = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase.from('rda').select('*').eq('commessa_id', id).order('created_at', { ascending: false })
-    setRda(data || [])
+    const { data } = await supabase.from(\'rda\').select(\'*\').eq(\'commessa_id\', id).order(\'created_at\', { ascending: false })
+    setRdaList((data as RDA[]) || [])
     setLoading(false)
-  }
-  useEffect(() => { load() }, [id])
+  }, [id])
 
-  async function createRDA() {
-    if (!oggetto.trim()) { setErr('Oggetto obbligatorio'); return }
+  useEffect(() => { carica() }, [carica])
+
+  // Ricerca fornitori live
+  useEffect(() => {
+    if (!fSearch || fSearch.length < 2) { setFResults([]); return }
+    const t = setTimeout(async () => {
+      const { data } = await supabase.from(\'professionisti_fornitori\')
+        .select(\'id,ragione_sociale,nome,cognome,categoria_soa,specializzazione\')
+        .or(`ragione_sociale.ilike.%${fSearch}%,nome.ilike.%${fSearch}%,cognome.ilike.%${fSearch}%`)
+        .limit(8)
+      setFResults((data as Fornitore[]) || [])
+    }, 300)
+    return () => clearTimeout(t)
+  }, [fSearch])
+
+  const salva = async () => {
+    if (!editRda?.oggetto || !editRda?.tipo) { showToast(\'Compila oggetto e tipo\'); return }
     setSaving(true)
-    const { count } = await supabase.from('rda').select('*', { count: 'exact', head: true }).eq('commessa_id', id)
-    const numero = 'RDA-' + new Date().getFullYear() + '-' + String((count || 0) + 1).padStart(3, '0')
-    const { error } = await supabase.from('rda').insert({
-      commessa_id: id, numero, tipo, oggetto: oggetto.trim(),
-      importo_stimato: parseFloat(importo) || null,
-      data_necessita: dataNecessita || null,
-      note: note || null, priorita, stato: 'BOZZA',
-    })
-    setSaving(false)
-    if (error) { setErr(error.message); return }
-    setOggetto(''); setImporto(''); setDataNecessita(''); setNote('')
-    setShowForm(false)
-    await load()
+    try {
+      const payload = {
+        commessa_id: id,
+        tipo: editRda.tipo || \'MAT\',
+        oggetto: editRda.oggetto || \'\',
+        qta_stimata: editRda.qta_stimata || 1,
+        um: editRda.um || \'nr\',
+        data_necessita: editRda.data_necessita || null,
+        stato: editRda.stato || \'bozza\',
+        fornitore_sugg: editRda.fornitore_sugg || \'\',
+        note: editRda.note || \'\',
+        wbs_id: editRda.wbs_id || null,
+      }
+      if (editRda.id) {
+        await supabase.from(\'rda\').update(payload).eq(\'id\', editRda.id)
+        showToast(\'RDA aggiornata\')
+      } else {
+        const codice = \'RDA-\' + new Date().toISOString().slice(0,10).replace(/-/g,\'\') + \'-\' + Math.floor(Math.random()*1000).toString().padStart(3,\'0\')
+        await supabase.from(\'rda\').insert({ ...payload, codice })
+        showToast(\'RDA creata\')
+      }
+      setForm(false); setEditRda(null); carica()
+    } finally { setSaving(false) }
   }
 
-  async function cambiaStato(rdaId: string, stato: string) {
-    await supabase.from('rda').update({ stato }).eq('id', rdaId)
-    await load()
+  const cambiaStato = async (rda: RDA, nuovoStato: string) => {
+    await supabase.from(\'rda\').update({ stato: nuovoStato }).eq(\'id\', rda.id)
+    showToast(`Stato → ${nuovoStato}`)
+    carica()
   }
 
-  async function creaRDO(r: any) {
-    // Crea RDO collegata alla RDA e naviga
-    const { count } = await supabase.from('rdo').select('*', { count: 'exact', head: true }).eq('commessa_id', id)
-    const numero = 'RDO-' + new Date().getFullYear() + '-' + String((count || 0) + 1).padStart(3, '0')
-    const { data: rdoData, error } = await supabase.from('rdo').insert({
-      commessa_id: id,
-      numero,
-      oggetto: r.oggetto,
-      rda_id: r.id,
-      tipo: r.tipo,
-      stato: 'BOZZA',
-      data_emissione: new Date().toISOString().split('T')[0],
-    }).select().single()
-    if (!error) {
-      await supabase.from('rda').update({ stato: 'IN_APPROVAZIONE' }).eq('id', r.id)
-      router.push('/dashboard/commesse/' + id + '/rdo')
-    }
+  const elimina = async (rda: RDA) => {
+    if (!confirm(`Eliminare RDA ${rda.codice}?`)) return
+    await supabase.from(\'rda\').delete().eq(\'id\', rda.id)
+    showToast(\'RDA eliminata\'); carica()
   }
 
-  const totale = rda.length
-  const inApp = rda.filter(r => r.stato === 'IN_APPROVAZIONE').length
-  const approvate = rda.filter(r => r.stato === 'APPROVATA').length
-  const importoTot = rda.filter(r => r.stato !== 'RIFIUTATA').reduce((s, r) => s + (r.importo_stimato || 0), 0)
+  const rdaFiltrate = rdaList.filter(r => {
+    if (filtroStato !== \'tutti\' && r.stato !== filtroStato) return false
+    if (filtroTipo  !== \'tutti\' && r.tipo  !== filtroTipo)  return false
+    if (search && !r.oggetto?.toLowerCase().includes(search.toLowerCase()) &&
+        !r.codice?.toLowerCase().includes(search.toLowerCase())) return false
+    return true
+  })
+
+  const kpi = TIPI.map(t => ({
+    tipo: t,
+    n: rdaList.filter(r => r.tipo === t).length,
+    tot: 0
+  }))
+
+  const fLabel = (f: Fornitore) => f.ragione_sociale || `${f.nome || \'\'} ${f.cognome || \'\'}`.trim() || \'—\'
+
+  const S = {
+    page: { minHeight:\'100%\', background:\'var(--bg)\', padding:16, display:\'flex\', flexDirection:\'column\' as const, gap:12 },
+    card: { background:\'var(--panel)\', border:\'1px solid var(--border)\', borderRadius:12, overflow:\'hidden\', boxShadow:\'var(--shadow-sm)\' } as React.CSSProperties,
+    hdr:  { display:\'flex\', alignItems:\'center\', justifyContent:\'space-between\', padding:\'10px 16px\', borderBottom:\'1px solid var(--border)\', background:\'var(--bg)\' },
+    hl:   { fontSize:12, fontWeight:700, color:\'var(--t2)\', textTransform:\'uppercase\' as const, letterSpacing:\'0.04em\' },
+    th:   { padding:\'7px 10px\', fontSize:10, fontWeight:700, color:\'var(--t3)\', textTransform:\'uppercase\' as const, background:\'var(--bg)\', borderBottom:\'1px solid var(--border)\', textAlign:\'left\' as const, whiteSpace:\'nowrap\' as const },
+    td:   { padding:\'10px 10px\', fontSize:12, color:\'var(--t2)\', borderBottom:\'1px solid var(--border)\' },
+    badge:(c:string) => ({ display:\'inline-block\', padding:\'2px 8px\', borderRadius:10, fontSize:10, fontWeight:700, background:c+\'22\', color:c, border:`1px solid ${c}44` }),
+    inp:  { width:\'100%\', padding:\'8px 10px\', borderRadius:8, border:\'1px solid var(--border)\', fontSize:12, outline:\'none\', background:\'var(--panel)\', color:\'var(--t1)\' },
+    row:  { display:\'grid\', gridTemplateColumns:\'1fr 1fr\', gap:12 },
+    lbl:  { fontSize:11, fontWeight:600, color:\'var(--t2)\', marginBottom:4, display:\'block\' },
+    btn:  (c:string) => ({ padding:\'8px 16px\', borderRadius:8, border:\'none\', cursor:\'pointer\', fontSize:12, fontWeight:700, background:c, color:\'#fff\' }),
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={S.page} className="fade-in">
 
-      {/* KPI */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
-        {[['Totale RDA', String(totale), '#374151'], ['In approvazione', String(inApp), '#d97706'], ['Approvate', String(approvate), '#059669'], ['Importo stimato', 'EUR ' + fmt(importoTot), '#111827']].map(([l, v, c]) => (
-          <div key={String(l)} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
-            <p style={{ fontSize: 11, color: '#6b7280', margin: '0 0 4px' }}>{l}</p>
-            <p style={{ fontSize: 15, fontWeight: 600, color: String(c), margin: 0 }}>{v}</p>
+      {/* KPI bar */}
+      <div style={{ display:\'grid\', gridTemplateColumns:\'repeat(5,1fr)\', gap:8 }}>
+        {kpi.map(k => (
+          <div key={k.tipo} style={{ ...S.card, padding:\'12px 16px\', cursor:\'pointer\', outline: filtroTipo===k.tipo ? \'2px solid var(--accent)\' : \'none\' }}
+            onClick={() => setFiltroTipo(filtroTipo===k.tipo ? \'tutti\' : k.tipo)}>
+            <p style={{ fontSize:11, fontWeight:700, color:\'var(--t3)\', textTransform:\'uppercase\' as const }}>{k.tipo}</p>
+            <p style={{ fontSize:20, fontWeight:800, color:\'var(--t1)\', marginTop:4 }}>{k.n}</p>
+            <p style={{ fontSize:10, color:\'var(--t4)\', marginTop:2 }}>richieste</p>
           </div>
         ))}
       </div>
 
-      {/* Header + bottone */}
-      {!showForm && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button onClick={() => setShowForm(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>
-            <Plus size={14} /> Nuova RDA
-          </button>
-        </div>
-      )}
-
-      {/* Form nuova RDA */}
-      {showForm && (
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 20 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 16px' }}>Nuova Richiesta di Acquisto/Affidamento</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-            <div><label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>Tipo *</label>
-              <select value={tipo} onChange={e => setTipo(e.target.value)} style={{ width: '100%', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px' }}>
-                {TIPI.map(t => <option key={t}>{t}</option>)}
-              </select></div>
-            <div><label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>Priorita</label>
-              <select value={priorita} onChange={e => setPriorita(e.target.value)} style={{ width: '100%', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px' }}>
-                {PRIORITA.map(p => <option key={p.v} value={p.v}>{p.v}</option>)}
-              </select></div>
-          </div>
-          <div style={{ marginBottom: 12 }}><label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>Oggetto — descrizione acquisto/lavorazione *</label>
-            <input value={oggetto} onChange={e => setOggetto(e.target.value)} placeholder="es. Demolizioni strutturali Zona A, Acciaio B450C per pilastri..." style={{ width: '100%', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px', boxSizing: 'border-box' }} /></div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-            <div><label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>Importo stimato EUR</label>
-              <input type="number" step="0.01" value={importo} onChange={e => setImporto(e.target.value)} style={{ width: '100%', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px', textAlign: 'right', boxSizing: 'border-box' }} /></div>
-            <div><label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>Data necessita in cantiere</label>
-              <input type="date" value={dataNecessita} onChange={e => setDataNecessita(e.target.value)} style={{ width: '100%', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px', boxSizing: 'border-box' }} /></div>
-          </div>
-          <div style={{ marginBottom: 12 }}><label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>Note di cantiere — indicazioni specifiche per ufficio acquisti</label>
-            <textarea value={note} onChange={e => setNote(e.target.value)} rows={3} placeholder="Indica marca, specifiche, ubicazione cantiere, urgenze, materiale da sostituire..." style={{ width: '100%', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px', resize: 'vertical', boxSizing: 'border-box' }} /></div>
-          {err && <p style={{ fontSize: 12, color: '#dc2626', margin: '0 0 8px' }}>{err}</p>}
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button onClick={() => { setShowForm(false); setErr(''); setOggetto('') }} style={{ padding: '8px 16px', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', cursor: 'pointer' }}>Annulla</button>
-            <button onClick={createRDA} disabled={saving || !oggetto.trim()} style={{ padding: '8px 16px', fontSize: 13, background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: (saving || !oggetto.trim()) ? 0.5 : 1 }}>
-              {saving && <Loader2 size={13} className="animate-spin" />} Crea RDA
+      {/* Lista */}
+      <div style={S.card}>
+        <div style={S.hdr}>
+          <span style={S.hl}>Richieste di Acquisto</span>
+          <div style={{ display:\'flex\', gap:8, alignItems:\'center\' }}>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cerca..." style={{ ...S.inp, width:180 }} />
+            <select value={filtroStato} onChange={e=>setFiltroStato(e.target.value)} style={{ ...S.inp, width:120 }}>
+              <option value="tutti">Tutti gli stati</option>
+              {STATI.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <button className="btn-primary" style={{ fontSize:12, padding:\'8px 14px\', whiteSpace:\'nowrap\' as const }}
+              onClick={() => { setEditRda({ tipo:\'MAT\', stato:\'bozza\', qta_stimata:1, um:\'nr\' }); setForm(true) }}>
+              + Nuova RDA
             </button>
           </div>
         </div>
+
+        {loading ? (
+          <div style={{ padding:40, textAlign:\'center\' }}><span className="spinner" /></div>
+        ) : rdaFiltrate.length === 0 ? (
+          <div style={{ padding:40, textAlign:\'center\', color:\'var(--t3)\', fontSize:13 }}>Nessuna RDA trovata</div>
+        ) : (
+          <div style={{ overflowX:\'auto\' }}>
+            <table style={{ width:\'100%\', borderCollapse:\'collapse\' }}>
+              <thead>
+                <tr>
+                  {[\'Codice\',\'Tipo\',\'Oggetto\',\'Data necessità\',\'Fornitore sugg.\',\'Stato\',\'Azioni\'].map(h => (
+                    <th key={h} style={S.th}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rdaFiltrate.map(r => (
+                  <tr key={r.id} style={{ transition:\'background .1s\' }}
+                    onMouseEnter={e=>(e.currentTarget.style.background=\'var(--accent-light)\')}
+                    onMouseLeave={e=>(e.currentTarget.style.background=\'transparent\')}>
+                    <td style={{ ...S.td, fontFamily:\'monospace\', fontSize:11, color:\'var(--accent)\' }}>{r.codice}</td>
+                    <td style={S.td}><span style={S.badge(\'#3b82f6\')}>{r.tipo}</span></td>
+                    <td style={{ ...S.td, maxWidth:300, overflow:\'hidden\', textOverflow:\'ellipsis\', whiteSpace:\'nowrap\' as const }}>{r.oggetto}</td>
+                    <td style={{ ...S.td, fontSize:11 }}>{r.data_necessita || \'—\'}</td>
+                    <td style={{ ...S.td, fontSize:11 }}>{r.fornitore_sugg || \'—\'}</td>
+                    <td style={S.td}>
+                      <select value={r.stato}
+                        onChange={e => cambiaStato(r, e.target.value)}
+                        style={{ padding:\'3px 6px\', borderRadius:6, border:`1px solid ${STATO_COLOR[r.stato] || \'#ccc\'}44`, background:(STATO_COLOR[r.stato]||\'#ccc\')+\'22\', color:STATO_COLOR[r.stato]||\'#666\', fontSize:11, fontWeight:700, cursor:\'pointer\' }}>
+                        {STATI.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </td>
+                    <td style={S.td}>
+                      <div style={{ display:\'flex\', gap:6 }}>
+                        <button style={{ ...S.btn(\'#3b82f6\'), padding:\'4px 10px\', fontSize:11 }}
+                          onClick={() => { setEditRda(r); setFSearch(r.fornitore_sugg||\'\'); setForm(true) }}>✎</button>
+                        {r.stato === \'bozza\' && (
+                          <button style={{ ...S.btn(\'#ef4444\'), padding:\'4px 10px\', fontSize:11 }}
+                            onClick={() => elimina(r)}>✕</button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Modal form */}
+      {form && editRda && (
+        <div className="modal-overlay" onClick={e => { if(e.target===e.currentTarget){setForm(false);setEditRda(null)} }}>
+          <div className="modal-box" style={{ maxWidth:560, width:\'90%\' }}>
+            <div style={{ display:\'flex\', justifyContent:\'space-between\', marginBottom:20 }}>
+              <h3 style={{ fontSize:14, fontWeight:700, color:\'var(--t1)\' }}>{editRda.id ? \'Modifica RDA\' : \'Nuova Richiesta di Acquisto\'}</h3>
+              <button onClick={() => { setForm(false); setEditRda(null) }} style={{ background:\'none\', border:\'none\', fontSize:18, cursor:\'pointer\', color:\'var(--t3)\' }}>✕</button>
+            </div>
+            <div style={{ display:\'flex\', flexDirection:\'column\', gap:14 }}>
+              <div>
+                <label style={S.lbl}>Oggetto *</label>
+                <input style={S.inp} value={editRda.oggetto||\'\'} onChange={e=>setEditRda({...editRda, oggetto:e.target.value})} placeholder="Descrivi la richiesta..." />
+              </div>
+              <div style={S.row}>
+                <div>
+                  <label style={S.lbl}>Tipo *</label>
+                  <select style={S.inp} value={editRda.tipo||\'MAT\'} onChange={e=>setEditRda({...editRda, tipo:e.target.value})}>
+                    {TIPI.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={S.lbl}>Stato</label>
+                  <select style={S.inp} value={editRda.stato||\'bozza\'} onChange={e=>setEditRda({...editRda, stato:e.target.value})}>
+                    {STATI.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={S.row}>
+                <div>
+                  <label style={S.lbl}>Quantità stimata</label>
+                  <input type="number" style={S.inp} value={editRda.qta_stimata||1} onChange={e=>setEditRda({...editRda, qta_stimata:parseFloat(e.target.value)})} />
+                </div>
+                <div>
+                  <label style={S.lbl}>UM</label>
+                  <input style={S.inp} value={editRda.um||\'nr\'} onChange={e=>setEditRda({...editRda, um:e.target.value})} placeholder="nr, kg, mc..." />
+                </div>
+              </div>
+              <div>
+                <label style={S.lbl}>Data necessità</label>
+                <input type="date" style={S.inp} value={editRda.data_necessita||\'\'} onChange={e=>setEditRda({...editRda, data_necessita:e.target.value})} />
+              </div>
+              <div style={{ position:\'relative\' }}>
+                <label style={S.lbl}>Fornitore suggerito</label>
+                <input style={S.inp} value={fSearch} onChange={e=>{setFSearch(e.target.value); setEditRda({...editRda, fornitore_sugg:e.target.value})}} placeholder="Cerca per nome o ragione sociale..." />
+                {fResults.length > 0 && (
+                  <div style={{ position:\'absolute\', zIndex:100, width:\'100%\', background:\'var(--panel)\', border:\'1px solid var(--border)\', borderRadius:8, boxShadow:\'var(--shadow-md)\', maxHeight:200, overflowY:\'auto\' as const }}>
+                    {fResults.map(f => (
+                      <div key={f.id} style={{ padding:\'8px 12px\', cursor:\'pointer\', fontSize:12, borderBottom:\'1px solid var(--border)\' }}
+                        onMouseEnter={e=>(e.currentTarget.style.background=\'var(--accent-light)\')}
+                        onMouseLeave={e=>(e.currentTarget.style.background=\'\')}
+                        onClick={() => { setEditRda({...editRda, fornitore_sugg:fLabel(f)}); setFSearch(fLabel(f)); setFResults([]) }}>
+                        <span style={{ fontWeight:600 }}>{fLabel(f)}</span>
+                        {f.categoria_soa && <span style={{ fontSize:10, color:\'var(--t3)\', marginLeft:8 }}>SOA: {f.categoria_soa}</span>}
+                        {f.specializzazione && <span style={{ fontSize:10, color:\'var(--t3)\', marginLeft:8 }}>{f.specializzazione}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label style={S.lbl}>Note</label>
+                <textarea style={{ ...S.inp, resize:\'vertical\' as const, minHeight:60 }} value={editRda.note||\'\'} onChange={e=>setEditRda({...editRda, note:e.target.value})} />
+              </div>
+              <div style={{ display:\'flex\', gap:8, justifyContent:\'flex-end\', marginTop:8 }}>
+                <button style={S.btn(\'#6b7280\')} onClick={() => { setForm(false); setEditRda(null) }}>Annulla</button>
+                <button style={S.btn(\'var(--accent)\')} onClick={salva} disabled={saving}>{saving ? \'...\' : \'Salva\'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
-      {/* Lista RDA */}
-      {loading
-        ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 120, gap: 8, color: '#9ca3af' }}><Loader2 size={16} className="animate-spin" /> Caricamento...</div>
-        : rda.length === 0
-        ? <div style={{ border: '2px dashed #e5e7eb', borderRadius: 12, padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>Nessuna RDA — crea la prima richiesta di acquisto o affidamento</div>
-        : <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {rda.map(r => {
-              const si = STATI_RDA.find(s => s.v === r.stato) || STATI_RDA[0]
-              const pa = PRIORITA.find(p => p.v === r.priorita)
-              const isExp = expanded === r.id
-              return (
-                <div key={r.id} style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
-                  <div onClick={() => setExpanded(isExp ? null : r.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', cursor: 'pointer', background: isExp ? '#f9fafb' : '#fff' }}>
-                    {isExp ? <ChevronDown size={14} style={{ color: '#9ca3af', flexShrink: 0 }} /> : <ChevronRight size={14} style={{ color: '#9ca3af', flexShrink: 0 }} />}
-                    <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#9ca3af', width: 120, flexShrink: 0 }}>{r.numero}</span>
-                    <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 6, background: '#f3f4f6', color: '#374151', flexShrink: 0 }}>{r.tipo}</span>
-                    <span style={{ flex: 1, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.oggetto}</span>
-                    {pa && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 6, border: '1px solid ' + pa.c, color: pa.c, flexShrink: 0 }}>{r.priorita}</span>}
-                    {r.importo_stimato && <span style={{ fontSize: 12, fontWeight: 500, flexShrink: 0 }}>EUR {fmt(r.importo_stimato)}</span>}
-                    <span style={{ fontSize: 11, padding: '2px 10px', borderRadius: 12, fontWeight: 500, background: si.bg, color: si.c, flexShrink: 0 }}>{r.stato}</span>
-                  </div>
-                  {isExp && (
-                    <div style={{ borderTop: '1px solid #f3f4f6', background: '#fafafa', padding: 14 }}>
-                      {r.note && <p style={{ fontSize: 12, color: '#6b7280', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '8px 10px', margin: '0 0 12px' }}><strong>Note cantiere:</strong> {r.note}</p>}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 12, fontSize: 12 }}>
-                        <div><p style={{ fontSize: 10, color: '#9ca3af', margin: '0 0 2px' }}>Data necessita</p><p style={{ margin: 0 }}>{r.data_necessita || '—'}</p></div>
-                        <div><p style={{ fontSize: 10, color: '#9ca3af', margin: '0 0 2px' }}>Creata il</p><p style={{ margin: 0 }}>{new Date(r.created_at).toLocaleDateString('it-IT')}</p></div>
-                        <div><p style={{ fontSize: 10, color: '#9ca3af', margin: '0 0 2px' }}>Tipo</p><p style={{ margin: 0 }}>{r.tipo}</p></div>
-                      </div>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                        <span style={{ fontSize: 11, color: '#6b7280' }}>Azioni:</span>
-                        {r.stato === 'BOZZA' && <button onClick={() => cambiaStato(r.id, 'IN_APPROVAZIONE')} style={{ fontSize: 11, padding: '4px 10px', border: '1px solid #fde68a', borderRadius: 6, background: '#fffbeb', color: '#d97706', cursor: 'pointer' }}>Invia per approvazione</button>}
-                        {r.stato === 'IN_APPROVAZIONE' && <>
-                          <button onClick={() => cambiaStato(r.id, 'APPROVATA')} style={{ fontSize: 11, padding: '4px 10px', border: '1px solid #a7f3d0', borderRadius: 6, background: '#f0fdf4', color: '#059669', cursor: 'pointer' }}>Approva</button>
-                          <button onClick={() => cambiaStato(r.id, 'RIFIUTATA')} style={{ fontSize: 11, padding: '4px 10px', border: '1px solid #fca5a5', borderRadius: 6, background: '#fef2f2', color: '#dc2626', cursor: 'pointer' }}>Rifiuta</button>
-                        </>}
-                        {r.stato === 'APPROVATA' && (
-                          <button onClick={() => creaRDO(r)} style={{ fontSize: 12, padding: '6px 14px', border: 'none', borderRadius: 8, background: '#2563eb', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500 }}>
-                            <Send size={13} /> Crea RDO e invia a fornitori
-                          </button>
-                        )}
-                        {r.stato === 'EVASA' && <span style={{ fontSize: 11, color: '#059669', fontWeight: 500 }}>RDA evasa — ODA emesso</span>}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-      }
+      {toast && (
+        <div style={{ position:\'fixed\', bottom:20, right:20, background:\'#14532d\', color:\'#fff\', padding:\'10px 18px\', borderRadius:10, fontSize:12, fontWeight:700, zIndex:1000, boxShadow:\'var(--shadow-lg)\' }}>
+          {toast}
+        </div>
+      )}
     </div>
   )
 }
