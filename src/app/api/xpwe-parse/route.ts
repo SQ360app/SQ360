@@ -1,201 +1,294 @@
 import { NextRequest, NextResponse } from 'next/server'
-import AdmZip from 'adm-zip'
+import { createClient } from '@supabase/supabase-js'
 
-export const runtime = 'nodejs'
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
-export interface RigaMisura {
-  posizione: number
-  nota: string
-  nr_expr: string
-  a_expr: string
-  b_expr: string
-  h_expr: string
-  q_parziale: number
-  is_titolo: boolean
+// ─── Tipi XPWE ────────────────────────────────────────────────────────────────
+
+interface EPItem {
+  ID: string
+  Tariffa: string
+  DesEstesa: string
+  DesSintetica?: string
+  UnMisura: string
+  Prezzo1: string
+  IncMDO?: string   // incidenza manodopera
+  IncMAT?: string   // incidenza materiali
+  IncATTR?: string  // incidenza attrezzatura
+  IncSIC?: string   // incidenza sicurezza interna ← chiave per formula ribasso
+  TipoVoce?: string // 'L'=Lavoro, 'S'=Sicurezza, 'E'=Economia, 'N'=Nolo
 }
 
-export interface VoceParsed {
-  capitolo: string
-  codice: string
-  descrizione: string
-  um: string
-  quantita: number
-  prezzo_unitario: number
-  importo: number
-  pct_manodopera: number
-  pct_materiali: number
-  pct_noli: number
-  misure: RigaMisura[]
+interface VCItem {
+  IDEP: string
+  Quantita: string
+  IDSpCat?: string  // supercategoria
+  IDCat?: string    // categoria
+  IDSbCat?: string  // subcategoria
+  NrOrdinale?: string
 }
 
-function getTag(xml: string, tag: string): string {
-  let s = xml.indexOf('<' + tag + '>')
-  if (s < 0) s = xml.indexOf('<' + tag + ' ')
-  if (s < 0) return ''
-  const gt = xml.indexOf('>', s)
-  if (gt < 0) return ''
-  if (xml[gt - 1] === '/') return ''
-  const e = xml.indexOf('</' + tag + '>', gt)
-  if (e < 0) return ''
-  return xml.slice(gt + 1, e)
-    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/&apos;/g, "'").replace(/&quot;/g, '"').trim()
+interface Capitolo {
+  ID: string
+  DesSintetica: string
 }
 
-function getAttr(xml: string, attr: string): string {
-  const p = attr + '="'
-  const s = xml.indexOf(p)
-  if (s < 0) return ''
-  const st = s + p.length
-  const en = xml.indexOf('"', st)
-  return en >= 0 ? xml.slice(st, en).trim() : ''
+// ─── Parser XML manuale (no librerie) ─────────────────────────────────────────
+
+function extractAll(xml: string, tag: string): string[] {
+  const results: string[] = []
+  const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'gi')
+  let m
+  while ((m = re.exec(xml)) !== null) results.push(m[0])
+  return results
 }
 
-function blocks(xml: string, tag: string): string[] {
-  const res: string[] = []
-  const open = '<' + tag
-  const close = '</' + tag + '>'
-  let pos = 0
-  while (pos < xml.length) {
-    const si = xml.indexOf(open, pos)
-    if (si < 0) break
-    const ca = xml[si + open.length]
-    if (ca !== '>' && ca !== ' ' && ca !== '\n' && ca !== '\r' && ca !== '\t') { pos = si + 1; continue }
-    const fg = xml.indexOf('>', si)
-    if (fg > 0 && xml[fg - 1] === '/') { pos = fg + 1; continue }
-    let depth = 1, search = si + open.length
-    while (depth > 0 && search < xml.length) {
-      const no = xml.indexOf(open, search)
-      const nc = xml.indexOf(close, search)
-      if (nc < 0) { depth = -1; break }
-      if (no >= 0 && no < nc) {
-        const cb = xml[no + open.length]
-        if (cb === '>' || cb === ' ' || cb === '\n' || cb === '\r' || cb === '\t') { depth++; search = no + open.length }
-        else { search = no + 1 }
-      } else { depth--; search = nc + close.length }
+function attr(xml: string, name: string): string {
+  const m = new RegExp(`${name}="([^"]*)"`, 'i').exec(xml)
+  return m ? m[1].trim() : ''
+}
+
+function innerText(xml: string, tag: string): string {
+  const m = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i').exec(xml)
+  return m ? m[1].replace(/<[^>]+>/g, '').trim() : ''
+}
+
+function parseXPWE(xml: string) {
+  // ── Supercategorie
+  const superCatMap: Record<string, string> = {}
+  const scBlock = xml.match(/<SuperCategorie[\s\S]*?<\/SuperCategorie>/)
+  if (scBlock) {
+    const scItems = extractAll(scBlock[0], 'SupCat')
+    for (const sc of scItems) {
+      const id = attr(sc, 'ID') || innerText(sc, 'ID')
+      const des = attr(sc, 'DesSintetica') || innerText(sc, 'DesSintetica')
+      if (id) superCatMap[id] = des
     }
-    if (depth === 0) { res.push(xml.slice(si, search)); pos = search }
-    else { pos = si + 1 }
   }
-  return res
-}
 
-function parseNum(s: string): number {
-  if (!s || !s.trim()) return 0
-  const c = s.trim().replace(/[^\d,.-]/g, '')
-  if (!c) return 0
-  if (c.includes(',') && c.includes('.')) return parseFloat(c.replace(/\./g, '').replace(',', '.')) || 0
-  return parseFloat(c.replace(',', '.')) || 0
-}
-
-function parseRGItem(rgXml: string, pos: number): RigaMisura {
-  const nota    = getTag(rgXml, 'Descrizione') || ''
-  const nr_expr = getTag(rgXml, 'PartiUguali') || ''
-  const a_expr  = getTag(rgXml, 'Lunghezza')   || ''
-  const b_expr  = getTag(rgXml, 'Larghezza')   || ''
-  const h_expr  = getTag(rgXml, 'HPeso')       || ''
-  const q_parziale = parseNum(getTag(rgXml, 'Quantita'))
-  const is_titolo = !nr_expr && !a_expr && !b_expr && !h_expr && q_parziale === 0
-  return { posizione: pos, nota: nota.slice(0, 300), nr_expr, a_expr, b_expr, h_expr, q_parziale, is_titolo }
-}
-
-function parsePrimusXPWE(xml: string): VoceParsed[] {
-  const voci: VoceParsed[] = []
-  const superCatMap = new Map<string, string>()
-  for (const item of blocks(xml, 'DGSuperCategorieItem')) {
-    const id = getAttr(item, 'ID')
-    const nome = getTag(item, 'DesSintetica') || getTag(item, 'DesEstesa')
-    if (id && nome) superCatMap.set(id, nome)
-  }
-  const catMap = new Map<string, string>()
-  for (const item of blocks(xml, 'DGCategorieItem')) {
-    const id = getAttr(item, 'ID')
-    const nome = getTag(item, 'DesSintetica') || getTag(item, 'DesEstesa')
-    if (id && nome) catMap.set(id, nome)
-  }
-  const subCatMap = new Map<string, string>()
-  for (const item of blocks(xml, 'DGSottoCategorieItem')) {
-    const id = getAttr(item, 'ID')
-    const nome = getTag(item, 'DesSintetica') || getTag(item, 'DesEstesa')
-    if (id && nome) subCatMap.set(id, nome)
-  }
-  interface EPData { tariffa: string; desc: string; um: string; prezzo: number; incMDO: number; incMAT: number; incATTR: number }
-  const epMap = new Map<string, EPData>()
-  for (const item of blocks(xml, 'EPItem')) {
-    const id = getAttr(item, 'ID')
-    if (!id) continue
-    const tariffa = getTag(item, 'Tariffa')
-    const desc = getTag(item, 'DesEstesa') || getTag(item, 'DesRidotta') || getTag(item, 'Descrizione')
-    const um = getTag(item, 'UnMisura') || getTag(item, 'UnMis') || 'nr'
-    const prezzo = parseNum(getTag(item, 'Prezzo1') || getTag(item, 'Prezzo'))
-    const incMDO = parseNum(getTag(item, 'IncMDO'))
-    const incMAT = parseNum(getTag(item, 'IncMAT'))
-    const incATTR = parseNum(getTag(item, 'IncATTR'))
-    if (desc || tariffa) epMap.set(id, { tariffa, desc: desc || tariffa, um, prezzo, incMDO, incMAT, incATTR })
-  }
-  if (epMap.size === 0) return []
-  for (const item of blocks(xml, 'VCItem')) {
-    const idEP = getTag(item, 'IDEP')
-    const qta = parseNum(getTag(item, 'Quantita'))
-    const idSpCat = getTag(item, 'IDSpCat')
-    const idCat = getTag(item, 'IDCat')
-    const idSbCat = getTag(item, 'IDSbCat')
-    const ep = epMap.get(idEP)
-    if (!ep || !ep.desc) continue
-    const parts: string[] = []
-    if (idSpCat && idSpCat !== '0') { const n = superCatMap.get(idSpCat); if (n) parts.push(n) }
-    if (idCat && idCat !== '0') { const n = catMap.get(idCat); if (n) parts.push(n) }
-    if (idSbCat && idSbCat !== '0') { const n = subCatMap.get(idSbCat); if (n) parts.push(n) }
-    const capitolo = parts.join(' > ') || 'Importato'
-    const misure: RigaMisura[] = []
-    const misureSection = getTag(item, 'PweVCMisure')
-    if (misureSection) {
-      blocks(misureSection, 'RGItem').forEach((rg, idx) => { misure.push(parseRGItem(rg, idx)) })
+  // ── Categorie
+  const catMap: Record<string, string> = {}
+  const catBlock = xml.match(/<Categorie[\s\S]*?<\/Categorie>/)
+  if (catBlock) {
+    const catItems = extractAll(catBlock[0], 'Cat')
+    for (const c of catItems) {
+      const id = attr(c, 'ID') || innerText(c, 'ID')
+      const des = attr(c, 'DesSintetica') || innerText(c, 'DesSintetica')
+      if (id) catMap[id] = des
     }
-    voci.push({
-      capitolo: capitolo.slice(0, 500),
-      codice: (ep.tariffa || '').slice(0, 100),
-      descrizione: ep.desc.slice(0, 5000),
-      um: ep.um.slice(0, 20),
-      quantita: qta,
-      prezzo_unitario: ep.prezzo,
-      importo: Math.round(qta * ep.prezzo * 100) / 100,
-      pct_manodopera: ep.incMDO,
-      pct_materiali: ep.incMAT,
-      pct_noli: ep.incATTR,
-      misure
-    })
   }
-  console.log('xpwe OK: voci=' + voci.length + ' misure=' + voci.reduce((s, v) => s + v.misure.length, 0))
-  return voci
+
+  // ── Elenco Prezzi
+  const epMap: Record<string, EPItem> = {}
+  const epBlock = xml.match(/<PweElencoPrezzi[\s\S]*?<\/PweElencoPrezzi>/)
+  if (epBlock) {
+    const epItems = extractAll(epBlock[0], 'EPItem')
+    for (const ep of epItems) {
+      const item: EPItem = {
+        ID:          attr(ep, 'ID')          || innerText(ep, 'ID'),
+        Tariffa:     attr(ep, 'Tariffa')     || innerText(ep, 'Tariffa'),
+        DesEstesa:   attr(ep, 'DesEstesa')   || innerText(ep, 'DesEstesa'),
+        DesSintetica:attr(ep, 'DesSintetica')|| innerText(ep, 'DesSintetica'),
+        UnMisura:    attr(ep, 'UnMisura')    || innerText(ep, 'UnMisura'),
+        Prezzo1:     attr(ep, 'Prezzo1')     || innerText(ep, 'Prezzo1'),
+        IncMDO:      attr(ep, 'IncMDO')      || innerText(ep, 'IncMDO'),
+        IncMAT:      attr(ep, 'IncMAT')      || innerText(ep, 'IncMAT'),
+        IncATTR:     attr(ep, 'IncATTR')     || innerText(ep, 'IncATTR'),
+        IncSIC:      attr(ep, 'IncSIC')      || innerText(ep, 'IncSIC'),
+        TipoVoce:    attr(ep, 'TipoVoce')    || innerText(ep, 'TipoVoce'),
+      }
+      if (item.ID) epMap[item.ID] = item
+    }
+  }
+
+  // ── Voci Computo
+  const voci: VCItem[] = []
+  const vcBlock = xml.match(/<PweVociComputo[\s\S]*?<\/PweVociComputo>/)
+  if (vcBlock) {
+    const vcItems = extractAll(vcBlock[0], 'VCItem')
+    for (const vc of vcItems) {
+      voci.push({
+        IDEP:      attr(vc, 'IDEP')      || innerText(vc, 'IDEP'),
+        Quantita:  attr(vc, 'Quantita')  || innerText(vc, 'Quantita'),
+        IDSpCat:   attr(vc, 'IDSpCat')   || innerText(vc, 'IDSpCat'),
+        IDCat:     attr(vc, 'IDCat')     || innerText(vc, 'IDCat'),
+        IDSbCat:   attr(vc, 'IDSbCat')   || innerText(vc, 'IDSbCat'),
+        NrOrdinale:attr(vc, 'NrOrdinale')|| innerText(vc, 'NrOrdinale'),
+      })
+    }
+  }
+
+  return { superCatMap, catMap, epMap, voci }
 }
+
+// ─── Determina sezione dalla TipoVoce ─────────────────────────────────────────
+
+function getSezione(tipoVoce?: string): string {
+  if (!tipoVoce) return 'LAVORI'
+  const t = tipoVoce.toUpperCase()
+  if (t === 'S') return 'SICUREZZA'
+  if (t === 'E') return 'ECONOMIA'
+  return 'LAVORI'
+}
+
+// ─── Handler ──────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData()
-    const file = formData.get('file') as File | null
-    if (!file) return NextResponse.json({ ok: false, errore: 'Nessun file ricevuto' }, { status: 400 })
-    const buffer = Buffer.from(await file.arrayBuffer())
-    const allContents: string[] = []
-    try {
-      const zip = new AdmZip(buffer)
-      const entries = zip.getEntries().filter(e => !e.isDirectory && e.getData().length > 50).sort((a, b) => b.getData().length - a.getData().length)
-      for (const entry of entries.slice(0, 5)) {
-        try { allContents.push(entry.getData().toString('utf8')) } catch { }
-      }
-    } catch {
-      try { allContents.push(buffer.toString('utf8')) } catch { }
+    const file = formData.get('file') as File
+    const commessaId = formData.get('commessa_id') as string
+
+    if (!file || !commessaId) {
+      return NextResponse.json({ error: 'file e commessa_id obbligatori' }, { status: 400 })
     }
-    const contents = allContents.filter(c => c && c.trim().length > 50)
-    if (contents.length === 0) return NextResponse.json({ ok: false, errore: 'File vuoto o illeggibile' })
-    let voci: VoceParsed[] = []
-    for (const content of contents) {
-      const v = parsePrimusXPWE(content)
-      if (v.length > voci.length) voci = v
+
+    const xml = await file.text()
+
+    if (!xml.includes('PweDocumento') && !xml.includes('PweVociComputo')) {
+      return NextResponse.json({ error: 'File non riconosciuto come XPWE/PWE Primus' }, { status: 400 })
     }
-    if (voci.length === 0) return NextResponse.json({ ok: false, errore: 'Formato non riconosciuto' })
-    return NextResponse.json({ ok: true, voci, fonte: 'parser', totale: voci.length, totale_misure: voci.reduce((s, v) => s + v.misure.length, 0) })
-  } catch (err) {
-    return NextResponse.json({ ok: false, errore: 'Errore: ' + String(err) }, { status: 500 })
+
+    const { superCatMap, catMap, epMap, voci } = parseXPWE(xml)
+
+    // 1. Crea o aggiorna il computo_metrico
+    const { data: computo, error: computoErr } = await supabase
+      .from('computo_metrico')
+      .upsert({
+        commessa_id: commessaId,
+        fonte: 'XPWE',
+        data_import: new Date().toISOString().split('T')[0],
+        note: `Importato da ${file.name}`,
+      }, { onConflict: 'commessa_id' })
+      .select()
+      .single()
+
+    if (computoErr) throw computoErr
+
+    // 2. Cancella le tariffe esistenti di questa commessa
+    await supabase.from('tariffe').delete().eq('commessa_id', commessaId)
+
+    // 3. Cancella le voci computo esistenti
+    await supabase.from('voci_computo').delete().eq('computo_id', computo.id)
+
+    // 4. Insert tariffe (elenco prezzi)
+    const tariffeInsert = Object.values(epMap).map(ep => ({
+      commessa_id:                commessaId,
+      codice_tariffa:             ep.Tariffa || ep.ID,
+      descrizione:                ep.DesEstesa || ep.DesSintetica || '(senza descrizione)',
+      unita_misura:               ep.UnMisura || 'a corpo',
+      prezzo_unitario:            parseFloat(ep.Prezzo1?.replace(',', '.') || '0') || 0,
+      prezzo_unitario_lista:      parseFloat(ep.Prezzo1?.replace(',', '.') || '0') || 0,
+      // Incidenze per formula ribasso
+      incidenza_sicurezza_interna: parseFloat(ep.IncSIC?.replace(',', '.') || '0') / 100 || 0,
+      pct_manodopera:             parseFloat(ep.IncMDO?.replace(',', '.') || '0') / 100 || 0,
+      pct_materiali:              parseFloat(ep.IncMAT?.replace(',', '.') || '0') / 100 || 0,
+      // Flag
+      voce_sicurezza:             getSezione(ep.TipoVoce) === 'SICUREZZA',
+      voce_sicurezza_speciale:    getSezione(ep.TipoVoce) === 'SICUREZZA',
+      sezione:                    getSezione(ep.TipoVoce),
+      ribassabile:                getSezione(ep.TipoVoce) !== 'SICUREZZA',
+      fonte:                      'XPWE',
+      // ID interno per join con voci
+      _xpwe_id:                   ep.ID,
+    }))
+
+    // Insert in batch da 100
+    const BATCH = 100
+    const tariffeInserted: { id: string; _xpwe_id: string }[] = []
+    for (let i = 0; i < tariffeInsert.length; i += BATCH) {
+      const { data, error } = await supabase
+        .from('tariffe')
+        .insert(tariffeInsert.slice(i, i + BATCH))
+        .select('id, codice_tariffa')
+      if (error) throw error
+      // Non possiamo fare join su _xpwe_id che non esiste nel DB
+      // Creiamo una mappa codice_tariffa → id
+    }
+
+    // Rileggo le tariffe inserite per fare join
+    const { data: tariffeDB } = await supabase
+      .from('tariffe')
+      .select('id, codice_tariffa')
+      .eq('commessa_id', commessaId)
+
+    const tariffeMap: Record<string, string> = {}
+    for (const t of (tariffeDB || [])) {
+      // Mappa codice_tariffa → uuid (per la join con IDEP delle voci)
+      // IDEP in VCItem corrisponde all'ID interno Primus, non alla tariffa
+      // Dobbiamo usare l'ordine di inserimento
+    }
+
+    // Mappa XPWE ID → tariffa DB id
+    const xpweIdToDbId: Record<string, string> = {}
+    const { data: tariffeAll } = await supabase
+      .from('tariffe')
+      .select('id, codice_tariffa')
+      .eq('commessa_id', commessaId)
+
+    // Ricostruiamo la mappa basandoci su codice_tariffa = Tariffa o ID XPWE
+    for (const ep of Object.values(epMap)) {
+      const codice = ep.Tariffa || ep.ID
+      const found = tariffeAll?.find(t => t.codice_tariffa === codice)
+      if (found) xpweIdToDbId[ep.ID] = found.id
+    }
+
+    // 5. Insert voci computo
+    const vociInsert = voci
+      .filter(vc => vc.IDEP && xpweIdToDbId[vc.IDEP])
+      .map(vc => {
+        const ep = epMap[vc.IDEP]
+        const prezzoUnit = parseFloat(ep?.Prezzo1?.replace(',', '.') || '0') || 0
+        const quantita = parseFloat(vc.Quantita?.replace(',', '.') || '0') || 0
+        const supCat = vc.IDSpCat ? (superCatMap[vc.IDSpCat] || vc.IDSpCat) : null
+        const cat = vc.IDCat ? (catMap[vc.IDCat] || vc.IDCat) : null
+
+        return {
+          computo_id:      computo.id,
+          codice:          ep?.Tariffa || vc.IDEP,
+          codice_prezzario:ep?.Tariffa || vc.IDEP,
+          descrizione:     ep?.DesEstesa || ep?.DesSintetica || '(senza descrizione)',
+          um:              ep?.UnMisura || 'a corpo',
+          quantita,
+          prezzo_unitario: prezzoUnit,
+          importo:         quantita * prezzoUnit,
+          capitolo:        supCat || cat || 'Generale',
+          categoria:       (cat || '').slice(0, 30),
+          note:            `Cat: ${cat || '—'} | SpCat: ${supCat || '—'}`,
+        }
+      })
+
+    for (let i = 0; i < vociInsert.length; i += BATCH) {
+      const { error } = await supabase
+        .from('voci_computo')
+        .insert(vociInsert.slice(i, i + BATCH))
+      if (error) throw error
+    }
+
+    // 6. Aggiorna importo_contrattuale sulla commessa
+    const importoTotale = vociInsert.reduce((acc, v) => acc + (v.importo || 0), 0)
+    await supabase
+      .from('commesse')
+      .update({ importo_contrattuale: importoTotale })
+      .eq('id', commessaId)
+
+    return NextResponse.json({
+      ok: true,
+      tariffe: tariffeInsert.length,
+      voci: vociInsert.length,
+      importo_totale: importoTotale,
+      supercategorie: Object.keys(superCatMap).length,
+      categorie: Object.keys(catMap).length,
+    })
+
+  } catch (e) {
+    console.error('XPWE parse error:', e)
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Errore sconosciuto' },
+      { status: 500 }
+    )
   }
 }
