@@ -740,9 +740,8 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
             <div className="cmp-ctxh">Voce EP</div>
             <div className="cmp-ctxi" style={{ color: '#7c3aed', fontWeight: 600 }} onClick={() => {
               const v = voci.find(x => x.id === ctx.id)
-              const el = document.getElementById(`wbs_${ctx.id}`)
-              if (el) { const r = el.getBoundingClientRect(); setWbsPicker({ voceId: ctx.id, x: r.left, y: r.bottom + 4 }) }
-              setCtx(null)
+             setWbsPicker({ voceId: ctx.id, x: ctx.x, y: Math.min(ctx.y, window.innerHeight - 360) })
+setCtx(null)
             }}>📐 Assegna WBS</div>
             <div className="cmp-ctxi acc" onClick={() => {
               setMultiSel(new Set([ctx.id])); setCtx(null)
