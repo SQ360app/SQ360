@@ -750,7 +750,11 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
           <div className="cmp-ctx" style={{ left: ctx.x, top: ctx.y }} onClick={e => e.stopPropagation()}>
             <div className="cmp-ctxh">Voce EP</div>
             <div className="cmp-ctxi" style={{ color: '#7c3aed', fontWeight: 600 }} onClick={() => {
-              setWbsPicker({ voceId: ctx.id, x: ctx.x, y: Math.min(ctx.y, window.innerHeight - 360) })
+              if (multiSel.size > 1 && multiSel.has(ctx.id)) {
+                setBulkWbsPicker(true)
+              } else {
+                setWbsPicker({ voceId: ctx.id, x: ctx.x, y: Math.min(ctx.y, window.innerHeight - 360) })
+              }
               setCtx(null)
             }}>📐 Assegna WBS</div>
             <div className="cmp-ctxi acc" onClick={() => {
