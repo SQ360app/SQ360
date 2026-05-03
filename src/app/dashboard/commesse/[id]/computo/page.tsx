@@ -333,7 +333,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
 
   // Chiudi context menu e wbs picker al click esterno
   useEffect(() => {
-    const h = () => { setCtx(null); setWbsPicker(null) }
+    const h = () => { setCtx(null) }
     document.addEventListener('click', h)
     return () => document.removeEventListener('click', h)
   }, [])
@@ -726,8 +726,10 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
         </div>
 
         {/* WBS PICKER POPUP */}
-        {wbsPicker && (
-          <WbsPicker voceId={wbsPicker.voceId} x={wbsPicker.x} y={wbsPicker.y}
+       {wbsPicker && (
+  <>
+    <div style={{ position:'fixed', inset:0, zIndex:199 }} onClick={() => setWbsPicker(null)} />
+    <WbsPicker voceId={wbsPicker.voceId}
             currentWbs={voci.find(v => v.id === wbsPicker.voceId)?.wbs_id} />
         )}
 
