@@ -124,7 +124,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
 
   const fLabel = (f: Fornitore) => f.ragione_sociale || `${f.nome || ''} ${f.cognome || ''}`.trim() || '—'
 
-  const S = {
+  const Css = {
     page: { minHeight:'100%', background:'var(--bg)', padding:16, display:'flex', flexDirection:'column' as const, gap:12 },
     card: { background:'var(--panel)', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden', boxShadow:'var(--shadow-sm)' } as React.CSSProperties,
     hdr:  { display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 16px', borderBottom:'1px solid var(--border)', background:'var(--bg)' },
@@ -139,12 +139,12 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
   }
 
   return (
-    <div style={S.page} className="fade-in">
+    <div style={Css.page} className="fade-in">
 
       {/* KPI bar */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:8 }}>
         {kpi.map(k => (
-          <div key={k.tipo} style={{ ...S.card, padding:'12px 16px', cursor:'pointer', outline: filtroTipo===k.tipo ? '2px solid var(--accent)' : 'none' }}
+          <div key={k.tipo} style={{ ...Css.card, padding:'12px 16px', cursor:'pointer', outline: filtroTipo===k.tipo ? '2px solid var(--accent)' : 'none' }}
             onClick={() => setFiltroTipo(filtroTipo===k.tipo ? 'tutti' : k.tipo)}>
             <p style={{ fontSize:11, fontWeight:700, color:'var(--t3)', textTransform:'uppercase' as const }}>{k.tipo}</p>
             <p style={{ fontSize:20, fontWeight:800, color:'var(--t1)', marginTop:4 }}>{k.n}</p>
@@ -154,12 +154,12 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
       </div>
 
       {/* Lista */}
-      <div style={S.card}>
-        <div style={S.hdr}>
-          <span style={S.hl}>Richieste di Acquisto</span>
+      <div style={Css.card}>
+        <div style={Css.hdr}>
+          <span style={Css.hl}>Richieste di Acquisto</span>
           <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cerca..." style={{ ...S.inp, width:180 }} />
-            <select value={filtroStato} onChange={e=>setFiltroStato(e.target.value)} style={{ ...S.inp, width:120 }}>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cerca..." style={{ ...Css.inp, width:180 }} />
+            <select value={filtroStato} onChange={e=>setFiltroStato(e.target.value)} style={{ ...Css.inp, width:120 }}>
               <option value="tutti">Tutti gli stati</option>
               {STATI.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
@@ -180,7 +180,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
               <thead>
                 <tr>
                   {['Codice','Tipo','Oggetto','Data necessità','Fornitore sugg.','Stato','Azioni'].map(h => (
-                    <th key={h} style={S.th}>{h}</th>
+                    <th key={h} style={Css.th}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -189,24 +189,24 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
                   <tr key={r.id} style={{ transition:'background .1s' }}
                     onMouseEnter={e=>(e.currentTarget.style.background='var(--accent-light)')}
                     onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
-                    <td style={{ ...S.td, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>{r.codice}</td>
-                    <td style={S.td}><span style={S.badge('#3b82f6')}>{r.tipo}</span></td>
-                    <td style={{ ...S.td, maxWidth:300, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{r.oggetto}</td>
-                    <td style={{ ...S.td, fontSize:11 }}>{r.data_necessita || '—'}</td>
-                    <td style={{ ...S.td, fontSize:11 }}>{r.fornitore_sugg || '—'}</td>
-                    <td style={S.td}>
+                    <td style={{ ...Css.td, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>{r.codice}</td>
+                    <td style={Css.td}><span style={S.badge('#3b82f6')}>{r.tipo}</span></td>
+                    <td style={{ ...Css.td, maxWidth:300, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{r.oggetto}</td>
+                    <td style={{ ...Css.td, fontSize:11 }}>{r.data_necessita || '—'}</td>
+                    <td style={{ ...Css.td, fontSize:11 }}>{r.fornitore_sugg || '—'}</td>
+                    <td style={Css.td}>
                       <select value={r.stato}
                         onChange={e => cambiaStato(r, e.target.value)}
                         style={{ padding:'3px 6px', borderRadius:6, border:`1px solid ${STATO_COLOR[r.stato] || '#ccc'}44`, background:(STATO_COLOR[r.stato]||'#ccc')+'22', color:STATO_COLOR[r.stato]||'#666', fontSize:11, fontWeight:700, cursor:'pointer' }}>
                         {STATI.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </td>
-                    <td style={S.td}>
+                    <td style={Css.td}>
                       <div style={{ display:'flex', gap:6 }}>
-                        <button style={{ ...S.btn('#3b82f6'), padding:'4px 10px', fontSize:11 }}
+                        <button style={{ ...Css.btn('#3b82f6'), padding:'4px 10px', fontSize:11 }}
                           onClick={() => { setEditRda(r); setFSearch(r.fornitore_sugg||''); setForm(true) }}>✎</button>
                         {r.stato === 'bozza' && (
-                          <button style={{ ...S.btn('#ef4444'), padding:'4px 10px', fontSize:11 }}
+                          <button style={{ ...Css.btn('#ef4444'), padding:'4px 10px', fontSize:11 }}
                             onClick={() => elimina(r)}>✕</button>
                         )}
                       </div>
@@ -229,40 +229,40 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
               <div>
-                <label style={S.lbl}>Oggetto *</label>
-                <input style={S.inp} value={editRda.oggetto||''} onChange={e=>setEditRda({...editRda, oggetto:e.target.value})} placeholder="Descrivi la richiesta..." />
+                <label style={Css.lbl}>Oggetto *</label>
+                <input style={Css.inp} value={editRda.oggetto||''} onChange={e=>setEditRda({...editRda, oggetto:e.target.value})} placeholder="Descrivi la richiesta..." />
               </div>
-              <div style={S.row}>
+              <div style={Css.row}>
                 <div>
-                  <label style={S.lbl}>Tipo *</label>
-                  <select style={S.inp} value={editRda.tipo||'MAT'} onChange={e=>setEditRda({...editRda, tipo:e.target.value})}>
+                  <label style={Css.lbl}>Tipo *</label>
+                  <select style={Css.inp} value={editRda.tipo||'MAT'} onChange={e=>setEditRda({...editRda, tipo:e.target.value})}>
                     {TIPI.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={S.lbl}>Stato</label>
-                  <select style={S.inp} value={editRda.stato||'bozza'} onChange={e=>setEditRda({...editRda, stato:e.target.value})}>
+                  <label style={Css.lbl}>Stato</label>
+                  <select style={Css.inp} value={editRda.stato||'bozza'} onChange={e=>setEditRda({...editRda, stato:e.target.value})}>
                     {STATI.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
               </div>
-              <div style={S.row}>
+              <div style={Css.row}>
                 <div>
-                  <label style={S.lbl}>Quantità stimata</label>
-                  <input type="number" style={S.inp} value={editRda.qta_stimata||1} onChange={e=>setEditRda({...editRda, qta_stimata:parseFloat(e.target.value)})} />
+                  <label style={Css.lbl}>Quantità stimata</label>
+                  <input type="number" style={Css.inp} value={editRda.qta_stimata||1} onChange={e=>setEditRda({...editRda, qta_stimata:parseFloat(e.target.value)})} />
                 </div>
                 <div>
-                  <label style={S.lbl}>UM</label>
-                  <input style={S.inp} value={editRda.um||'nr'} onChange={e=>setEditRda({...editRda, um:e.target.value})} placeholder="nr, kg, mc..." />
+                  <label style={Css.lbl}>UM</label>
+                  <input style={Css.inp} value={editRda.um||'nr'} onChange={e=>setEditRda({...editRda, um:e.target.value})} placeholder="nr, kg, mc..." />
                 </div>
               </div>
               <div>
-                <label style={S.lbl}>Data necessità</label>
-                <input type="date" style={S.inp} value={editRda.data_necessita||''} onChange={e=>setEditRda({...editRda, data_necessita:e.target.value})} />
+                <label style={Css.lbl}>Data necessità</label>
+                <input type="date" style={Css.inp} value={editRda.data_necessita||''} onChange={e=>setEditRda({...editRda, data_necessita:e.target.value})} />
               </div>
               <div style={{ position:'relative' }}>
-                <label style={S.lbl}>Fornitore suggerito</label>
-                <input style={S.inp} value={fSearch} onChange={e=>{setFSearch(e.target.value); setEditRda({...editRda, fornitore_sugg:e.target.value})}} placeholder="Cerca per nome o ragione sociale..." />
+                <label style={Css.lbl}>Fornitore suggerito</label>
+                <input style={Css.inp} value={fSearch} onChange={e=>{setFSearch(e.target.value); setEditRda({...editRda, fornitore_sugg:e.target.value})}} placeholder="Cerca per nome o ragione sociale..." />
                 {fResults.length > 0 && (
                   <div style={{ position:'absolute', zIndex:100, width:'100%', background:'var(--panel)', border:'1px solid var(--border)', borderRadius:8, boxShadow:'var(--shadow-md)', maxHeight:200, overflowY:'auto' as const }}>
                     {fResults.map(f => (
@@ -279,12 +279,12 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
                 )}
               </div>
               <div>
-                <label style={S.lbl}>Note</label>
-                <textarea style={{ ...S.inp, resize:'vertical' as const, minHeight:60 }} value={editRda.note||''} onChange={e=>setEditRda({...editRda, note:e.target.value})} />
+                <label style={Css.lbl}>Note</label>
+                <textarea style={{ ...Css.inp, resize:'vertical' as const, minHeight:60 }} value={editRda.note||''} onChange={e=>setEditRda({...editRda, note:e.target.value})} />
               </div>
               <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
-                <button style={S.btn('#6b7280')} onClick={() => { setForm(false); setEditRda(null) }}>Annulla</button>
-                <button style={S.btn('var(--accent)')} onClick={salva} disabled={saving}>{saving ? '...' : 'Salva'}</button>
+                <button style={Css.btn('#6b7280')} onClick={() => { setForm(false); setEditRda(null) }}>Annulla</button>
+                <button style={Css.btn('var(--accent)')} onClick={salva} disabled={saving}>{saving ? '...' : 'Salva'}</button>
               </div>
             </div>
           </div>
