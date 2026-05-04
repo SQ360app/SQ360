@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, use } from 'react'
+import React, { useState, useEffect, useCallback, use } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -42,7 +42,7 @@ const S = {
   th:    { padding:'7px 10px', fontSize:10, fontWeight:700, color:'var(--t3)', textTransform:'uppercase' as const, background:'var(--bg)', borderBottom:'1px solid var(--border)', textAlign:'left' as const, whiteSpace:'nowrap' as const },
   td:    { padding:'9px 10px', fontSize:12, color:'var(--t2)', borderBottom:'1px solid var(--border)', verticalAlign:'top' as const },
   inp:   { width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid var(--border)', fontSize:12, outline:'none', background:'var(--panel)', color:'var(--t1)' },
-  row:   (cols: number) => ({ display:'grid', gridTemplateColumns:`repeat(${cols},1fr)`, gap:12 }),
+  row:   (cols: number) => ({ display:'grid', gridTemplateColumns:'repeat('+cols+',1fr)', gap:12 }),
   lbl:   { fontSize:11, fontWeight:600, color:'var(--t2)', marginBottom:4, display:'block' },
   btn:   (c: string) => ({ padding:'8px 16px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:700, background:c, color:'#fff' }),
   chkRow:{ display:'flex', alignItems:'center', gap:8, padding:'6px 0' },
