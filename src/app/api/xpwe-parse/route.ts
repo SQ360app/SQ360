@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
       const parsed: EPParsed = {
         xpweId,
         tariffa,
-        descrizione: desEst.slice(0, 2000),
+        descrizione: desEst,
         um: um.slice(0, 20),
         prezzo:   parseFloat(prezzoStr.replace(',', '.'))  || 0,
         incSic:   parseFloat(incSicStr.replace(',', '.'))  || 0,
