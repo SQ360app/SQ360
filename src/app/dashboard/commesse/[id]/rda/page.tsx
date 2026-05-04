@@ -193,7 +193,11 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
                     <td style={(styleObj as any).td as React.CSSProperties}><span style={(styleObj as any).badge('#3b82f6')}>{r.tipo}</span></td>
                     <td style={{ ...(styleObj as any).td, maxWidth:300, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{r.oggetto}</td>
                     <td style={{ ...(styleObj as any).td, fontSize:11 }}>{r.data_necessita || '—'}</td>
-                    <td style={{ ...(styleObj as any).td, fontSize:11 }}>{r.fornitore_sugg || '—'}</td>
+                    <td style={{ ...styleTd, fontSize:11 }}>
+  {r.fornitore_sugg
+    ? <button onClick={() => setViewFornitore(r.fornitore_sugg)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--accent)', textDecoration:'underline', fontSize:11, padding:0 }}>{r.fornitore_sugg}</button>
+    : '—'}
+</td>
                     <td style={(styleObj as any).td as React.CSSProperties}>
                       <select value={r.stato}
                         onChange={e => cambiaStato(r, e.target.value)}
