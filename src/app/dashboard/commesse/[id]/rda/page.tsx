@@ -64,7 +64,8 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
   const [fSearch, setFSearch] = useState('')
   const [fResults, setFResults] = useState<Fornitore[]>([])
   const [saving, setSaving] = useState(false)
-  const [toast, setToast] = useState('')   const [viewFornitore, setViewFornitore] = useState<string | null>(null)
+const [toast, setToast] = useState('')
+  const [viewFornitore, setViewFornitore] = useState<string | null>(null)
 {viewFornitore && (
   <div className="modal-overlay" onClick={() => setViewFornitore(null)}>
     <div className="modal-box" style={{ maxWidth:480, width:'92%' }} onClick={e => e.stopPropagation()}>
