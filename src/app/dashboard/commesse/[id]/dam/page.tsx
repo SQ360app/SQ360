@@ -34,7 +34,7 @@ interface Fornitore {
   id: string; ragione_sociale?: string; nome?: string; cognome?: string
 }
 
-const S = {
+const Css = {
   page:  { minHeight:'100%', background:'var(--bg)', padding:16, display:'flex', flexDirection:'column' as const, gap:12 },
   card:  { background:'var(--panel)', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden', boxShadow:'var(--shadow-sm)' } as React.CSSProperties,
   hdr:   { display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 16px', borderBottom:'1px solid var(--border)', background:'var(--bg)' },
@@ -147,7 +147,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
   const kpi = STATI_DAM.map(s => ({ stato: s, n: damList.filter(d => d.stato === s).length }))
 
   const DocCheck = ({ label, val, key_ }: { label: string; val: boolean; key_: keyof DAM }) => (
-    <div style={S.chkRow}>
+    <div style={Css.chkRow}>
       <input type="checkbox" checked={val} onChange={e=>setEditDam(prev=>({...prev!, [key_]:e.target.checked}))}
         style={{ width:15, height:15, accentColor:'var(--accent)', cursor:'pointer', flexShrink:0 }} />
       <span style={{ fontSize:12, color:'var(--t2)' }}>{label}</span>
@@ -155,12 +155,12 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
   )
 
   return (
-    <div style={S.page} className="fade-in">
+    <div style={Css.page} className="fade-in">
 
       {/* KPI stati */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:8 }}>
         {kpi.map(k => (
-          <div key={k.stato} style={{ ...S.card, padding:'12px 16px', cursor:'pointer', outline: filtroStato===k.stato ? '2px solid var(--accent)' : 'none' }}
+          <div key={k.stato} style={{ ...Css.card, padding:'12px 16px', cursor:'pointer', outline: filtroStato===k.stato ? '2px solid var(--accent)' : 'none' }}
             onClick={() => setFiltroStato(filtroStato===k.stato ? 'tutti' : k.stato)}>
             <div style={{ width:8, height:8, borderRadius:'50%', background:STATO_COLOR[k.stato], marginBottom:8 }} />
             <p style={{ fontSize:20, fontWeight:800, color:'var(--t1)' }}>{k.n}</p>
@@ -170,11 +170,11 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
       </div>
 
       {/* Lista DAM */}
-      <div style={S.card}>
-        <div style={S.hdr}>
-          <span style={S.hl}>Dossier Accettazione Materiali</span>
+      <div style={Css.card}>
+        <div style={Css.hdr}>
+          <span style={Css.hl}>Dossier Accettazione Materiali</span>
           <div style={{ display:'flex', gap:8 }}>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cerca materiale..." style={{ ...S.inp, width:200 }} />
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cerca materiale..." style={{ ...Css.inp, width:200 }} />
             <button className="btn-primary" style={{ fontSize:12, padding:'8px 14px', whiteSpace:'nowrap' as const }}
               onClick={() => { setEditDam({ stato:'bozza', revisione:0, quantita:1, um:'nr' }); setFSearch(''); setForm(true) }}>
               + Nuova DAM
@@ -192,7 +192,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
               <thead>
                 <tr>
                   {['Codice','Materiale','Qty / UM','Marca / Modello','Norma','Documenti','Stato',''].map(h => (
-                    <th key={h} style={S.th}>{h}</th>
+                    <th key={h} style={Css.th}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -201,20 +201,20 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
                   <tr key={d.id}
                     onMouseEnter={e=>(e.currentTarget.style.background='var(--accent-light)')}
                     onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
-                    <td style={{ ...S.td, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>
+                    <td style={{ ...Css.td, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>
                       {d.codice}<br/>
                       <span style={{ fontSize:10, color:'var(--t4)' }}>Rev.{d.revisione}</span>
                     </td>
-                    <td style={S.td}>
+                    <td style={Css.td}>
                       <p style={{ fontWeight:700, fontSize:12 }}>{d.materiale}</p>
                       {d.descrizione && <p style={{ fontSize:11, color:'var(--t3)', marginTop:2 }}>{d.descrizione.slice(0,80)}</p>}
                     </td>
-                    <td style={{ ...S.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums' as const }}>
+                    <td style={{ ...Css.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums' as const }}>
                       {fi(d.quantita)}<br/><span style={{ fontSize:10, color:'var(--t3)' }}>{d.um}</span>
                     </td>
-                    <td style={{ ...S.td, fontSize:11 }}>{d.marca_modello || '—'}</td>
-                    <td style={{ ...S.td, fontSize:11 }}>{d.norma_riferimento || '—'}</td>
-                    <td style={S.td}>
+                    <td style={{ ...Css.td, fontSize:11 }}>{d.marca_modello || '—'}</td>
+                    <td style={{ ...Css.td, fontSize:11 }}>{d.norma_riferimento || '—'}</td>
+                    <td style={Css.td}>
                       <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const }}>
                         {[
                           ['ST', d.scheda_tecnica],
@@ -231,14 +231,14 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
                         ))}
                       </div>
                     </td>
-                    <td style={S.td}>
+                    <td style={Css.td}>
                       <select value={d.stato} onChange={e=>cambiaStato(d, e.target.value)}
                         style={{ padding:'3px 6px', borderRadius:6, border:`1px solid ${STATO_COLOR[d.stato]||'#ccc'}44`, background:(STATO_COLOR[d.stato]||'#ccc')+'22', color:STATO_COLOR[d.stato]||'#666', fontSize:11, fontWeight:700, cursor:'pointer' }}>
                         {STATI_DAM.map(s => <option key={s} value={s}>{STATO_LBL[s]}</option>)}
                       </select>
                     </td>
-                    <td style={S.td}>
-                      <button style={{ ...S.btn('#3b82f6'), padding:'4px 10px', fontSize:11 }}
+                    <td style={Css.td}>
+                      <button style={{ ...Css.btn('#3b82f6'), padding:'4px 10px', fontSize:11 }}
                         onClick={() => { setEditDam(d); setFSearch(''); setForm(true) }}>✎</button>
                     </td>
                   </tr>
@@ -262,45 +262,45 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
               {/* Sezione materiale */}
               <p style={{ fontSize:11, fontWeight:700, color:'var(--t3)', textTransform:'uppercase', letterSpacing:'0.04em' }}>Materiale</p>
               <div>
-                <label style={S.lbl}>Materiale / Voce di lavorazione *</label>
-                <input style={S.inp} value={editDam.materiale||''} onChange={e=>setEditDam({...editDam, materiale:e.target.value})} placeholder="Es. Acciaio B450C, Calcestruzzo C25/30..." />
+                <label style={Css.lbl}>Materiale / Voce di lavorazione *</label>
+                <input style={Css.inp} value={editDam.materiale||''} onChange={e=>setEditDam({...editDam, materiale:e.target.value})} placeholder="Es. Acciaio B450C, Calcestruzzo C25/30..." />
               </div>
               <div>
-                <label style={S.lbl}>Descrizione estesa</label>
-                <textarea style={{ ...S.inp, resize:'vertical' as const, minHeight:60 }} value={editDam.descrizione||''} onChange={e=>setEditDam({...editDam, descrizione:e.target.value})} />
+                <label style={Css.lbl}>Descrizione estesa</label>
+                <textarea style={{ ...Css.inp, resize:'vertical' as const, minHeight:60 }} value={editDam.descrizione||''} onChange={e=>setEditDam({...editDam, descrizione:e.target.value})} />
               </div>
-              <div style={S.row(3)}>
+              <div style={Css.row(3)}>
                 <div>
-                  <label style={S.lbl}>Quantità</label>
-                  <input type="number" step="0.01" style={S.inp} value={editDam.quantita||0} onChange={e=>setEditDam({...editDam, quantita:parseFloat(e.target.value)||0})} />
+                  <label style={Css.lbl}>Quantità</label>
+                  <input type="number" step="0.01" style={Css.inp} value={editDam.quantita||0} onChange={e=>setEditDam({...editDam, quantita:parseFloat(e.target.value)||0})} />
                 </div>
                 <div>
-                  <label style={S.lbl}>UM</label>
-                  <input style={S.inp} value={editDam.um||'nr'} onChange={e=>setEditDam({...editDam, um:e.target.value})} />
+                  <label style={Css.lbl}>UM</label>
+                  <input style={Css.inp} value={editDam.um||'nr'} onChange={e=>setEditDam({...editDam, um:e.target.value})} />
                 </div>
                 <div>
-                  <label style={S.lbl}>Revisione</label>
-                  <input type="number" style={S.inp} value={editDam.revisione||0} onChange={e=>setEditDam({...editDam, revisione:parseInt(e.target.value)||0})} />
-                </div>
-              </div>
-              <div style={S.row(2)}>
-                <div>
-                  <label style={S.lbl}>Marca / Modello</label>
-                  <input style={S.inp} value={editDam.marca_modello||''} onChange={e=>setEditDam({...editDam, marca_modello:e.target.value})} placeholder="Es. Ferriere Nord, BetonBasalt..." />
-                </div>
-                <div>
-                  <label style={S.lbl}>Norma di riferimento</label>
-                  <input style={S.inp} value={editDam.norma_riferimento||''} onChange={e=>setEditDam({...editDam, norma_riferimento:e.target.value})} placeholder="Es. EN 10025, UNI EN 206..." />
+                  <label style={Css.lbl}>Revisione</label>
+                  <input type="number" style={Css.inp} value={editDam.revisione||0} onChange={e=>setEditDam({...editDam, revisione:parseInt(e.target.value)||0})} />
                 </div>
               </div>
-              <div style={S.row(2)}>
+              <div style={Css.row(2)}>
                 <div>
-                  <label style={S.lbl}>Classe prestazionale</label>
-                  <input style={S.inp} value={editDam.classe_prestazionale||''} onChange={e=>setEditDam({...editDam, classe_prestazionale:e.target.value})} />
+                  <label style={Css.lbl}>Marca / Modello</label>
+                  <input style={Css.inp} value={editDam.marca_modello||''} onChange={e=>setEditDam({...editDam, marca_modello:e.target.value})} placeholder="Es. Ferriere Nord, BetonBasalt..." />
                 </div>
                 <div>
-                  <label style={S.lbl}>Data emissione</label>
-                  <input type="date" style={S.inp} value={editDam.data_emissione||''} onChange={e=>setEditDam({...editDam, data_emissione:e.target.value})} />
+                  <label style={Css.lbl}>Norma di riferimento</label>
+                  <input style={Css.inp} value={editDam.norma_riferimento||''} onChange={e=>setEditDam({...editDam, norma_riferimento:e.target.value})} placeholder="Es. EN 10025, UNI EN 206..." />
+                </div>
+              </div>
+              <div style={Css.row(2)}>
+                <div>
+                  <label style={Css.lbl}>Classe prestazionale</label>
+                  <input style={Css.inp} value={editDam.classe_prestazionale||''} onChange={e=>setEditDam({...editDam, classe_prestazionale:e.target.value})} />
+                </div>
+                <div>
+                  <label style={Css.lbl}>Data emissione</label>
+                  <input type="date" style={Css.inp} value={editDam.data_emissione||''} onChange={e=>setEditDam({...editDam, data_emissione:e.target.value})} />
                 </div>
               </div>
 
@@ -317,41 +317,41 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
 
               {/* DL */}
               <p style={{ fontSize:11, fontWeight:700, color:'var(--t3)', textTransform:'uppercase', letterSpacing:'0.04em', marginTop:4 }}>Direzione Lavori</p>
-              <div style={S.row(2)}>
+              <div style={Css.row(2)}>
                 <div>
-                  <label style={S.lbl}>Nome DL</label>
-                  <input style={S.inp} value={editDam.dl_nome||''} onChange={e=>setEditDam({...editDam, dl_nome:e.target.value})} />
+                  <label style={Css.lbl}>Nome DL</label>
+                  <input style={Css.inp} value={editDam.dl_nome||''} onChange={e=>setEditDam({...editDam, dl_nome:e.target.value})} />
                 </div>
                 <div>
-                  <label style={S.lbl}>Email DL</label>
-                  <input type="email" style={S.inp} value={editDam.dl_email||''} onChange={e=>setEditDam({...editDam, dl_email:e.target.value})} />
+                  <label style={Css.lbl}>Email DL</label>
+                  <input type="email" style={Css.inp} value={editDam.dl_email||''} onChange={e=>setEditDam({...editDam, dl_email:e.target.value})} />
                 </div>
               </div>
-              <div style={S.row(2)}>
+              <div style={Css.row(2)}>
                 <div>
-                  <label style={S.lbl}>Stato</label>
-                  <select style={S.inp} value={editDam.stato||'bozza'} onChange={e=>setEditDam({...editDam, stato:e.target.value})}>
+                  <label style={Css.lbl}>Stato</label>
+                  <select style={Css.inp} value={editDam.stato||'bozza'} onChange={e=>setEditDam({...editDam, stato:e.target.value})}>
                     {STATI_DAM.map(s => <option key={s} value={s}>{STATO_LBL[s]}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={S.lbl}>Note DL</label>
-                  <input style={S.inp} value={editDam.note_dl||''} onChange={e=>setEditDam({...editDam, note_dl:e.target.value})} />
+                  <label style={Css.lbl}>Note DL</label>
+                  <input style={Css.inp} value={editDam.note_dl||''} onChange={e=>setEditDam({...editDam, note_dl:e.target.value})} />
                 </div>
               </div>
               {editDam.stato === 'rifiutata' && (
                 <div>
-                  <label style={S.lbl}>Motivo rifiuto</label>
-                  <textarea style={{ ...S.inp, resize:'vertical' as const, minHeight:60 }} value={editDam.motivo_rifiuto||''} onChange={e=>setEditDam({...editDam, motivo_rifiuto:e.target.value})} />
+                  <label style={Css.lbl}>Motivo rifiuto</label>
+                  <textarea style={{ ...Css.inp, resize:'vertical' as const, minHeight:60 }} value={editDam.motivo_rifiuto||''} onChange={e=>setEditDam({...editDam, motivo_rifiuto:e.target.value})} />
                 </div>
               )}
               <div>
-                <label style={S.lbl}>Note interne</label>
-                <textarea style={{ ...S.inp, resize:'vertical' as const, minHeight:50 }} value={editDam.note_interne||''} onChange={e=>setEditDam({...editDam, note_interne:e.target.value})} />
+                <label style={Css.lbl}>Note interne</label>
+                <textarea style={{ ...Css.inp, resize:'vertical' as const, minHeight:50 }} value={editDam.note_interne||''} onChange={e=>setEditDam({...editDam, note_interne:e.target.value})} />
               </div>
               <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8, position:'sticky' as const, bottom:0, background:'var(--panel)', paddingTop:12, borderTop:'1px solid var(--border)' }}>
-                <button style={S.btn('#6b7280')} onClick={()=>{setForm(false);setEditDam(null)}}>Annulla</button>
-                <button style={S.btn('var(--accent)')} onClick={salva} disabled={saving}>{saving ? '...' : 'Salva DAM'}</button>
+                <button style={Css.btn('#6b7280')} onClick={()=>{setForm(false);setEditDam(null)}}>Annulla</button>
+                <button style={Css.btn('var(--accent)')} onClick={salva} disabled={saving}>{saving ? '...' : 'Salva DAM'}</button>
               </div>
             </div>
           </div>
