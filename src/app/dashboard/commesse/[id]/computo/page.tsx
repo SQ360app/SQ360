@@ -638,9 +638,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                       const isSel = sel === v.id; const isMSel = multiSel.has(v.id)
                       const idx = voceIdx(v)
                       const hasWBS = !!v.wbs_id
-                      const dot = v.descrizione?.indexOf('.') ?? -1
-                      const first = dot > 0 ? v.descrizione.slice(0, dot + 1) : v.descrizione || ''
-                      const rest = dot > 0 ? v.descrizione.slice(dot + 1) : ''
+                     const first = v.descrizione || ''
                       return (
                         <tr key={v.id} className={`cmp-rvo${isSel ? ' sel' : ''}${isMSel ? ' msel' : ''}`}
                           onClick={() => setSel(v.id)}
@@ -652,8 +650,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                           <td style={{ textAlign: 'center', fontSize: 11, fontWeight: 700 }}>{idx}</td>
                           <td style={{ fontSize: 10, color: '#1d4ed8', fontFamily: 'monospace' }}>{v.codice}</td>
                           <td style={{ fontSize: 10, maxWidth: 0 }}>
-                            <span className="cmp-des-first">{first}</span>
-                           {rest && <span className="cmp-des-rest">{rest}</span>}
+                            <span className="cmp-des-first" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{first}</span>
                             {/* WBS badge cliccabile */}
                             <span
                               className={`cmp-wbadge ${hasWBS ? 'set' : 'unset'}`}
