@@ -28,7 +28,27 @@ interface Fornitore {
   id: string; ragione_sociale?: string; nome?: string; cognome?: string
   categoria_soa?: string; specializzazione?: string
 }
-
+function FornitoreCard({ nome }: { nome: string }) {
+  const [data, setData] = React.useState<Fornitore | null>(null)
+  React.useEffect(() => {
+    supabase.from('professionisti_fornitori')
+      .select('*').or('ragione_sociale.eq.' + nome + ',nome.eq.' + nome)
+      .limit(1).single()
+      .then(({ data: d }) => { if (d) setData(d) })
+  }, [nome])
+  if (!data) return <p style={{ color:'var(--t3)', fontSize:13 }}>Caricamento...</p>
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:10, fontSize:13 }}>
+      <p style={{ fontSize:16, fontWeight:700 }}>{data.ragione_sociale || (data.nome + ' ' + (data.cognome || ''))}</p>
+      {data.specializzazione && <p style={{ color:'var(--t3)' }}>{data.specializzazione}</p>}
+      {data.pec && <p>PEC: <a href={'mailto:'+data.pec} style={{ color:'var(--accent)' }}>{data.pec}</a></p>}
+      {data.email && <p>Email: <a href={'mailto:'+data.email} style={{ color:'var(--accent)' }}>{data.email}</a></p>}
+      {data.telefono && <p>Tel: {data.telefono}</p>}
+      {data.categoria_soa && <p>SOA: {data.categoria_soa}</p>}
+      {data.ordine_professionale && <p>Ordine: {data.ordine_professionale} n. {data.numero_iscrizione}</p>}
+    </div>
+  )
+}
 export default function RDAPage({ params: p }: { params: Promise<{ id: string }> }) {
   const { id } = use(p)
   const [rdaList, setRdaList] = useState<RDA[]>([])
@@ -43,7 +63,17 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
   const [fResults, setFResults] = useState<Fornitore[]>([])
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState('')
-
+{viewFornitore && (
+  <div className="modal-overlay" onClick={() => setViewFornitore(null)}>
+    <div className="modal-box" style={{ maxWidth:480, width:'92%' }} onClick={e => e.stopPropagation()}>
+      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:16 }}>
+        <h3 style={{ fontSize:14, fontWeight:700 }}>Anagrafica Fornitore</h3>
+        <button onClick={() => setViewFornitore(null)} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer' }}>x</button>
+      </div>
+      <FornitoreCard nome={viewFornitore} />
+    </div>
+  </div>
+)}
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
   const carica = useCallback(async () => {
@@ -294,7 +324,17 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
           </div>
         </div>
       )}
-
+{viewFornitore && (
+  <div className="modal-overlay" onClick={() => setViewFornitore(null)}>
+    <div className="modal-box" style={{ maxWidth:480, width:'92%' }} onClick={e => e.stopPropagation()}>
+      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:16 }}>
+        <h3 style={{ fontSize:14, fontWeight:700 }}>Anagrafica Fornitore</h3>
+        <button onClick={() => setViewFornitore(null)} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer' }}>x</button>
+      </div>
+      <FornitoreCard nome={viewFornitore} />
+    </div>
+  </div>
+)}
       {toast && (
         <div style={{ position:'fixed', bottom:20, right:20, background:'#14532d', color:'#fff', padding:'10px 18px', borderRadius:10, fontSize:12, fontWeight:700, zIndex:1000, boxShadow:'var(--shadow-lg)' }}>
           {toast}
