@@ -277,6 +277,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
       await supabase.from('rda').insert({
         commessa_id: id, codice, stato: 'bozza', tipo: 'MAT', qta_stimata: 1, um: 'nr',
         oggetto: `RDA da computo (${voceIds.length} voci)`,
+        voci_ids: voceIds,
         wbs_id: wbsId !== 'nessun_wbs' ? wbsId : null,
         wbs_label: wbsId !== 'nessun_wbs' ? WBS_MAP[wbsId] : null,
       })
