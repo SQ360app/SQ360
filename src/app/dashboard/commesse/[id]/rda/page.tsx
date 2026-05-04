@@ -27,6 +27,8 @@ interface RDA {
 interface Fornitore {
   id: string; ragione_sociale?: string; nome?: string; cognome?: string
   categoria_soa?: string; specializzazione?: string
+  pec?: string; email?: string; telefono?: string
+  ordine_professionale?: string; numero_iscrizione?: string
 }
 function FornitoreCard({ nome }: { nome: string }) {
   const [data, setData] = React.useState<Fornitore | null>(null)
