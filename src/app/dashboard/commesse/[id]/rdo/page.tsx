@@ -32,7 +32,7 @@ interface Fornitore {
   email?: string; pec?: string; categoria_soa?: string
 }
 
-const S = {
+const Css = {
   page:  { minHeight:'100%', background:'var(--bg)', padding:16, display:'flex', flexDirection:'column' as const, gap:12 },
   card:  { background:'var(--panel)', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden', boxShadow:'var(--shadow-sm)' } as React.CSSProperties,
   hdr:   { display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 16px', borderBottom:'1px solid var(--border)', background:'var(--bg)' },
@@ -137,12 +137,12 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
   }
 
   return (
-    <div style={S.page} className="fade-in">
+    <div style={Css.page} className="fade-in">
 
       {/* KPI */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:8 }}>
         {STATI_RDO.map(s => (
-          <div key={s} style={{ ...S.card, padding:'10px 14px', cursor:'pointer', outline: filtroStato===s ? '2px solid var(--accent)' : 'none' }}
+          <div key={s} style={{ ...Css.card, padding:'10px 14px', cursor:'pointer', outline: filtroStato===s ? '2px solid var(--accent)' : 'none' }}
             onClick={() => setFiltroStato(filtroStato===s ? 'tutti' : s)}>
             <div style={{ width:7, height:7, borderRadius:'50%', background:STATO_COLOR[s], marginBottom:6 }} />
             <p style={{ fontSize:17, fontWeight:800, color:'var(--t1)' }}>{rdoList.filter(r=>r.stato===s).length}</p>
@@ -153,9 +153,9 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
 
       {/* Quadro comparativo offerte */}
       {Object.keys(compareGroups).length > 0 && (
-        <div style={S.card}>
-          <div style={S.hdr}>
-            <span style={S.hl}>Quadro comparativo offerte</span>
+        <div style={Css.card}>
+          <div style={Css.hdr}>
+            <span style={Css.hl}>Quadro comparativo offerte</span>
           </div>
           <div style={{ padding:12 }}>
             {Object.entries(compareGroups).map(([rdaId, group]) => {
@@ -191,9 +191,9 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
       )}
 
       {/* Lista RDO */}
-      <div style={S.card}>
-        <div style={S.hdr}>
-          <span style={S.hl}>Richieste d'Offerta</span>
+      <div style={Css.card}>
+        <div style={Css.hdr}>
+          <span style={Css.hl}>Richieste d'Offerta</span>
           <button className="btn-primary" style={{ fontSize:12, padding:'8px 14px' }}
             onClick={() => { setEditRdo({ stato:'bozza', importo_offerta:0 }); setFSearch(''); setForm(true) }}>
             + Nuova RDO
@@ -209,7 +209,7 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
             <thead>
               <tr>
                 {['Codice','Fornitore','Email','RDA collegata','Scadenza','Offerta (€)','Stato',''].map(h => (
-                  <th key={h} style={S.th}>{h}</th>
+                  <th key={h} style={Css.th}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -220,22 +220,22 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
                   <tr key={r.id}
                     onMouseEnter={e=>(e.currentTarget.style.background='var(--accent-light)')}
                     onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
-                    <td style={{ ...S.td, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>{r.codice}</td>
-                    <td style={{ ...S.td, fontWeight:600 }}>{r.fornitore}</td>
-                    <td style={{ ...S.td, fontSize:11 }}>{r.email_fornitore || '—'}</td>
-                    <td style={{ ...S.td, fontSize:11 }}>{rda ? `${rda.codice}` : '—'}</td>
-                    <td style={{ ...S.td, fontSize:11 }}>{r.data_scadenza || '—'}</td>
-                    <td style={{ ...S.td, textAlign:'right' as const, fontWeight:700, fontVariantNumeric:'tabular-nums' as const }}>
+                    <td style={{ ...Css.td, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>{r.codice}</td>
+                    <td style={{ ...Css.td, fontWeight:600 }}>{r.fornitore}</td>
+                    <td style={{ ...Css.td, fontSize:11 }}>{r.email_fornitore || '—'}</td>
+                    <td style={{ ...Css.td, fontSize:11 }}>{rda ? `${rda.codice}` : '—'}</td>
+                    <td style={{ ...Css.td, fontSize:11 }}>{r.data_scadenza || '—'}</td>
+                    <td style={{ ...Css.td, textAlign:'right' as const, fontWeight:700, fontVariantNumeric:'tabular-nums' as const }}>
                       {r.importo_offerta ? fi(r.importo_offerta) : '—'}
                     </td>
-                    <td style={S.td}>
+                    <td style={Css.td}>
                       <select value={r.stato} onChange={e=>cambiaStato(r, e.target.value)}
                         style={{ padding:'3px 6px', borderRadius:6, border:`1px solid ${STATO_COLOR[r.stato]||'#ccc'}44`, background:(STATO_COLOR[r.stato]||'#ccc')+'22', color:STATO_COLOR[r.stato]||'#666', fontSize:11, fontWeight:700, cursor:'pointer' }}>
                         {STATI_RDO.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </td>
-                    <td style={S.td}>
-                      <button style={{ ...S.btn('#3b82f6'), padding:'4px 10px', fontSize:11 }}
+                    <td style={Css.td}>
+                      <button style={{ ...Css.btn('#3b82f6'), padding:'4px 10px', fontSize:11 }}
                         onClick={() => { setEditRdo(r); setFSearch(r.fornitore||''); setForm(true) }}>✎</button>
                     </td>
                   </tr>
@@ -257,8 +257,8 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
             <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
               {rdaList.length > 0 && (
                 <div>
-                  <label style={S.lbl}>Collega a RDA</label>
-                  <select style={S.inp} value={editRdo.rda_id||''} onChange={e=>setEditRdo({...editRdo, rda_id:e.target.value||undefined})}>
+                  <label style={Css.lbl}>Collega a RDA</label>
+                  <select style={Css.inp} value={editRdo.rda_id||''} onChange={e=>setEditRdo({...editRdo, rda_id:e.target.value||undefined})}>
                     <option value="">— Nessuna RDA collegata —</option>
                     {rdaList.map(r => <option key={r.id} value={r.id}>{r.codice} — {r.oggetto}</option>)}
                   </select>
@@ -266,8 +266,8 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
               )}
               {/* Fornitore con ricerca live */}
               <div style={{ position:'relative' }}>
-                <label style={S.lbl}>Fornitore *</label>
-                <input style={S.inp} value={fSearch} onChange={e=>{setFSearch(e.target.value); setEditRdo({...editRdo, fornitore:e.target.value})}} placeholder="Cerca fornitore nel DB..." />
+                <label style={Css.lbl}>Fornitore *</label>
+                <input style={Css.inp} value={fSearch} onChange={e=>{setFSearch(e.target.value); setEditRdo({...editRdo, fornitore:e.target.value})}} placeholder="Cerca fornitore nel DB..." />
                 {fResults.length > 0 && (
                   <div style={{ position:'absolute', zIndex:100, width:'100%', background:'var(--panel)', border:'1px solid var(--border)', borderRadius:8, boxShadow:'var(--shadow-md)', maxHeight:200, overflowY:'auto' as const }}>
                     {fResults.map(f => (
@@ -288,36 +288,36 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
                 )}
               </div>
               <div>
-                <label style={S.lbl}>Email fornitore</label>
-                <input type="email" style={S.inp} value={editRdo.email_fornitore||''} onChange={e=>setEditRdo({...editRdo, email_fornitore:e.target.value})} />
+                <label style={Css.lbl}>Email fornitore</label>
+                <input type="email" style={Css.inp} value={editRdo.email_fornitore||''} onChange={e=>setEditRdo({...editRdo, email_fornitore:e.target.value})} />
               </div>
-              <div style={S.row(2)}>
+              <div style={Css.row(2)}>
                 <div>
-                  <label style={S.lbl}>Data invio</label>
-                  <input type="date" style={S.inp} value={editRdo.data_invio||''} onChange={e=>setEditRdo({...editRdo, data_invio:e.target.value})} />
+                  <label style={Css.lbl}>Data invio</label>
+                  <input type="date" style={Css.inp} value={editRdo.data_invio||''} onChange={e=>setEditRdo({...editRdo, data_invio:e.target.value})} />
                 </div>
                 <div>
-                  <label style={S.lbl}>Data scadenza offerta</label>
-                  <input type="date" style={S.inp} value={editRdo.data_scadenza||''} onChange={e=>setEditRdo({...editRdo, data_scadenza:e.target.value})} />
+                  <label style={Css.lbl}>Data scadenza offerta</label>
+                  <input type="date" style={Css.inp} value={editRdo.data_scadenza||''} onChange={e=>setEditRdo({...editRdo, data_scadenza:e.target.value})} />
                 </div>
               </div>
               <div>
-                <label style={S.lbl}>Importo offerta ricevuta (€)</label>
-                <input type="number" step="0.01" style={S.inp} value={editRdo.importo_offerta||''} onChange={e=>setEditRdo({...editRdo, importo_offerta:parseFloat(e.target.value)||0})} placeholder="0,00" />
+                <label style={Css.lbl}>Importo offerta ricevuta (€)</label>
+                <input type="number" step="0.01" style={Css.inp} value={editRdo.importo_offerta||''} onChange={e=>setEditRdo({...editRdo, importo_offerta:parseFloat(e.target.value)||0})} placeholder="0,00" />
               </div>
               <div>
-                <label style={S.lbl}>Stato</label>
-                <select style={S.inp} value={editRdo.stato||'bozza'} onChange={e=>setEditRdo({...editRdo, stato:e.target.value})}>
+                <label style={Css.lbl}>Stato</label>
+                <select style={Css.inp} value={editRdo.stato||'bozza'} onChange={e=>setEditRdo({...editRdo, stato:e.target.value})}>
                   {STATI_RDO.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
               <div>
-                <label style={S.lbl}>Note</label>
-                <textarea style={{ ...S.inp, resize:'vertical' as const, minHeight:60 }} value={editRdo.note||''} onChange={e=>setEditRdo({...editRdo, note:e.target.value})} />
+                <label style={Css.lbl}>Note</label>
+                <textarea style={{ ...Css.inp, resize:'vertical' as const, minHeight:60 }} value={editRdo.note||''} onChange={e=>setEditRdo({...editRdo, note:e.target.value})} />
               </div>
               <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
-                <button style={S.btn('#6b7280')} onClick={()=>{setForm(false);setEditRdo(null)}}>Annulla</button>
-                <button style={S.btn('var(--accent)')} onClick={salva} disabled={saving}>{saving ? '...' : 'Salva RDO'}</button>
+                <button style={Css.btn('#6b7280')} onClick={()=>{setForm(false);setEditRdo(null)}}>Annulla</button>
+                <button style={Css.btn('var(--accent)')} onClick={salva} disabled={saving}>{saving ? '...' : 'Salva RDO'}</button>
               </div>
             </div>
           </div>
