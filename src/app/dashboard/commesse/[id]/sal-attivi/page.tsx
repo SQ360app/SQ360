@@ -32,7 +32,7 @@ interface Commessa {
   importo_contrattuale: number; ribasso_pct: number; oneri_sicurezza: number
 }
 
-const S = {
+const Css = {
   page:  { minHeight:'100%', background:'var(--bg)', padding:16, display:'flex', flexDirection:'column' as const, gap:12 },
   card:  { background:'var(--panel)', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden', boxShadow:'var(--shadow-sm)' } as React.CSSProperties,
   hdr:   { display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 16px', borderBottom:'1px solid var(--border)', background:'var(--bg)' },
@@ -143,43 +143,43 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
   const avanzPct = contratto > 0 ? (certificato / contratto) * 100 : 0
 
   return (
-    <div style={S.page} className="fade-in">
+    <div style={Css.page} className="fade-in">
 
       {/* KPI */}
-      <div style={S.card}>
-        <div style={S.hdr}>
-          <span style={S.hl}>Quadro SAL — Attivi verso committente</span>
+      <div style={Css.card}>
+        <div style={Css.hdr}>
+          <span style={Css.hl}>Quadro SAL — Attivi verso committente</span>
           <button className="btn-primary" style={{ fontSize:12, padding:'8px 14px' }} onClick={apriNuovo}>+ Nuovo SAL</button>
         </div>
-        <div style={S.kgrid}>
-          <div style={S.kcell(false)}>
-            <p style={S.klbl}>Importo contratto</p>
-            <p style={S.kval}>€ {fi(contratto)}</p>
-            <div style={S.prog}><div style={{ height:'100%', background:'var(--accent)', width:'100%', borderRadius:3 }} /></div>
+        <div style={Css.kgrid}>
+          <div style={Css.kcell(false)}>
+            <p style={Css.klbl}>Importo contratto</p>
+            <p style={Css.kval}>€ {fi(contratto)}</p>
+            <div style={Css.prog}><div style={{ height:'100%', background:'var(--accent)', width:'100%', borderRadius:3 }} /></div>
           </div>
-          <div style={S.kcell(false)}>
-            <p style={S.klbl}>Certificato cumulato</p>
-            <p style={{ ...S.kval, color:'var(--accent)' }}>€ {fi(certificato)}</p>
-            <div style={S.prog}><div style={{ height:'100%', background:'var(--accent)', width:`${Math.min(avanzPct,100)}%`, borderRadius:3 }} /></div>
-            <p style={S.ksub}>{avanzPct.toFixed(1)}% del contratto</p>
+          <div style={Css.kcell(false)}>
+            <p style={Css.klbl}>Certificato cumulato</p>
+            <p style={{ ...Css.kval, color:'var(--accent)' }}>€ {fi(certificato)}</p>
+            <div style={Css.prog}><div style={{ height:'100%', background:'var(--accent)', width:`${Math.min(avanzPct,100)}%`, borderRadius:3 }} /></div>
+            <p style={Css.ksub}>{avanzPct.toFixed(1)}% del contratto</p>
           </div>
-          <div style={S.kcell(false)}>
-            <p style={S.klbl}>Netto liquidato</p>
-            <p style={{ ...S.kval, color:'var(--success)' }}>€ {fi(nettoPagato)}</p>
-            <p style={S.ksub}>SAL in stato "pagato"</p>
+          <div style={Css.kcell(false)}>
+            <p style={Css.klbl}>Netto liquidato</p>
+            <p style={{ ...Css.kval, color:'var(--success)' }}>€ {fi(nettoPagato)}</p>
+            <p style={Css.ksub}>SAL in stato "pagato"</p>
           </div>
-          <div style={S.kcell(true)}>
-            <p style={S.klbl}>Residuo contratto</p>
-            <p style={{ ...S.kval, color:'var(--warning)' }}>€ {fi(contratto - certificato)}</p>
-            <p style={S.ksub}>{(100 - avanzPct).toFixed(1)}% da certificare</p>
+          <div style={Css.kcell(true)}>
+            <p style={Css.klbl}>Residuo contratto</p>
+            <p style={{ ...Css.kval, color:'var(--warning)' }}>€ {fi(contratto - certificato)}</p>
+            <p style={Css.ksub}>{(100 - avanzPct).toFixed(1)}% da certificare</p>
           </div>
         </div>
       </div>
 
       {/* Lista SAL */}
-      <div style={S.card}>
-        <div style={S.hdr}>
-          <span style={S.hl}>{salList.length} SAL emessi</span>
+      <div style={Css.card}>
+        <div style={Css.hdr}>
+          <span style={Css.hl}>{salList.length} SAL emessi</span>
         </div>
         {loading ? (
           <div style={{ padding:40, textAlign:'center' }}><span className="spinner" /></div>
@@ -193,7 +193,7 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
             <thead>
               <tr>
                 {['N°','Codice','Periodo','Importo lavori','Importo sicurezza','Importo totale','Precedenti','Netto','Ritenuta','Certificato','Stato',''].map(h => (
-                  <th key={h} style={S.th}>{h}</th>
+                  <th key={h} style={Css.th}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -202,24 +202,24 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
                 <tr key={sal.id}
                   onMouseEnter={e=>(e.currentTarget.style.background='var(--accent-light)')}
                   onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
-                  <td style={{ ...S.td, fontWeight:700, textAlign:'center' as const }}>{sal.numero}</td>
-                  <td style={{ ...S.td, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>{sal.codice}</td>
-                  <td style={{ ...S.td, fontSize:11 }}>{sal.data_inizio && sal.data_fine ? `${sal.data_inizio} → ${sal.data_fine}` : '—'}</td>
-                  <td style={{ ...S.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums' as const }}>{fi(sal.importo_lavori)}</td>
-                  <td style={{ ...S.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums' as const }}>{fi(sal.importo_sicurezza)}</td>
-                  <td style={{ ...S.td, textAlign:'right' as const, fontWeight:700, fontVariantNumeric:'tabular-nums' as const }}>{fi(sal.importo_totale)}</td>
-                  <td style={{ ...S.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums' as const, color:'var(--t3)' }}>{fi(sal.importo_precedenti)}</td>
-                  <td style={{ ...S.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums' as const }}>{fi(sal.importo_netto)}</td>
-                  <td style={{ ...S.td, textAlign:'right' as const, color:'var(--danger)', fontVariantNumeric:'tabular-nums' as const }}>({fi(sal.ritenuta_garanzia)})</td>
-                  <td style={{ ...S.td, textAlign:'right' as const, fontWeight:700, color:'var(--success)', fontVariantNumeric:'tabular-nums' as const }}>{fi(sal.importo_certificato)}</td>
-                  <td style={S.td}>
+                  <td style={{ ...Css.td, fontWeight:700, textAlign:'center' as const }}>{sal.numero}</td>
+                  <td style={{ ...Css.td, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>{sal.codice}</td>
+                  <td style={{ ...Css.td, fontSize:11 }}>{sal.data_inizio && sal.data_fine ? `${sal.data_inizio} → ${sal.data_fine}` : '—'}</td>
+                  <td style={{ ...Css.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums' as const }}>{fi(sal.importo_lavori)}</td>
+                  <td style={{ ...Css.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums' as const }}>{fi(sal.importo_sicurezza)}</td>
+                  <td style={{ ...Css.td, textAlign:'right' as const, fontWeight:700, fontVariantNumeric:'tabular-nums' as const }}>{fi(sal.importo_totale)}</td>
+                  <td style={{ ...Css.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums' as const, color:'var(--t3)' }}>{fi(sal.importo_precedenti)}</td>
+                  <td style={{ ...Css.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums' as const }}>{fi(sal.importo_netto)}</td>
+                  <td style={{ ...Css.td, textAlign:'right' as const, color:'var(--danger)', fontVariantNumeric:'tabular-nums' as const }}>({fi(sal.ritenuta_garanzia)})</td>
+                  <td style={{ ...Css.td, textAlign:'right' as const, fontWeight:700, color:'var(--success)', fontVariantNumeric:'tabular-nums' as const }}>{fi(sal.importo_certificato)}</td>
+                  <td style={Css.td}>
                     <select value={sal.stato} onChange={e=>cambiaStato(sal, e.target.value)}
                       style={{ padding:'3px 6px', borderRadius:6, border:`1px solid ${STATO_COLOR[sal.stato]||'#ccc'}44`, background:(STATO_COLOR[sal.stato]||'#ccc')+'22', color:STATO_COLOR[sal.stato]||'#666', fontSize:11, fontWeight:700, cursor:'pointer' }}>
                       {STATI_SAL.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </td>
-                  <td style={S.td}>
-                    <button style={{ ...S.btn('#3b82f6'), padding:'4px 10px', fontSize:11 }}
+                  <td style={Css.td}>
+                    <button style={{ ...Css.btn('#3b82f6'), padding:'4px 10px', fontSize:11 }}
                       onClick={() => { setEditSal(sal); setForm(true) }}>✎</button>
                   </td>
                 </tr>
@@ -238,37 +238,37 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
               <button onClick={()=>{setForm(false);setEditSal(null)}} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'var(--t3)' }}>✕</button>
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-              <div style={S.row(2)}>
+              <div style={Css.row(2)}>
                 <div>
-                  <label style={S.lbl}>Data inizio periodo</label>
-                  <input type="date" style={S.inp} value={editSal.data_inizio||''} onChange={e=>setEditSal({...editSal, data_inizio:e.target.value})} />
+                  <label style={Css.lbl}>Data inizio periodo</label>
+                  <input type="date" style={Css.inp} value={editSal.data_inizio||''} onChange={e=>setEditSal({...editSal, data_inizio:e.target.value})} />
                 </div>
                 <div>
-                  <label style={S.lbl}>Data fine periodo</label>
-                  <input type="date" style={S.inp} value={editSal.data_fine||''} onChange={e=>setEditSal({...editSal, data_fine:e.target.value})} />
+                  <label style={Css.lbl}>Data fine periodo</label>
+                  <input type="date" style={Css.inp} value={editSal.data_fine||''} onChange={e=>setEditSal({...editSal, data_fine:e.target.value})} />
                 </div>
               </div>
-              <div style={S.row(2)}>
+              <div style={Css.row(2)}>
                 <div>
-                  <label style={S.lbl}>Importo lavori (€)</label>
-                  <input type="number" step="0.01" style={S.inp} value={editSal.importo_lavori||0}
+                  <label style={Css.lbl}>Importo lavori (€)</label>
+                  <input type="number" step="0.01" style={Css.inp} value={editSal.importo_lavori||0}
                     onChange={e=>setEditSal(ricalcola({...editSal, importo_lavori:parseFloat(e.target.value)||0}))} />
                 </div>
                 <div>
-                  <label style={S.lbl}>Importo sicurezza (€)</label>
-                  <input type="number" step="0.01" style={S.inp} value={editSal.importo_sicurezza||0}
+                  <label style={Css.lbl}>Importo sicurezza (€)</label>
+                  <input type="number" step="0.01" style={Css.inp} value={editSal.importo_sicurezza||0}
                     onChange={e=>setEditSal(ricalcola({...editSal, importo_sicurezza:parseFloat(e.target.value)||0}))} />
                 </div>
               </div>
-              <div style={S.row(2)}>
+              <div style={Css.row(2)}>
                 <div>
-                  <label style={S.lbl}>Importi precedenti SAL (€)</label>
-                  <input type="number" step="0.01" style={S.inp} value={editSal.importo_precedenti||0}
+                  <label style={Css.lbl}>Importi precedenti SAL (€)</label>
+                  <input type="number" step="0.01" style={Css.inp} value={editSal.importo_precedenti||0}
                     onChange={e=>setEditSal(ricalcola({...editSal, importo_precedenti:parseFloat(e.target.value)||0}))} />
                 </div>
                 <div>
-                  <label style={S.lbl}>Anticipazione da scomputare (€)</label>
-                  <input type="number" step="0.01" style={S.inp} value={editSal.anticipazione_da_scompute||0}
+                  <label style={Css.lbl}>Anticipazione da scomputare (€)</label>
+                  <input type="number" step="0.01" style={Css.inp} value={editSal.anticipazione_da_scompute||0}
                     onChange={e=>setEditSal(ricalcola({...editSal, anticipazione_da_scompute:parseFloat(e.target.value)||0}))} />
                 </div>
               </div>
@@ -290,21 +290,21 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
                 </div>
               </div>
 
-              <div style={S.row(2)}>
+              <div style={Css.row(2)}>
                 <div>
-                  <label style={S.lbl}>Stato</label>
-                  <select style={S.inp} value={editSal.stato||'bozza'} onChange={e=>setEditSal({...editSal, stato:e.target.value})}>
+                  <label style={Css.lbl}>Stato</label>
+                  <select style={Css.inp} value={editSal.stato||'bozza'} onChange={e=>setEditSal({...editSal, stato:e.target.value})}>
                     {STATI_SAL.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={S.lbl}>Note</label>
-                  <input style={S.inp} value={editSal.note||''} onChange={e=>setEditSal({...editSal, note:e.target.value})} />
+                  <label style={Css.lbl}>Note</label>
+                  <input style={Css.inp} value={editSal.note||''} onChange={e=>setEditSal({...editSal, note:e.target.value})} />
                 </div>
               </div>
               <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
-                <button style={S.btn('#6b7280')} onClick={()=>{setForm(false);setEditSal(null)}}>Annulla</button>
-                <button style={S.btn('var(--accent)')} onClick={salva} disabled={saving}>{saving ? '...' : 'Salva SAL'}</button>
+                <button style={Css.btn('#6b7280')} onClick={()=>{setForm(false);setEditSal(null)}}>Annulla</button>
+                <button style={Css.btn('var(--accent)')} onClick={salva} disabled={saving}>{saving ? '...' : 'Salva SAL'}</button>
               </div>
             </div>
           </div>
