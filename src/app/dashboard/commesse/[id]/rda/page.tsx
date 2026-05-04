@@ -66,17 +66,6 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
   const [saving, setSaving] = useState(false)
 const [toast, setToast] = useState('')
   const [viewFornitore, setViewFornitore] = useState<string | null>(null)
-{viewFornitore && (
-  <div className="modal-overlay" onClick={() => setViewFornitore(null)}>
-    <div className="modal-box" style={{ maxWidth:480, width:'92%' }} onClick={e => e.stopPropagation()}>
-      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:16 }}>
-        <h3 style={{ fontSize:14, fontWeight:700 }}>Anagrafica Fornitore</h3>
-        <button onClick={() => setViewFornitore(null)} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer' }}>x</button>
-      </div>
-      <FornitoreCard nome={viewFornitore} />
-    </div>
-  </div>
-)}
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
   const carica = useCallback(async () => {
