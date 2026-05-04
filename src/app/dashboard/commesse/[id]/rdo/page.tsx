@@ -251,7 +251,7 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
         <div className="modal-overlay" onClick={e=>{ if(e.target===e.currentTarget){setForm(false);setEditRdo(null)} }}>
           <div className="modal-box" style={{ maxWidth:560, width:'92%' }}>
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:20 }}>
-              <h3 style={{ fontSize:14, fontWeight:700 }}>{editRdo.id ? 'Modifica RDO' : 'Nuova Richiesta d\'Offerta'}</h3>
+              <h3 style={{ fontSize:14, fontWeight:700 }}>{editRdo.id ? 'Modifica RDO' : 'Nuova Richiesta d'Offerta'}</h3>
               <button onClick={()=>{setForm(false);setEditRdo(null)}} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'var(--t3)' }}>✕</button>
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
