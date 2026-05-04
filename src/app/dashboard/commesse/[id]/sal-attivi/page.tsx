@@ -143,43 +143,43 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
   const avanzPct = contratto > 0 ? (certificato / contratto) * 100 : 0
 
   return (
-    <div style={Css.page} className="fade-in">
+    <div style={(styleObj as any).page as React.CSSProperties} className="fade-in">
 
       {/* KPI */}
-      <div style={Css.card}>
-        <div style={Css.hdr}>
-          <span style={Css.hl}>Quadro SAL — Attivi verso committente</span>
+      <div style={(styleObj as any).card as React.CSSProperties}>
+        <div style={(styleObj as any).hdr as React.CSSProperties}>
+          <span style={(styleObj as any).hl as React.CSSProperties}>Quadro SAL — Attivi verso committente</span>
           <button className="btn-primary" style={{ fontSize:12, padding:'8px 14px' }} onClick={apriNuovo}>+ Nuovo SAL</button>
         </div>
-        <div style={Css.kgrid}>
-          <div style={Css.kcell(false)}>
-            <p style={Css.klbl}>Importo contratto</p>
-            <p style={Css.kval}>€ {fi(contratto)}</p>
-            <div style={Css.prog}><div style={{ height:'100%', background:'var(--accent)', width:'100%', borderRadius:3 }} /></div>
+        <div style={(styleObj as any).kgrid as React.CSSProperties}>
+          <div style={(styleObj as any).kcell(false)}>
+            <p style={(styleObj as any).klbl as React.CSSProperties}>Importo contratto</p>
+            <p style={(styleObj as any).kval as React.CSSProperties}>€ {fi(contratto)}</p>
+            <div style={(styleObj as any).prog as React.CSSProperties}><div style={{ height:'100%', background:'var(--accent)', width:'100%', borderRadius:3 }} /></div>
           </div>
-          <div style={Css.kcell(false)}>
-            <p style={Css.klbl}>Certificato cumulato</p>
-            <p style={{ ...Css.kval, color:'var(--accent)' }}>€ {fi(certificato)}</p>
-            <div style={Css.prog}><div style={{ height:'100%', background:'var(--accent)', width:`${Math.min(avanzPct,100)}%`, borderRadius:3 }} /></div>
-            <p style={Css.ksub}>{avanzPct.toFixed(1)}% del contratto</p>
+          <div style={(styleObj as any).kcell(false)}>
+            <p style={(styleObj as any).klbl as React.CSSProperties}>Certificato cumulato</p>
+            <p style={{ ...(styleObj as any).kval, color:'var(--accent)' }}>€ {fi(certificato)}</p>
+            <div style={(styleObj as any).prog as React.CSSProperties}><div style={{ height:'100%', background:'var(--accent)', width:`${Math.min(avanzPct,100)}%`, borderRadius:3 }} /></div>
+            <p style={(styleObj as any).ksub as React.CSSProperties}>{avanzPct.toFixed(1)}% del contratto</p>
           </div>
-          <div style={Css.kcell(false)}>
-            <p style={Css.klbl}>Netto liquidato</p>
-            <p style={{ ...Css.kval, color:'var(--success)' }}>€ {fi(nettoPagato)}</p>
-            <p style={Css.ksub}>SAL in stato "pagato"</p>
+          <div style={(styleObj as any).kcell(false)}>
+            <p style={(styleObj as any).klbl as React.CSSProperties}>Netto liquidato</p>
+            <p style={{ ...(styleObj as any).kval, color:'var(--success)' }}>€ {fi(nettoPagato)}</p>
+            <p style={(styleObj as any).ksub as React.CSSProperties}>SAL in stato "pagato"</p>
           </div>
-          <div style={Css.kcell(true)}>
-            <p style={Css.klbl}>Residuo contratto</p>
-            <p style={{ ...Css.kval, color:'var(--warning)' }}>€ {fi(contratto - certificato)}</p>
-            <p style={Css.ksub}>{(100 - avanzPct).toFixed(1)}% da certificare</p>
+          <div style={(styleObj as any).kcell(true)}>
+            <p style={(styleObj as any).klbl as React.CSSProperties}>Residuo contratto</p>
+            <p style={{ ...(styleObj as any).kval, color:'var(--warning)' }}>€ {fi(contratto - certificato)}</p>
+            <p style={(styleObj as any).ksub as React.CSSProperties}>{(100 - avanzPct).toFixed(1)}% da certificare</p>
           </div>
         </div>
       </div>
 
       {/* Lista SAL */}
-      <div style={Css.card}>
-        <div style={Css.hdr}>
-          <span style={Css.hl}>{salList.length} SAL emessi</span>
+      <div style={(styleObj as any).card as React.CSSProperties}>
+        <div style={(styleObj as any).hdr as React.CSSProperties}>
+          <span style={(styleObj as any).hl as React.CSSProperties}>{salList.length} SAL emessi</span>
         </div>
         {loading ? (
           <div style={{ padding:40, textAlign:'center' }}><span className="spinner" /></div>
@@ -193,7 +193,7 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
             <thead>
               <tr>
                 {['N°','Codice','Periodo','Importo lavori','Importo sicurezza','Importo totale','Precedenti','Netto','Ritenuta','Certificato','Stato',''].map(h => (
-                  <th key={h} style={Css.th}>{h}</th>
+                  <th key={h} style={(styleObj as any).th as React.CSSProperties}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -202,24 +202,24 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
                 <tr key={sal.id}
                   onMouseEnter={e=>(e.currentTarget.style.background='var(--accent-light)')}
                   onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
-                  <td style={{ ...Css.td, fontWeight:700, textAlign:'center' as const }}>{sal.numero}</td>
-                  <td style={{ ...Css.td, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>{sal.codice}</td>
-                  <td style={{ ...Css.td, fontSize:11 }}>{sal.data_inizio && sal.data_fine ? `${sal.data_inizio} → ${sal.data_fine}` : '—'}</td>
-                  <td style={{ ...Css.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums' as const }}>{fi(sal.importo_lavori)}</td>
-                  <td style={{ ...Css.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums' as const }}>{fi(sal.importo_sicurezza)}</td>
-                  <td style={{ ...Css.td, textAlign:'right' as const, fontWeight:700, fontVariantNumeric:'tabular-nums' as const }}>{fi(sal.importo_totale)}</td>
-                  <td style={{ ...Css.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums' as const, color:'var(--t3)' }}>{fi(sal.importo_precedenti)}</td>
-                  <td style={{ ...Css.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums' as const }}>{fi(sal.importo_netto)}</td>
-                  <td style={{ ...Css.td, textAlign:'right' as const, color:'var(--danger)', fontVariantNumeric:'tabular-nums' as const }}>({fi(sal.ritenuta_garanzia)})</td>
-                  <td style={{ ...Css.td, textAlign:'right' as const, fontWeight:700, color:'var(--success)', fontVariantNumeric:'tabular-nums' as const }}>{fi(sal.importo_certificato)}</td>
-                  <td style={Css.td}>
+                  <td style={{ ...(styleObj as any).td, fontWeight:700, textAlign:'center' as const }}>{sal.numero}</td>
+                  <td style={{ ...(styleObj as any).td, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>{sal.codice}</td>
+                  <td style={{ ...(styleObj as any).td, fontSize:11 }}>{sal.data_inizio && sal.data_fine ? `${sal.data_inizio} → ${sal.data_fine}` : '—'}</td>
+                  <td style={{ ...(styleObj as any).td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums' as const }}>{fi(sal.importo_lavori)}</td>
+                  <td style={{ ...(styleObj as any).td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums' as const }}>{fi(sal.importo_sicurezza)}</td>
+                  <td style={{ ...(styleObj as any).td, textAlign:'right' as const, fontWeight:700, fontVariantNumeric:'tabular-nums' as const }}>{fi(sal.importo_totale)}</td>
+                  <td style={{ ...(styleObj as any).td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums' as const, color:'var(--t3)' }}>{fi(sal.importo_precedenti)}</td>
+                  <td style={{ ...(styleObj as any).td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums' as const }}>{fi(sal.importo_netto)}</td>
+                  <td style={{ ...(styleObj as any).td, textAlign:'right' as const, color:'var(--danger)', fontVariantNumeric:'tabular-nums' as const }}>({fi(sal.ritenuta_garanzia)})</td>
+                  <td style={{ ...(styleObj as any).td, textAlign:'right' as const, fontWeight:700, color:'var(--success)', fontVariantNumeric:'tabular-nums' as const }}>{fi(sal.importo_certificato)}</td>
+                  <td style={(styleObj as any).td as React.CSSProperties}>
                     <select value={sal.stato} onChange={e=>cambiaStato(sal, e.target.value)}
                       style={{ padding:'3px 6px', borderRadius:6, border:`1px solid ${STATO_COLOR[sal.stato]||'#ccc'}44`, background:(STATO_COLOR[sal.stato]||'#ccc')+'22', color:STATO_COLOR[sal.stato]||'#666', fontSize:11, fontWeight:700, cursor:'pointer' }}>
                       {STATI_SAL.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </td>
-                  <td style={Css.td}>
-                    <button style={{ ...Css.btn('#3b82f6'), padding:'4px 10px', fontSize:11 }}
+                  <td style={(styleObj as any).td as React.CSSProperties}>
+                    <button style={{ ...(styleObj as any).btn('#3b82f6'), padding:'4px 10px', fontSize:11 }}
                       onClick={() => { setEditSal(sal); setForm(true) }}>✎</button>
                   </td>
                 </tr>
@@ -238,37 +238,37 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
               <button onClick={()=>{setForm(false);setEditSal(null)}} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'var(--t3)' }}>✕</button>
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-              <div style={Css.row(2)}>
+              <div style={(styleObj as any).row(2)}>
                 <div>
-                  <label style={Css.lbl}>Data inizio periodo</label>
-                  <input type="date" style={Css.inp} value={editSal.data_inizio||''} onChange={e=>setEditSal({...editSal, data_inizio:e.target.value})} />
+                  <label style={(styleObj as any).lbl as React.CSSProperties}>Data inizio periodo</label>
+                  <input type="date" style={(styleObj as any).inp as React.CSSProperties} value={editSal.data_inizio||''} onChange={e=>setEditSal({...editSal, data_inizio:e.target.value})} />
                 </div>
                 <div>
-                  <label style={Css.lbl}>Data fine periodo</label>
-                  <input type="date" style={Css.inp} value={editSal.data_fine||''} onChange={e=>setEditSal({...editSal, data_fine:e.target.value})} />
+                  <label style={(styleObj as any).lbl as React.CSSProperties}>Data fine periodo</label>
+                  <input type="date" style={(styleObj as any).inp as React.CSSProperties} value={editSal.data_fine||''} onChange={e=>setEditSal({...editSal, data_fine:e.target.value})} />
                 </div>
               </div>
-              <div style={Css.row(2)}>
+              <div style={(styleObj as any).row(2)}>
                 <div>
-                  <label style={Css.lbl}>Importo lavori (€)</label>
-                  <input type="number" step="0.01" style={Css.inp} value={editSal.importo_lavori||0}
+                  <label style={(styleObj as any).lbl as React.CSSProperties}>Importo lavori (€)</label>
+                  <input type="number" step="0.01" style={(styleObj as any).inp as React.CSSProperties} value={editSal.importo_lavori||0}
                     onChange={e=>setEditSal(ricalcola({...editSal, importo_lavori:parseFloat(e.target.value)||0}))} />
                 </div>
                 <div>
-                  <label style={Css.lbl}>Importo sicurezza (€)</label>
-                  <input type="number" step="0.01" style={Css.inp} value={editSal.importo_sicurezza||0}
+                  <label style={(styleObj as any).lbl as React.CSSProperties}>Importo sicurezza (€)</label>
+                  <input type="number" step="0.01" style={(styleObj as any).inp as React.CSSProperties} value={editSal.importo_sicurezza||0}
                     onChange={e=>setEditSal(ricalcola({...editSal, importo_sicurezza:parseFloat(e.target.value)||0}))} />
                 </div>
               </div>
-              <div style={Css.row(2)}>
+              <div style={(styleObj as any).row(2)}>
                 <div>
-                  <label style={Css.lbl}>Importi precedenti SAL (€)</label>
-                  <input type="number" step="0.01" style={Css.inp} value={editSal.importo_precedenti||0}
+                  <label style={(styleObj as any).lbl as React.CSSProperties}>Importi precedenti SAL (€)</label>
+                  <input type="number" step="0.01" style={(styleObj as any).inp as React.CSSProperties} value={editSal.importo_precedenti||0}
                     onChange={e=>setEditSal(ricalcola({...editSal, importo_precedenti:parseFloat(e.target.value)||0}))} />
                 </div>
                 <div>
-                  <label style={Css.lbl}>Anticipazione da scomputare (€)</label>
-                  <input type="number" step="0.01" style={Css.inp} value={editSal.anticipazione_da_scompute||0}
+                  <label style={(styleObj as any).lbl as React.CSSProperties}>Anticipazione da scomputare (€)</label>
+                  <input type="number" step="0.01" style={(styleObj as any).inp as React.CSSProperties} value={editSal.anticipazione_da_scompute||0}
                     onChange={e=>setEditSal(ricalcola({...editSal, anticipazione_da_scompute:parseFloat(e.target.value)||0}))} />
                 </div>
               </div>
@@ -290,21 +290,21 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
                 </div>
               </div>
 
-              <div style={Css.row(2)}>
+              <div style={(styleObj as any).row(2)}>
                 <div>
-                  <label style={Css.lbl}>Stato</label>
-                  <select style={Css.inp} value={editSal.stato||'bozza'} onChange={e=>setEditSal({...editSal, stato:e.target.value})}>
+                  <label style={(styleObj as any).lbl as React.CSSProperties}>Stato</label>
+                  <select style={(styleObj as any).inp as React.CSSProperties} value={editSal.stato||'bozza'} onChange={e=>setEditSal({...editSal, stato:e.target.value})}>
                     {STATI_SAL.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={Css.lbl}>Note</label>
-                  <input style={Css.inp} value={editSal.note||''} onChange={e=>setEditSal({...editSal, note:e.target.value})} />
+                  <label style={(styleObj as any).lbl as React.CSSProperties}>Note</label>
+                  <input style={(styleObj as any).inp as React.CSSProperties} value={editSal.note||''} onChange={e=>setEditSal({...editSal, note:e.target.value})} />
                 </div>
               </div>
               <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
-                <button style={Css.btn('#6b7280')} onClick={()=>{setForm(false);setEditSal(null)}}>Annulla</button>
-                <button style={Css.btn('var(--accent)')} onClick={salva} disabled={saving}>{saving ? '...' : 'Salva SAL'}</button>
+                <button style={(styleObj as any).btn('#6b7280')} onClick={()=>{setForm(false);setEditSal(null)}}>Annulla</button>
+                <button style={(styleObj as any).btn('var(--accent)')} onClick={salva} disabled={saving}>{saving ? '...' : 'Salva SAL'}</button>
               </div>
             </div>
           </div>
