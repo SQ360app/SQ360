@@ -11,7 +11,7 @@ const supabase = createClient(
 const fi = (n: number, d = 2) => n?.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? '—'
 
 const STATI = ['bozza','approvata','inviata','chiusa','annullata']
-const TIPI  = ['MAT','MAN','NOL','SUB','MIX']
+const TIPI  = ['MAT','MAN','NOL','SUB','MIX']h
 
 const STATO_COLOR: Record<string,string> = {
   bozza:'#f59e0b', approvata:'#3b82f6', inviata:'#8b5cf6', chiusa:'#10b981', annullata:'#ef4444'
