@@ -182,7 +182,11 @@ function RicercaProfessionista({ figura, valore, onSeleziona, onNuovo }: {
             {valore.telefono && <span style={{ marginLeft: 6 }}>· {valore.telefono}</span>}
           </p>
         </div>
-        <button style={S.removeBtn} onClick={() => onSeleziona({ id:'',nome:'',cognome:'',tipo:'' })} title="Rimuovi">
+        <button style={S.removeBtn} onClick={() => {
+          if (window.confirm('Rimuovere questa figura professionale?') && window.confirm('Conferma definitiva: rimuovere la figura?')) {
+            onSeleziona({ id:'',nome:'',cognome:'',tipo:'' })
+          }
+        }} title="Rimuovi">
           <X size={14} />
         </button>
       </div>
