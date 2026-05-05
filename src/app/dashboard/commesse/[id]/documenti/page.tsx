@@ -1,361 +1,301 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
-import { useParams } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import { Upload, FileText, Trash2, Eye, Sparkles, CheckCircle, AlertTriangle, File, X } from 'lucide-react'
 
-type TipoDoc = 'BANDO' | 'CAPITOLATO' | 'COMPUTO' | 'CONTRATTO' | 'VERBALE' | 'SAL_FIRMATO' | 'VARIANTE' | 'DAM' | 'ALTRO'
+import React, { useState, useEffect, useCallback, use } from 'react'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
+const CATEGORIE = [
+  { id: 'contratto', label: 'Contratto', icona: '📋' },
+  { id: 'elaborati', label: 'Elaborati progettuali', icona: '📐' },
+  { id: 'capitolato', label: 'Capitolato', icona: '📖' },
+  { id: 'autorizzazioni', label: 'Autorizzazioni', icona: '🏛️' },
+  { id: 'sicurezza', label: 'Sicurezza (PSC/POS)', icona: '🦺' },
+  { id: 'collaudo', label: 'Collaudo', icona: '✅' },
+  { id: 'corrispondenza', label: 'Corrispondenza DL', icona: '📧' },
+  { id: 'altro', label: 'Altro', icona: '📎' },
+]
 
 interface Documento {
   id: string
-  tipo: TipoDoc
+  commessa_id: string
   nome: string
-  file_nome: string
-  file_size: number
-  ai_elaborato: boolean
-  ai_dati_estratti: Record<string, unknown>
+  categoria: string
+  url: string
+  tipo_mime: string
+  dimensione: number
+  note: string
   created_at: string
+  uploaded_by?: string
 }
 
-const TIPO_META: Record<TipoDoc, { label: string; color: string; icon: string }> = {
-  BANDO:       { label: 'Bando di gara',       color: '#f59e0b', icon: '📢' },
-  CAPITOLATO:  { label: 'Capitolato speciale',  color: '#3b82f6', icon: '📋' },
-  COMPUTO:     { label: 'Computo estimativo',   color: '#10b981', icon: '🔢' },
-  CONTRATTO:   { label: "Contratto d'appalto",  color: '#8b5cf6', icon: '📝' },
-  VERBALE:     { label: 'Verbale',              color: '#6b7280', icon: '🗒️' },
-  SAL_FIRMATO: { label: 'SAL firmato',          color: '#10b981', icon: '✅' },
-  VARIANTE:    { label: 'Variante',             color: '#ef4444', icon: '🔄' },
-  DAM:         { label: 'DAM',                  color: '#ec4899', icon: '📦' },
-  ALTRO:       { label: 'Altro',               color: '#94a3b8', icon: '📄' },
-}
+const fmt = (b: number) => b > 1e6 ? (b/1e6).toFixed(1)+' MB' : b > 1e3 ? (b/1e3).toFixed(0)+' KB' : b+' B'
+const isImg = (mime: string) => mime?.startsWith('image/')
+const isPdf = (mime: string) => mime === 'application/pdf'
 
-const AZIENDA_ID = 'f5ddf460-715a-495e-997a-0246ea73326b'
-
-function fmtSize(bytes: number) {
-  if (!bytes) return '—'
-  if (bytes < 1048576) return `${(bytes/1024).toFixed(1)} KB`
-  return `${(bytes/1048576).toFixed(1)} MB`
-}
-
-export default function DocumentiPage() {
-  const { id } = useParams() as { id: string }
-  const [documenti, setDocumenti] = useState<Documento[]>([])
+export default function DocumentiPage({ params: p }: { params: Promise<{ id: string }> }) {
+  const { id } = use(p)
+  const [docs, setDocs] = useState<Documento[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
-  const [erroreUpload, setErroreUpload] = useState('')
-  const [aiAnalyzing, setAiAnalyzing] = useState<string | null>(null)
-  const [aiResult, setAiResult] = useState<Record<string, unknown> | null>(null)
-  const [showModal, setShowModal] = useState(false)
-  const [pendingFile, setPendingFile] = useState<File | null>(null)
-  const [nuovoTipo, setNuovoTipo] = useState<TipoDoc>('CAPITOLATO')
-  const [nuovoNome, setNuovoNome] = useState('')
-  const [filtroTipo, setFiltroTipo] = useState<TipoDoc | 'TUTTI'>('TUTTI')
-  const [dragOver, setDragOver] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
-  const modalFileRef = useRef<HTMLInputElement>(null)
+  const [filtroCategoria, setFiltroCategoria] = useState('tutti')
+  const [preview, setPreview] = useState<Documento | null>(null)
+  const [toast, setToast] = useState('')
+  const [form, setForm] = useState(false)
+  const [newDoc, setNewDoc] = useState({ nome: '', categoria: 'contratto', note: '' })
+  const [file, setFile] = useState<File | null>(null)
 
-  useEffect(() => { carica() }, [id])
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
-  async function carica() {
-    const { data, error } = await supabase
+  const carica = useCallback(async () => {
+    setLoading(true)
+    const { data } = await supabase
       .from('documenti_commessa')
       .select('*')
       .eq('commessa_id', id)
       .order('created_at', { ascending: false })
-    if (data) setDocumenti(data)
-    if (error) console.error('Carica documenti error:', error)
+    setDocs((data as Documento[]) || [])
     setLoading(false)
+  }, [id])
+
+  useEffect(() => { carica() }, [carica])
+
+  const getPublicUrl = (url: string) => {
+    if (!url) return ''
+    if (url.startsWith('http')) return url
+    const { data } = supabase.storage.from('documenti').getPublicUrl(url)
+    return data?.publicUrl || ''
   }
 
-  async function getAziendaId(): Promise<string> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return AZIENDA_ID
-      const { data } = await supabase.from('utenti').select('azienda_id').eq('id', user.id).single()
-      return data?.azienda_id || AZIENDA_ID
-    } catch { return AZIENDA_ID }
-  }
-
-  function apriModal(file?: File) {
-    setPendingFile(file || null)
-    setNuovoNome(file ? file.name.replace(/\.[^/.]+$/, '') : '')
-    setErroreUpload('')
-    setShowModal(true)
-  }
-
-  async function uploadFile() {
-    if (!pendingFile) return
+  const upload = async () => {
+    if (!file || !newDoc.nome.trim()) { showToast('Inserisci nome e seleziona un file'); return }
     setUploading(true)
-    setErroreUpload('')
     try {
-      const aziendaId = await getAziendaId()
-      const ext = pendingFile.name.split('.').pop() || 'bin'
-      const path = `${aziendaId}/${id}/${Date.now()}.${ext}`
-
-      // Upload su Storage (non bloccante se il bucket non esiste)
-      let fileUrl: string | null = null
-      try {
-        const { error: storageErr } = await supabase.storage.from('documenti').upload(path, pendingFile, { upsert: false })
-        if (!storageErr) {
-          fileUrl = supabase.storage.from('documenti').getPublicUrl(path).data.publicUrl
-        } else {
-          console.warn('Storage upload skip:', storageErr.message)
-        }
-      } catch (storageEx) {
-        console.warn('Storage exception:', storageEx)
-      }
-
-      // Insert DB — funziona anche senza file_url
-      const { data: doc, error: dbErr } = await supabase
-        .from('documenti_commessa')
-        .insert([{
-          commessa_id: id,
-          tipo: nuovoTipo,
-          nome: nuovoNome || pendingFile.name.replace(/\.[^/.]+$/, ''),
-          file_nome: pendingFile.name,
-          file_size: pendingFile.size,
-          file_url: fileUrl,
-          ai_elaborato: false,
-          ai_dati_estratti: {},
-          versione: 1,
-        }])
-        .select()
-        .single()
-
-      if (dbErr) {
-        setErroreUpload(`Errore DB: ${dbErr.message} [${dbErr.code}]`)
-        return
-      }
-
-      if (doc) {
-        setDocumenti(prev => [doc, ...prev])
-        setShowModal(false)
-        setPendingFile(null)
-        setNuovoNome('')
-        // AI analisi automatica per doc rilevanti
-        if (['CAPITOLATO', 'BANDO', 'CONTRATTO', 'COMPUTO'].includes(nuovoTipo)) {
-          analizzaAI(doc.id, pendingFile)
-        }
-      }
-    } catch (err) {
-      setErroreUpload(`Errore: ${String(err)}`)
+      const ext = file.name.split('.').pop()
+      const path = `${id}/${Date.now()}.${ext}`
+      const { error: upErr } = await supabase.storage.from('documenti').upload(path, file)
+      if (upErr) throw upErr
+      const { data: urlData } = supabase.storage.from('documenti').getPublicUrl(path)
+      await supabase.from('documenti_commessa').insert({
+        commessa_id: id,
+        nome: newDoc.nome.trim(),
+        categoria: newDoc.categoria,
+        url: urlData.publicUrl,
+        tipo_mime: file.type,
+        dimensione: file.size,
+        note: newDoc.note,
+      })
+      showToast('Documento caricato')
+      setForm(false)
+      setFile(null)
+      setNewDoc({ nome: '', categoria: 'contratto', note: '' })
+      carica()
+    } catch (e: any) {
+      showToast('Errore upload: ' + e.message)
     } finally {
       setUploading(false)
     }
   }
 
-  async function analizzaAI(docId: string, file?: File) {
-    setAiAnalyzing(docId)
-    try {
-      let testoFile = ''
-      if (file) {
-        const isDocx = file.name.toLowerCase().endsWith('.docx') || file.type.includes('officedocument')
-        const isPdf = file.type === 'application/pdf'
-        if (isDocx) {
-          const fd = new FormData(); fd.append('file', file)
-          const dr = await fetch('/api/docx-text', { method: 'POST', body: fd })
-          const dj = await dr.json() as {ok: boolean; testo?: string}
-          testoFile = dj.ok ? (dj.testo || '') : ''
-        } else if (!isPdf) {
-          testoFile = await file.text().catch(() => '')
-        }
-      }
-      if (testoFile.trim().length < 20) {
-        setAiAnalyzing(null)
-        return
-      }
-      const response = await fetch('/api/ai-estrai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ testo: testoFile, tipo: 'documento' })
-      })
-      const result = await response.json() as { ok: boolean; dati?: Record<string, unknown> }
-      if (result.ok && result.dati) {
-        await supabase.from('documenti_commessa')
-          .update({ ai_elaborato: true, ai_dati_estratti: result.dati })
-          .eq('id', docId)
-        setDocumenti(prev => prev.map(d => d.id === docId ? { ...d, ai_elaborato: true, ai_dati_estratti: result.dati as Record<string, unknown> } : d))
-        setAiResult(result.dati)
-      }
-    } catch (err) { console.error('AI error:', err) }
-    setAiAnalyzing(null)
+  const elimina = async (doc: Documento) => {
+    if (!window.confirm(`Eliminare il documento "${doc.nome}"?`)) return
+    if (!window.confirm('Conferma definitiva: il documento verrà eliminato permanentemente.')) return
+    await supabase.from('documenti_commessa').delete().eq('id', doc.id)
+    showToast('Documento eliminato')
+    carica()
   }
 
-  async function elimina(docId: string) {
-    if (!confirm('Eliminare il documento?')) return
-    await supabase.from('documenti_commessa').delete().eq('id', docId)
-    setDocumenti(prev => prev.filter(d => d.id !== docId))
-  }
+  const docsFiltrati = filtroCategoria === 'tutti' ? docs : docs.filter(d => d.categoria === filtroCategoria)
 
-  function handleDrop(e: React.DragEvent) {
-    e.preventDefault(); setDragOver(false)
-    const file = e.dataTransfer.files[0]
-    if (file) apriModal(file)
+  const stileCard: React.CSSProperties = {
+    background: 'var(--panel)',
+    border: '1px solid var(--border)',
+    borderRadius: 12,
+    overflow: 'hidden',
+    boxShadow: 'var(--shadow-sm)'
   }
-
-  const filtrati = documenti.filter(d => filtroTipo === 'TUTTI' || d.tipo === filtroTipo)
-  const inp: React.CSSProperties = { width: '100%', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 7, padding: '8px 11px', color: '#1e293b', fontSize: 13, boxSizing: 'border-box' as const }
-  const lbl: React.CSSProperties = { fontSize: 10, color: '#64748b', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.05em', display: 'block', marginBottom: 4 }
 
   return (
-    <div style={{ padding: '24px 32px' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+    <div style={{ minHeight: '100%', background: 'var(--bg)', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }} className="fade-in">
+
+      {/* HEADER */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', ...stileCard, padding: '12px 16px' }}>
         <div>
-          <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--t1)', margin: 0 }}>Documenti & AI</h2>
-          <p style={{ fontSize: 12, color: 'var(--t3)', marginTop: 4 }}>Archivio documenti · AI estrae dati automaticamente da capitolati e contratti</p>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--t1)' }}>Documenti Commessa</h2>
+          <p style={{ fontSize: 12, color: 'var(--t3)', marginTop: 2 }}>{docs.length} documento{docs.length !== 1 ? 'i' : ''} caricato{docs.length !== 1 ? 'i' : ''}</p>
         </div>
-        <button onClick={() => apriModal()} className="btn-primary"><Upload size={14} /> Carica documento</button>
-      </div>
-
-      {/* Filtri */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
-        <button onClick={() => setFiltroTipo('TUTTI')} style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid var(--border)', fontSize: 11, fontWeight: 600, cursor: 'pointer', background: filtroTipo === 'TUTTI' ? 'var(--accent)' : 'var(--panel)', color: filtroTipo === 'TUTTI' ? 'white' : 'var(--t3)' }}>
-          Tutti ({documenti.length})
+        <button className="btn-primary" style={{ fontSize: 12, padding: '8px 14px' }}
+          onClick={() => setForm(true)}>
+          + Carica documento
         </button>
-        {(Object.keys(TIPO_META) as TipoDoc[]).filter(t => documenti.some(d => d.tipo === t)).map(t => (
-          <button key={t} onClick={() => setFiltroTipo(t)} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${TIPO_META[t].color}30`, fontSize: 11, fontWeight: 600, cursor: 'pointer', background: filtroTipo === t ? `${TIPO_META[t].color}15` : 'var(--panel)', color: filtroTipo === t ? TIPO_META[t].color : 'var(--t3)' }}>
-            {TIPO_META[t].icon} {TIPO_META[t].label} ({documenti.filter(d => d.tipo === t).length})
-          </button>
-        ))}
       </div>
 
-      {/* Drop area */}
-      <div
-        ref={fileRef as unknown as React.RefObject<HTMLDivElement>}
-        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={handleDrop}
-        onClick={() => { const inp = document.getElementById('doc-file-input') as HTMLInputElement; inp?.click() }}
-        style={{ border: `2px dashed ${dragOver ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 12, padding: '18px 24px', background: dragOver ? 'var(--accent-light)' : 'var(--panel)', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 20 }}
-      >
-        <Upload size={18} color={dragOver ? 'var(--accent)' : 'var(--t4)'} />
-        <span style={{ fontSize: 13, color: dragOver ? 'var(--accent)' : 'var(--t3)' }}>
-          Trascina qui un documento oppure <strong>clicca per selezionare</strong> — PDF, Word, TXT, XPWE
-        </span>
-        <input id="doc-file-input" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.xpwe" style={{ display: 'none' }}
-          onChange={e => { const f = e.target.files?.[0]; if (f) apriModal(f); e.target.value = '' }} />
+      {/* FILTRI CATEGORIE */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button
+          onClick={() => setFiltroCategoria('tutti')}
+          style={{ padding: '6px 12px', borderRadius: 20, border: '1px solid var(--border)', cursor: 'pointer', fontSize: 11, fontWeight: 600, background: filtroCategoria === 'tutti' ? 'var(--accent)' : 'var(--panel)', color: filtroCategoria === 'tutti' ? '#fff' : 'var(--t2)' }}>
+          Tutti ({docs.length})
+        </button>
+        {CATEGORIE.map(c => {
+          const count = docs.filter(d => d.categoria === c.id).length
+          if (count === 0) return null
+          return (
+            <button key={c.id}
+              onClick={() => setFiltroCategoria(c.id)}
+              style={{ padding: '6px 12px', borderRadius: 20, border: '1px solid var(--border)', cursor: 'pointer', fontSize: 11, fontWeight: 600, background: filtroCategoria === c.id ? 'var(--accent)' : 'var(--panel)', color: filtroCategoria === c.id ? '#fff' : 'var(--t2)' }}>
+              {c.icona} {c.label} ({count})
+            </button>
+          )
+        })}
       </div>
 
-      {/* Risultato AI */}
-      {aiResult && (
-        <div style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 12, padding: '16px 20px', marginBottom: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <Sparkles size={16} color="var(--accent)" />
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--accent)' }}>AI ha estratto questi dati</span>
-            <button onClick={() => setAiResult(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--t3)' }}>✕</button>
+      {/* LISTA DOCUMENTI */}
+      <div style={stileCard}>
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center' }}><span className="spinner" /></div>
+        ) : docsFiltrati.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--t3)', fontSize: 13 }}>
+            {docs.length === 0 ? 'Nessun documento caricato. Usa "+ Carica documento" per iniziare.' : 'Nessun documento in questa categoria.'}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
-            {Object.entries(aiResult).filter(([, v]) => v && String(v).trim()).map(([k, v]) => (
-              <div key={k} style={{ background: 'var(--panel)', borderRadius: 8, padding: '8px 12px' }}>
-                <div style={{ fontSize: 10, color: 'var(--t3)', textTransform: 'uppercase', marginBottom: 2 }}>{k.replace(/_/g, ' ')}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--t1)' }}>{String(v)}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Lista documenti */}
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: 40 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
-      ) : filtrati.length === 0 ? (
-        <div style={{ padding: 48, textAlign: 'center', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12, color: 'var(--t3)' }}>
-          <File size={32} style={{ marginBottom: 12, opacity: 0.3 }} />
-          <div style={{ fontSize: 14, marginBottom: 8 }}>Nessun documento</div>
-          <div style={{ fontSize: 12 }}>Carica il capitolato, il contratto o altri documenti di commessa</div>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {filtrati.map(doc => {
-            const tm = TIPO_META[doc.tipo]
-            return (
-              <div key={doc.id} style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 9, background: `${tm.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{tm.icon}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: tm.color }}>{tm.label}</span>
-                    {doc.ai_elaborato && <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'var(--accent)', background: 'var(--accent-light)', borderRadius: 5, padding: '1px 6px' }}><Sparkles size={9} /> AI elaborato</span>}
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12, padding: 16 }}>
+            {docsFiltrati.map(doc => {
+              const pubUrl = getPublicUrl(doc.url)
+              const cat = CATEGORIE.find(c => c.id === doc.categoria)
+              return (
+                <div key={doc.id} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', cursor: 'pointer' }}
+                  onClick={() => setPreview(doc)}>
+                  {/* Thumbnail */}
+                  <div style={{ height: 120, background: 'var(--panel)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                    {isImg(doc.tipo_mime) ? (
+                      <img src={pubUrl} alt={doc.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 36 }}>{isPdf(doc.tipo_mime) ? '📄' : '📎'}</div>
+                        <div style={{ fontSize: 10, color: 'var(--t3)', marginTop: 4 }}>{doc.tipo_mime?.split('/')[1]?.toUpperCase() || 'FILE'}</div>
+                      </div>
+                    )}
+                    <div style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.5)', borderRadius: 4, padding: '2px 6px', fontSize: 9, color: '#fff' }}>
+                      {cat?.icona} {cat?.label || doc.categoria}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)' }} className="truncate">{doc.nome}</div>
-                  <div style={{ fontSize: 11, color: 'var(--t3)' }}>{doc.file_nome} · {fmtSize(doc.file_size)} · {doc.created_at?.slice(0, 10)}</div>
+                  {/* Info */}
+                  <div style={{ padding: '10px 12px' }}>
+                    <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--t1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.nome}</p>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
+                      <span style={{ fontSize: 10, color: 'var(--t3)' }}>{fmt(doc.dimensione || 0)}</span>
+                      <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
+                        <a href={pubUrl} download={doc.nome} target="_blank" rel="noreferrer"
+                          style={{ fontSize: 10, color: 'var(--accent)', textDecoration: 'none', padding: '3px 8px', border: '1px solid var(--accent)', borderRadius: 4 }}>
+                          ⬇ Scarica
+                        </a>
+                        <button onClick={() => elimina(doc)}
+                          style={{ fontSize: 10, color: '#ef4444', background: 'none', border: '1px solid #ef4444', borderRadius: 4, padding: '3px 8px', cursor: 'pointer' }}>
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                  {!doc.ai_elaborato && ['CAPITOLATO', 'BANDO', 'CONTRATTO'].includes(doc.tipo) && (
-                    <button onClick={() => analizzaAI(doc.id)} disabled={aiAnalyzing === doc.id}
-                      style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 7, border: '1px solid rgba(59,130,246,0.3)', background: 'var(--accent-light)', color: 'var(--accent)', fontSize: 11, cursor: aiAnalyzing === doc.id ? 'wait' : 'pointer', fontWeight: 600 }}>
-                      <Sparkles size={11} />{aiAnalyzing === doc.id ? 'Analisi...' : 'Analizza AI'}
-                    </button>
-                  )}
-                  <button onClick={() => elimina(doc.id)} style={{ padding: '6px 10px', borderRadius: 7, border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.06)', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                    <Trash2 size={13} />
-                  </button>
-                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* MODAL PREVIEW */}
+      {preview && (
+        <div className="modal-overlay" onClick={() => setPreview(null)}>
+          <div style={{ background: 'var(--panel)', borderRadius: 16, maxWidth: '90vw', maxHeight: '90vh', overflow: 'auto', position: 'relative' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700 }}>{preview.nome}</h3>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <a href={getPublicUrl(preview.url)} download={preview.nome} target="_blank" rel="noreferrer"
+                  style={{ fontSize: 12, color: 'var(--accent)', padding: '6px 12px', border: '1px solid var(--accent)', borderRadius: 6, textDecoration: 'none' }}>
+                  ⬇ Scarica
+                </a>
+                <button onClick={() => setPreview(null)}
+                  style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--t3)' }}>✕</button>
               </div>
-            )
-          })}
+            </div>
+            <div style={{ padding: 16, minWidth: 320 }}>
+              {isImg(preview.tipo_mime) ? (
+                <img src={getPublicUrl(preview.url)} alt={preview.nome}
+                  style={{ maxWidth: '80vw', maxHeight: '70vh', objectFit: 'contain', borderRadius: 8 }} />
+              ) : isPdf(preview.tipo_mime) ? (
+                <iframe src={getPublicUrl(preview.url)} style={{ width: '80vw', height: '70vh', border: 'none', borderRadius: 8 }} title={preview.nome} />
+              ) : (
+                <div style={{ textAlign: 'center', padding: 40 }}>
+                  <div style={{ fontSize: 60 }}>📎</div>
+                  <p style={{ marginTop: 12, color: 'var(--t2)' }}>{preview.nome}</p>
+                  <p style={{ fontSize: 12, color: 'var(--t3)', margin: '8px 0 16px' }}>{preview.tipo_mime} — {fmt(preview.dimensione || 0)}</p>
+                  <a href={getPublicUrl(preview.url)} download={preview.nome} target="_blank" rel="noreferrer"
+                    style={{ color: 'var(--accent)', padding: '10px 20px', border: '1px solid var(--accent)', borderRadius: 8, textDecoration: 'none', fontSize: 13 }}>
+                    ⬇ Scarica il file
+                  </a>
+                </div>
+              )}
+              {preview.note && (
+                <p style={{ marginTop: 12, fontSize: 12, color: 'var(--t3)', fontStyle: 'italic' }}>Note: {preview.note}</p>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Modal upload */}
-      {showModal && (
-        <div className="modal-overlay">
-          <div className="modal-box" style={{ maxWidth: 500 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--t1)', margin: 0 }}>Carica documento</h2>
-              <button onClick={() => { setShowModal(false); setPendingFile(null) }} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: 8, cursor: 'pointer' }}><X size={15} color="#64748b" /></button>
+      {/* MODAL UPLOAD */}
+      {form && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setForm(false) }}>
+          <div className="modal-box" style={{ maxWidth: 500, width: '92%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700 }}>Carica documento</h3>
+              <button onClick={() => setForm(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--t3)' }}>✕</button>
             </div>
-
-            {erroreUpload && (
-              <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: '#ef4444', display: 'flex', gap: 8 }}>
-                <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />{erroreUpload}
-              </div>
-            )}
-
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
-                <label style={lbl}>Tipo documento</label>
-                <select value={nuovoTipo} onChange={e => setNuovoTipo(e.target.value as TipoDoc)} style={{ ...inp, width: '100%' }}>
-                  {(Object.keys(TIPO_META) as TipoDoc[]).map(t => <option key={t} value={t}>{TIPO_META[t].icon} {TIPO_META[t].label}</option>)}
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--t2)', display: 'block', marginBottom: 4 }}>Nome documento *</label>
+                <input style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 12, background: 'var(--panel)', color: 'var(--t1)', outline: 'none' }}
+                  value={newDoc.nome} onChange={e => setNewDoc({ ...newDoc, nome: e.target.value })}
+                  placeholder="Es. Contratto d'appalto, Planimetria piano terra..." />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--t2)', display: 'block', marginBottom: 4 }}>Categoria</label>
+                <select style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 12, background: 'var(--panel)', color: 'var(--t1)', outline: 'none' }}
+                  value={newDoc.categoria} onChange={e => setNewDoc({ ...newDoc, categoria: e.target.value })}>
+                  {CATEGORIE.map(c => <option key={c.id} value={c.id}>{c.icona} {c.label}</option>)}
                 </select>
               </div>
               <div>
-                <label style={lbl}>Nome documento</label>
-                <input value={nuovoNome} onChange={e => setNuovoNome(e.target.value)} placeholder="Lascia vuoto per usare il nome del file" style={inp} />
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--t2)', display: 'block', marginBottom: 4 }}>File *</label>
+                <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.dwg,.dxf"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) { setFile(f); if (!newDoc.nome) setNewDoc(prev => ({ ...prev, nome: f.name.replace(/\.[^.]+$/, '') })) } }}
+                  style={{ width: '100%', padding: '8px', fontSize: 12 }} />
+                {file && <p style={{ fontSize: 10, color: 'var(--t3)', marginTop: 4 }}>{file.name} — {fmt(file.size)}</p>}
               </div>
-
-              {pendingFile ? (
-                <div style={{ border: '2px solid var(--accent)', borderRadius: 10, padding: '16px', background: 'var(--accent-light)', textAlign: 'center' }}>
-                  <div style={{ fontSize: 28, marginBottom: 6 }}>📄</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>{pendingFile.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 2 }}>{fmtSize(pendingFile.size)}</div>
-                  <button onClick={() => { setPendingFile(null); setNuovoNome('') }} style={{ marginTop: 8, background: 'none', border: 'none', color: 'var(--t3)', cursor: 'pointer', fontSize: 11 }}>✕ Cambia file</button>
-                </div>
-              ) : (
-                <div onClick={() => modalFileRef.current?.click()} style={{ border: '2px dashed var(--border)', borderRadius: 10, padding: '28px', textAlign: 'center', cursor: 'pointer', background: 'var(--bg)' }}>
-                  <Upload size={24} color="var(--t4)" style={{ marginBottom: 8 }} />
-                  <div style={{ fontSize: 13, color: 'var(--t3)' }}>Clicca per selezionare il file</div>
-                  <div style={{ fontSize: 11, color: 'var(--t4)', marginTop: 4 }}>PDF, Word, TXT, XPWE</div>
-                  <input ref={modalFileRef} type="file" accept=".pdf,.doc,.docx,.txt,.xpwe" style={{ display: 'none' }}
-                    onChange={e => { const f = e.target.files?.[0]; if (f) { setPendingFile(f); if (!nuovoNome) setNuovoNome(f.name.replace(/\.[^/.]+$/, '')) } }} />
-                </div>
-              )}
-
-              {['CAPITOLATO', 'BANDO', 'CONTRATTO'].includes(nuovoTipo) && pendingFile && (
-                <div style={{ display: 'flex', gap: 8, padding: '10px 14px', background: 'var(--accent-light)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 8 }}>
-                  <Sparkles size={14} color="var(--accent)" style={{ flexShrink: 0, marginTop: 1 }} />
-                  <div style={{ fontSize: 12, color: 'var(--t2)' }}>AI analizzerà automaticamente il documento ed estrarrà CIG, importo, date e figure professionali.</div>
-                </div>
-              )}
-            </div>
-
-            <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button onClick={() => { setShowModal(false); setPendingFile(null) }} className="btn-secondary">Annulla</button>
-              <button onClick={uploadFile} disabled={!pendingFile || uploading} className="btn-primary" style={{ opacity: (!pendingFile || uploading) ? 0.5 : 1 }}>
-                <Upload size={14} />{uploading ? 'Caricamento...' : 'Carica documento'}
-              </button>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--t2)', display: 'block', marginBottom: 4 }}>Note (opzionale)</label>
+                <textarea style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 12, background: 'var(--panel)', color: 'var(--t1)', outline: 'none', resize: 'vertical', minHeight: 60 }}
+                  value={newDoc.note} onChange={e => setNewDoc({ ...newDoc, note: e.target.value })} />
+              </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button onClick={() => setForm(false)} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'none', cursor: 'pointer', fontSize: 12 }}>Annulla</button>
+                <button onClick={upload} disabled={uploading} className="btn-primary" style={{ fontSize: 12, padding: '8px 16px' }}>
+                  {uploading ? 'Caricamento...' : 'Carica'}
+                </button>
+              </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 20, right: 20, background: '#14532d', color: '#fff', padding: '10px 18px', borderRadius: 10, fontSize: 12, fontWeight: 700, zIndex: 1000, boxShadow: 'var(--shadow-lg)' }}>
+          {toast}
         </div>
       )}
     </div>
