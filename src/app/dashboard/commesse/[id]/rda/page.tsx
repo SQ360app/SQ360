@@ -11,7 +11,7 @@ const supabase = createClient(
 const fi = (n: number, d = 2) => n?.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? '—'
 
 const STATI = ['bozza','approvata','inviata','chiusa','annullata']
-const TIPI  = ['MAT','MAN','NOL','SUB','MIX']h
+const TIPI  = ['MAT','MAN','NOL','SUB','MIX']
 
 const STATO_COLOR: Record<string,string> = {
   bozza:'#f59e0b', approvata:'#3b82f6', inviata:'#8b5cf6', chiusa:'#10b981', annullata:'#ef4444'
@@ -30,6 +30,7 @@ interface Fornitore {
   pec?: string; email?: string; telefono?: string
   ordine_professionale?: string; numero_iscrizione?: string
 }
+
 function FornitoreCard({ nome }: { nome: string }) {
   const [data, setData] = React.useState<Fornitore | null>(null)
   React.useEffect(() => {
@@ -51,6 +52,7 @@ function FornitoreCard({ nome }: { nome: string }) {
     </div>
   )
 }
+
 export default function RDAPage({ params: p }: { params: Promise<{ id: string }> }) {
   const { id } = use(p)
   const [rdaList, setRdaList] = useState<RDA[]>([])
@@ -64,8 +66,9 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
   const [fSearch, setFSearch] = useState('')
   const [fResults, setFResults] = useState<Fornitore[]>([])
   const [saving, setSaving] = useState(false)
-const [toast, setToast] = useState('')
+  const [toast, setToast] = useState('')
   const [viewFornitore, setViewFornitore] = useState<string | null>(null)
+
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
   const carica = useCallback(async () => {
@@ -125,7 +128,8 @@ const [toast, setToast] = useState('')
   }
 
   const elimina = async (rda: RDA) => {
-    if (!confirm(`Eliminare RDA ${rda.codice}?`)) return
+    if (!window.confirm(`Eliminare la RDA ${rda.codice}?`)) return
+    if (!window.confirm(`Conferma definitiva: la RDA "${rda.codice}" verrà eliminata permanentemente.`)) return
     await supabase.from('rda').delete().eq('id', rda.id)
     showToast('RDA eliminata'); carica()
   }
@@ -316,17 +320,18 @@ const [toast, setToast] = useState('')
           </div>
         </div>
       )}
-{viewFornitore && (
-  <div className="modal-overlay" onClick={() => setViewFornitore(null)}>
-    <div className="modal-box" style={{ maxWidth:480, width:'92%' }} onClick={e => e.stopPropagation()}>
-      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:16 }}>
-        <h3 style={{ fontSize:14, fontWeight:700 }}>Anagrafica Fornitore</h3>
-        <button onClick={() => setViewFornitore(null)} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer' }}>x</button>
-      </div>
-      <FornitoreCard nome={viewFornitore} />
-    </div>
-  </div>
-)}
+
+      {viewFornitore && (
+        <div className="modal-overlay" onClick={() => setViewFornitore(null)}>
+          <div className="modal-box" style={{ maxWidth:480, width:'92%' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:16 }}>
+              <h3 style={{ fontSize:14, fontWeight:700 }}>Anagrafica Fornitore</h3>
+              <button onClick={() => setViewFornitore(null)} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'var(--t3)' }}>✕</button>
+            </div>
+            <FornitoreCard nome={viewFornitore} />
+          </div>
+        </div>
+      )}
       {toast && (
         <div style={{ position:'fixed', bottom:20, right:20, background:'#14532d', color:'#fff', padding:'10px 18px', borderRadius:10, fontSize:12, fontWeight:700, zIndex:1000, boxShadow:'var(--shadow-lg)' }}>
           {toast}
