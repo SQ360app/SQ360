@@ -1,396 +1,286 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { supabase } from '@/lib/supabase'
-import { Search, Plus, Upload, Sparkles, X, Save, CheckCircle, AlertCircle, AlertTriangle, Edit2, Phone, Mail } from 'lucide-react'
+import React, { useState, useEffect, useCallback } from 'react'
+import { createClient } from '@supabase/supabase-js'
 
-interface Fornitore {
-  id: string; ragione_sociale: string; partita_iva: string
-  categoria_soa: string; classifica_soa: string
-  email: string; telefono: string; citta: string; provincia: string
-  durc_scadenza: string; tipo: string; codice_fornitore: string
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
+const TIPI = ['professionista', 'fornitore', 'subappaltatore', 'nolo', 'altro']
+const TIPI_COLOR: Record<string, string> = {
+  professionista: '#3b82f6', fornitore: '#10b981',
+  subappaltatore: '#8b5cf6', nolo: '#f59e0b', altro: '#6b7280'
 }
 
-interface FormFornitore {
-  codice_fornitore: string; ragione_sociale: string; partita_iva: string
-  codice_fiscale: string; pec: string; email: string; telefono: string
-  indirizzo: string; citta: string; provincia: string; cap: string
-  codice_sdi: string; categoria_soa: string; classifica_soa: string
-  codice_ateco: string; tipo: string
-  durc_scadenza: string; soa_scadenza: string; note: string
+interface Soggetto {
+  id: string
+  nome?: string; cognome?: string; ragione_sociale?: string
+  tipo: string; specializzazione?: string
+  pec?: string; email?: string; telefono?: string
+  ordine_professionale?: string; numero_iscrizione?: string
+  categoria_soa?: string; studio?: string
+  attivo: boolean; created_at: string
 }
 
-const PROVINCE_IT = ['AG','AL','AN','AO','AP','AQ','AR','AT','AV','BA','BG','BI','BL','BN','BO','BR','BS','BT','BZ','CA','CB','CE','CH','CL','CN','CO','CR','CS','CT','CZ','EN','FC','FE','FG','FI','FM','FR','GE','GO','GR','IM','IS','KR','LC','LE','LI','LO','LT','LU','MB','MC','ME','MI','MN','MO','MS','MT','NA','NO','NU','OG','OR','PA','PC','PD','PE','PG','PI','PN','PO','PR','PT','PU','PV','PZ','RA','RC','RE','RG','RI','RM','RN','RO','SA','SI','SO','SP','SR','SS','SU','SV','TA','TE','TN','TO','TP','TR','TS','TV','UD','VA','VB','VC','VE','VI','VR','VT','VV']
-const TIPI = ['SUBAPPALTATORE','FORNITORE_MATERIALI','NOLO','PROFESSIONISTA','LABORATORIO','ALTRO']
-
-function durcInfo(scadenza?: string): { valido: boolean; label: string; color: string } {
-  if (!scadenza) return { valido: false, label: 'Non disponibile', color: '#6b7280' }
-  const gg = Math.ceil((new Date(scadenza).getTime() - Date.now()) / 86400000)
-  if (gg < 0) return { valido: false, label: `Scaduto ${Math.abs(gg)}gg fa`, color: '#ef4444' }
-  if (gg <= 30) return { valido: true, label: `Scade in ${gg}gg`, color: '#f59e0b' }
-  return { valido: true, label: `Valido`, color: '#10b981' }
-}
-
-function generaCodiceForn(prog: number) {
-  return `F${String(new Date().getFullYear()).slice(-2)}.${String(prog).padStart(4,'0')}`
-}
-
-const FORM_VUOTO: FormFornitore = {
-  codice_fornitore:'', ragione_sociale:'', partita_iva:'', codice_fiscale:'',
-  pec:'', email:'', telefono:'', indirizzo:'', citta:'', provincia:'NA',
-  cap:'', codice_sdi:'', categoria_soa:'', classifica_soa:'',
-  codice_ateco:'', tipo:'SUBAPPALTATORE',
-  durc_scadenza:'', soa_scadenza:'', note:''
-}
-
-type Step = 'UPLOAD' | 'AI_LOADING' | 'FORM'
+const fNome = (s: Soggetto) => s.ragione_sociale || ((s.nome || '') + ' ' + (s.cognome || '')).trim()
 
 export default function FornitoriPage() {
-  const [fornitori, setFornitori] = useState<Fornitore[]>([])
+  const [lista, setLista] = useState<Soggetto[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [filtroTipo, setFiltroTipo] = useState('TUTTI')
-  const [showNuovo, setShowNuovo] = useState(false)
-  const [step, setStep] = useState<Step>('UPLOAD')
-  const [aiStatus, setAiStatus] = useState('')
+  const [filtroTipo, setFiltroTipo] = useState('tutti')
+  const [detail, setDetail] = useState<Soggetto | null>(null)
+  const [form, setForm] = useState(false)
+  const [edit, setEdit] = useState<Partial<Soggetto> | null>(null)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState<FormFornitore>({ ...FORM_VUOTO })
-  const fileRef = useRef<HTMLInputElement>(null)
+  const [toast, setToast] = useState('')
 
-  useEffect(() => { carica() }, [])
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
-  async function carica() {
+  const carica = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase.from('fornitori')
-      .select('id,codice_fornitore,ragione_sociale,partita_iva,categoria_soa,classifica_soa,email,telefono,citta,provincia,durc_scadenza,tipo')
-      .order('ragione_sociale')
-    if (data) setFornitori(data as Fornitore[])
+    const { data } = await supabase
+      .from('professionisti_fornitori')
+      .select('*')
+      .order('created_at', { ascending: false })
+    setLista((data as Soggetto[]) || [])
     setLoading(false)
-  }
+  }, [])
 
-  function setF(k: keyof FormFornitore, v: string) {
-    setForm(p => ({ ...p, [k]: v }))
-  }
+  useEffect(() => { carica() }, [carica])
 
-  async function handleFileImport(file: File) {
-    setStep('AI_LOADING')
-    setAiStatus('Lettura documento...')
-    try {
-      const testo = await file.text()
-      setAiStatus('AI estrae i dati aziendali...')
-      const res = await fetch('/api/ai-estrai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ testo: testo.slice(0, 8000), tipo: 'fornitore' })
-      })
-      const json = await res.json() as { ok: boolean; dati?: Record<string, string> }
-      if (json.ok && json.dati) {
-        const d = json.dati
-        const codice = generaCodiceForn(fornitori.length + 1)
-        setForm(p => ({
-          ...p,
-          codice_fornitore: codice,
-          ragione_sociale: d.ragione_sociale || p.ragione_sociale,
-          partita_iva: d.partita_iva || p.partita_iva,
-          codice_fiscale: d.codice_fiscale || p.codice_fiscale,
-          pec: d.pec || p.pec,
-          email: d.email || p.email,
-          telefono: d.telefono || p.telefono,
-          indirizzo: d.indirizzo || p.indirizzo,
-          citta: d.citta || p.citta,
-          provincia: d.provincia || p.provincia,
-          cap: d.cap || p.cap,
-          codice_sdi: d.codice_sdi || p.codice_sdi,
-          categoria_soa: d.categoria_soa || p.categoria_soa,
-          classifica_soa: d.classifica_soa || p.classifica_soa,
-          codice_ateco: d.codice_ateco || p.codice_ateco,
-          note: d.note || p.note,
-        }))
-        setAiStatus('✅ Dati estratti — verifica e modifica prima di confermare')
-      } else {
-        setAiStatus('⚠️ Estrazione parziale — integra i dati mancanti')
-      }
-    } catch {
-      setAiStatus('❌ Errore — inserisci i dati manualmente')
-    }
-    setStep('FORM')
-  }
-
-  async function creaFornitore() {
-    if (!form.ragione_sociale) return
+  const salva = async () => {
+    if (!edit?.tipo) { showToast('Seleziona tipo'); return }
+    if (!fNome(edit as Soggetto)) { showToast('Inserisci nome o ragione sociale'); return }
     setSaving(true)
-    const { data: ut } = await supabase.auth.getUser()
-    const { data: utData } = await supabase.from('utenti').select('azienda_id').eq('id', ut.user?.id || '').single()
-    const codice = form.codice_fornitore || generaCodiceForn(fornitori.length + 1)
-    await supabase.from('fornitori').insert([{
-      azienda_id: utData?.azienda_id,
-      codice_fornitore: codice,
-      ragione_sociale: form.ragione_sociale,
-      partita_iva: form.partita_iva || null,
-      codice_fiscale: form.codice_fiscale || null,
-      pec: form.pec || null,
-      email: form.email || null,
-      telefono: form.telefono || null,
-      indirizzo: form.indirizzo || null,
-      citta: form.citta || null,
-      provincia: form.provincia || null,
-      cap: form.cap || null,
-      codice_sdi: form.codice_sdi || null,
-      categoria_soa: form.categoria_soa || null,
-      classifica_soa: form.classifica_soa || null,
-      codice_ateco: form.codice_ateco || null,
-      tipo: form.tipo,
-      durc_scadenza: form.durc_scadenza || null,
-      soa_scadenza: form.soa_scadenza || null,
-      note: form.note || null,
-    }])
-    setSaving(false)
-    setShowNuovo(false)
-    await carica()
+    try {
+      if (edit.id) {
+        await supabase.from('professionisti_fornitori').update(edit).eq('id', edit.id)
+        showToast('Aggiornato')
+      } else {
+        await supabase.from('professionisti_fornitori').insert({ ...edit, attivo: true })
+        showToast('Aggiunto')
+      }
+      setForm(false); setEdit(null); carica()
+    } finally { setSaving(false) }
   }
 
-  function apriNuovo() {
-    setStep('UPLOAD'); setAiStatus('')
-    setForm({ ...FORM_VUOTO, codice_fornitore: generaCodiceForn(fornitori.length + 1) })
-    setShowNuovo(true)
+  const elimina = async (s: Soggetto) => {
+    const nome = fNome(s)
+    if (!window.confirm(`Eliminare "${nome}" dal database?`)) return
+    if (!window.confirm(`Conferma definitiva: "${nome}" verrà rimosso permanentemente e da tutte le commesse collegate.`)) return
+    await supabase.from('professionisti_fornitori').delete().eq('id', s.id)
+    if (detail?.id === s.id) setDetail(null)
+    showToast('Eliminato')
+    carica()
   }
 
-  const filtrati = fornitori.filter(f => {
-    const mt = filtroTipo === 'TUTTI' || f.tipo === filtroTipo
-    const mq = !search || [f.ragione_sociale, f.partita_iva, f.codice_fornitore].some(x => x?.toLowerCase().includes(search.toLowerCase()))
-    return mt && mq
+  const filtrati = lista.filter(s => {
+    const match = search ? fNome(s).toLowerCase().includes(search.toLowerCase()) || s.email?.toLowerCase().includes(search.toLowerCase()) || s.specializzazione?.toLowerCase().includes(search.toLowerCase()) : true
+    const tipo = filtroTipo === 'tutti' || s.tipo === filtroTipo
+    return match && tipo
   })
 
-  const durcScaduti = fornitori.filter(f => !durcInfo(f.durc_scadenza).valido).length
-  const durcOk = fornitori.filter(f => durcInfo(f.durc_scadenza).valido).length
-
-  const inp: React.CSSProperties = { width:'100%', boxSizing:'border-box', background:'#fff', border:'1px solid #e2e8f0', borderRadius:7, padding:'8px 10px', color:'#1e293b', fontSize:13 }
-  const lbl: React.CSSProperties = { fontSize:10, color:'#64748b', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em', display:'block', marginBottom:4 }
+  const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 12, background: 'var(--panel)', color: 'var(--t1)', outline: 'none' }
+  const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: 'var(--t2)', display: 'block', marginBottom: 4 }
 
   return (
-    <div style={{ padding:'22px 28px', background:'var(--bg)', minHeight:'100%' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--bg)', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }} className="fade-in">
 
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
+      {/* HEADER */}
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: 'var(--shadow-sm)' }}>
         <div>
-          <h1 style={{ fontSize:20, fontWeight:800, color:'var(--t1)', margin:0 }}>Fornitori & Subappaltatori</h1>
-          <p style={{ fontSize:12, color:'var(--t3)', marginTop:3 }}>
-            {fornitori.length} fornitori · DURC ok: {durcOk}
-            {durcScaduti > 0 && <span style={{ color:'#ef4444', marginLeft:10 }}>⚠ {durcScaduti} DURC scaduti</span>}
-          </p>
+          <h1 style={{ fontSize: 16, fontWeight: 700, color: 'var(--t1)' }}>Database Professionisti & Fornitori</h1>
+          <p style={{ fontSize: 12, color: 'var(--t3)', marginTop: 2 }}>{lista.length} soggetti nel database</p>
         </div>
-        <button onClick={apriNuovo} className="btn-primary" style={{ fontSize:13 }}>
-          <Plus size={14} /> Nuovo fornitore
+        <button className="btn-primary" style={{ fontSize: 12, padding: '8px 14px' }}
+          onClick={() => { setEdit({ tipo: 'professionista', attivo: true }); setForm(true) }}>
+          + Nuovo
         </button>
       </div>
 
-      {/* KPI */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, marginBottom:18 }}>
-        {[
-          { label:'Totale', val: String(fornitori.length), color:'#6b7280' },
-          { label:'Subappaltatori', val: String(fornitori.filter(f=>f.tipo==='SUBAPPALTATORE').length), color:'#3b82f6' },
-          { label:'DURC validi', val: String(durcOk), color:'#10b981' },
-          { label:'DURC scaduti', val: String(durcScaduti), color: durcScaduti > 0 ? '#ef4444' : '#6b7280' },
-        ].map((k,i) => (
-          <div key={i} className="kpi-card" style={{ borderLeft:`3px solid ${k.color}`, padding:'10px 14px' }}>
-            <div style={{ fontSize:9, color:'var(--t3)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4 }}>{k.label}</div>
-            <div style={{ fontSize:22, fontWeight:800, color:k.color }}>{k.val}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Filtri */}
-      <div style={{ display:'flex', gap:10, marginBottom:14, flexWrap:'wrap' }}>
-        <div style={{ position:'relative', flex:1, minWidth:240 }}>
-          <Search size={13} style={{ position:'absolute', left:11, top:'50%', transform:'translateY(-50%)', color:'var(--t3)' }} />
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cerca per ragione sociale, P.IVA..."
-            style={{ width:'100%', background:'var(--panel)', border:'1px solid var(--border)', borderRadius:9, padding:'9px 12px 9px 34px', fontSize:13, color:'var(--t1)', boxSizing:'border-box' }} />
-        </div>
-        <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
-          {['TUTTI',...TIPI].map(t => (
-            <button key={t} onClick={()=>setFiltroTipo(t)} style={{ padding:'6px 10px', borderRadius:7, border:'1px solid var(--border)', fontSize:10, fontWeight:600, cursor:'pointer', background:filtroTipo===t?'var(--accent)':'var(--panel)', color:filtroTipo===t?'white':'var(--t3)', whiteSpace:'nowrap' }}>
-              {t==='TUTTI'?'Tutti':t.replace('_',' ')}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Lista */}
-      <div className="card" style={{ overflow:'hidden' }}>
-        {loading ? (
-          <div style={{ padding:48, textAlign:'center' }}><div className="spinner" style={{ margin:'0 auto' }} /></div>
-        ) : filtrati.length === 0 ? (
-          <div style={{ padding:'60px 32px', textAlign:'center', color:'var(--t3)', fontSize:13 }}>
-            {fornitori.length === 0 ? 'Nessun fornitore — inserisci il primo' : 'Nessun fornitore con questo filtro'}
-          </div>
-        ) : filtrati.map((f, i) => {
-          const durc = durcInfo(f.durc_scadenza)
+      {/* KPI TIPI */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {['tutti', ...TIPI].map(t => {
+          const count = t === 'tutti' ? lista.length : lista.filter(s => s.tipo === t).length
           return (
-            <div key={f.id} style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 20px', borderBottom:i<filtrati.length-1?'1px solid var(--border)':'none', transition:'background 0.12s' }}
-              onMouseEnter={e=>e.currentTarget.style.background='var(--panel-hover)'}
-              onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-              {/* DURC indicator */}
-              <div style={{ width:8, height:8, borderRadius:'50%', background:durc.color, flexShrink:0 }} />
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:2 }}>
-                  <span style={{ fontFamily:'var(--font-mono)', fontSize:10, fontWeight:700, color:'var(--accent)' }}>{f.codice_fornitore}</span>
-                  <span style={{ fontSize:10, fontWeight:600, color:'var(--t3)', background:'var(--bg)', borderRadius:5, padding:'1px 6px', border:'1px solid var(--border)' }}>{f.tipo?.replace('_',' ')}</span>
-                  {!durc.valido && <span style={{ fontSize:9, color:'#ef4444', display:'flex', alignItems:'center', gap:2 }}><AlertTriangle size={9} /> {durc.label}</span>}
-                </div>
-                <div style={{ fontSize:13, fontWeight:700, color:'var(--t1)' }} className="truncate">{f.ragione_sociale}</div>
-                <div style={{ display:'flex', gap:12, marginTop:2 }}>
-                  {f.partita_iva && <span style={{ fontSize:10, color:'var(--t3)', fontFamily:'var(--font-mono)' }}>P.IVA {f.partita_iva}</span>}
-                  {f.citta && <span style={{ fontSize:10, color:'var(--t3)' }}>{f.citta} ({f.provincia})</span>}
-                  {f.categoria_soa && <span style={{ fontSize:10, color:'#3b82f6', fontWeight:600 }}>SOA {f.categoria_soa} cl.{f.classifica_soa}</span>}
-                </div>
-              </div>
-              <div style={{ display:'flex', gap:10, flexShrink:0 }}>
-                {f.telefono && (
-                  <a href={`tel:${f.telefono}`} style={{ display:'flex', alignItems:'center', gap:4, fontSize:11, color:'var(--t3)', textDecoration:'none' }} onClick={e=>e.stopPropagation()}>
-                    <Phone size={12} /> {f.telefono}
-                  </a>
-                )}
-                {f.email && (
-                  <a href={`mailto:${f.email}`} style={{ display:'flex', alignItems:'center', gap:4, fontSize:11, color:'var(--t3)', textDecoration:'none' }} onClick={e=>e.stopPropagation()}>
-                    <Mail size={12} />
-                  </a>
-                )}
-                <div style={{ fontSize:10, fontWeight:600, color:durc.color, background:`${durc.color}15`, borderRadius:6, padding:'3px 8px', border:`1px solid ${durc.color}30` }}>
-                  DURC {durc.label}
-                </div>
-              </div>
-            </div>
+            <button key={t} onClick={() => setFiltroTipo(t)}
+              style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid ' + (TIPI_COLOR[t] || 'var(--border)') + (filtroTipo === t ? '' : '44'), cursor: 'pointer', fontSize: 11, fontWeight: 600, background: filtroTipo === t ? (TIPI_COLOR[t] || 'var(--accent)') : 'var(--panel)', color: filtroTipo === t ? '#fff' : 'var(--t2)' }}>
+              {t === 'tutti' ? 'Tutti' : t} ({count})
+            </button>
           )
         })}
       </div>
 
-      {/* MODAL NUOVO FORNITORE */}
-      {showNuovo && (
-        <div className="modal-overlay">
-          <div className="modal-box" style={{ maxWidth: step === 'FORM' ? 700 : 480 }}>
-
-            {step === 'UPLOAD' && (
-              <>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
-                  <div>
-                    <h2 style={{ fontSize:18, fontWeight:800, color:'#1e293b', margin:0 }}>Nuovo Fornitore</h2>
-                    <p style={{ fontSize:12, color:'#64748b', marginTop:3 }}>Importa documento oppure inserisci manualmente</p>
-                  </div>
-                  <button onClick={()=>setShowNuovo(false)} style={{ background:'#f1f5f9', border:'none', borderRadius:8, padding:8, cursor:'pointer' }}><X size={15} color="#64748b" /></button>
-                </div>
-                <div onClick={()=>fileRef.current?.click()} style={{ border:'2px dashed #e2e8f0', borderRadius:14, padding:'40px 24px', textAlign:'center', cursor:'pointer', background:'#f8fafc', marginBottom:16 }}>
-                  <div style={{ width:52, height:52, borderRadius:14, background:'rgba(59,130,246,0.1)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 14px' }}>
-                    <Upload size={24} color="#3b82f6" />
-                  </div>
-                  <div style={{ fontSize:15, fontWeight:700, color:'#1e293b', marginBottom:6 }}>Importa documento fornitore</div>
-                  <div style={{ fontSize:12, color:'#64748b', marginBottom:6 }}>Visura camerale, DURC, Fattura, Contratto</div>
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, fontSize:11, color:'#3b82f6', fontWeight:600 }}>
-                    <Sparkles size={13} /> AI estrae P.IVA, ragione sociale, SOA, ATECO
-                  </div>
-                  <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.txt" style={{ display:'none' }}
-                    onChange={e=>{ const f=e.target.files?.[0]; if(f) handleFileImport(f) }} />
-                </div>
-                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
-                  <div style={{ flex:1, height:1, background:'#e2e8f0' }} />
-                  <span style={{ fontSize:11, color:'#94a3b8' }}>oppure</span>
-                  <div style={{ flex:1, height:1, background:'#e2e8f0' }} />
-                </div>
-                <button onClick={()=>setStep('FORM')} className="btn-secondary" style={{ width:'100%', justifyContent:'center' }}>Inserisci dati manualmente</button>
-              </>
-            )}
-
-            {step === 'AI_LOADING' && (
-              <div style={{ textAlign:'center', padding:'48px 24px' }}>
-                <Sparkles size={28} color="#3b82f6" style={{ marginBottom:16 }} />
-                <div style={{ fontSize:16, fontWeight:700, color:'#1e293b', marginBottom:8 }}>AI analizza il documento</div>
-                <div style={{ fontSize:13, color:'#64748b', marginBottom:20 }}>{aiStatus}</div>
-                <div className="spinner" style={{ margin:'0 auto' }} />
-              </div>
-            )}
-
-            {step === 'FORM' && (
-              <>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
-                  <div>
-                    <h2 style={{ fontSize:18, fontWeight:800, color:'#1e293b', margin:0 }}>Dati fornitore</h2>
-                    {aiStatus && (
-                      <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:4, fontSize:11, color: aiStatus.startsWith('✅')?'#10b981':aiStatus.startsWith('⚠')?'#f59e0b':'#64748b' }}>
-                        {aiStatus.startsWith('✅') ? <CheckCircle size={12} /> : aiStatus.startsWith('⚠') ? <AlertCircle size={12} /> : null}
-                        {aiStatus}
+      {/* SEARCH + LISTA */}
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
+        <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="🔍 Cerca per nome, email, specializzazione..."
+            style={{ ...inp, width: '100%' }} />
+        </div>
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center' }}><span className="spinner" /></div>
+        ) : filtrati.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--t3)', fontSize: 13 }}>Nessun risultato</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  {['Nome / Ragione Sociale', 'Tipo', 'Specializzazione', 'Email / PEC', 'Telefono', ''].map(h => (
+                    <th key={h} style={{ padding: '7px 12px', fontSize: 10, fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', background: 'var(--bg)', borderBottom: '1px solid var(--border)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtrati.map(s => (
+                  <tr key={s.id} style={{ cursor: 'pointer' }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--accent-light)'}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+                    onClick={() => setDetail(s)}>
+                    <td style={{ padding: '10px 12px', fontSize: 12, fontWeight: 600, color: 'var(--t1)', borderBottom: '1px solid var(--border)' }}>{fNome(s)}</td>
+                    <td style={{ padding: '10px 12px', fontSize: 11, borderBottom: '1px solid var(--border)' }}>
+                      <span style={{ padding: '2px 8px', borderRadius: 10, background: (TIPI_COLOR[s.tipo] || '#ccc') + '22', color: TIPI_COLOR[s.tipo] || '#666', fontWeight: 600 }}>{s.tipo}</span>
+                    </td>
+                    <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--t2)', borderBottom: '1px solid var(--border)' }}>{s.specializzazione || '—'}</td>
+                    <td style={{ padding: '10px 12px', fontSize: 11, borderBottom: '1px solid var(--border)' }}>
+                      {s.pec ? <a href={'mailto:' + s.pec} onClick={e => e.stopPropagation()} style={{ color: 'var(--accent)' }}>{s.pec}</a> : s.email ? <a href={'mailto:' + s.email} onClick={e => e.stopPropagation()} style={{ color: 'var(--accent)' }}>{s.email}</a> : '—'}
+                    </td>
+                    <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--t2)', borderBottom: '1px solid var(--border)' }}>{s.telefono || '—'}</td>
+                    <td style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+                      <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
+                        <button onClick={() => { setEdit(s); setForm(true) }}
+                          style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'none', cursor: 'pointer', fontSize: 11 }}>✎</button>
+                        <button onClick={() => elimina(s)}
+                          style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #ef4444', color: '#ef4444', background: 'none', cursor: 'pointer', fontSize: 11 }}>✕</button>
                       </div>
-                    )}
-                  </div>
-                  <button onClick={()=>setShowNuovo(false)} style={{ background:'#f1f5f9', border:'none', borderRadius:8, padding:8, cursor:'pointer' }}><X size={15} color="#64748b" /></button>
-                </div>
-                <div style={{ maxHeight:'60vh', overflowY:'auto', paddingRight:4 }}>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                    <div>
-                      <label style={lbl}>Codice fornitore</label>
-                      <input value={form.codice_fornitore} onChange={e=>setF('codice_fornitore',e.target.value)} style={{ ...inp, fontFamily:'monospace', fontWeight:700 }} />
-                      <div style={{ fontSize:10, color:'#94a3b8', marginTop:2 }}>Modificabile prima della conferma</div>
-                    </div>
-                    <div>
-                      <label style={lbl}>Tipo</label>
-                      <select value={form.tipo} onChange={e=>setF('tipo',e.target.value)} style={{ ...inp, width:'100%' }}>
-                        {TIPI.map(t=><option key={t} value={t}>{t.replace('_',' ')}</option>)}
-                      </select>
-                    </div>
-                    <div style={{ gridColumn:'span 2' }}>
-                      <label style={lbl}>Ragione sociale *</label>
-                      <input value={form.ragione_sociale} onChange={e=>setF('ragione_sociale',e.target.value)} style={inp} />
-                    </div>
-                    <div><label style={lbl}>Partita IVA</label><input value={form.partita_iva} onChange={e=>setF('partita_iva',e.target.value)} style={{ ...inp, fontFamily:'monospace' }} /></div>
-                    <div><label style={lbl}>Codice fiscale</label><input value={form.codice_fiscale} onChange={e=>setF('codice_fiscale',e.target.value)} style={{ ...inp, fontFamily:'monospace' }} /></div>
-                    <div><label style={lbl}>PEC</label><input value={form.pec} onChange={e=>setF('pec',e.target.value)} type="email" style={inp} /></div>
-                    <div><label style={lbl}>Email</label><input value={form.email} onChange={e=>setF('email',e.target.value)} type="email" style={inp} /></div>
-                    <div><label style={lbl}>Telefono</label><input value={form.telefono} onChange={e=>setF('telefono',e.target.value)} type="tel" style={inp} /></div>
-                    <div><label style={lbl}>Codice SDI</label><input value={form.codice_sdi} onChange={e=>setF('codice_sdi',e.target.value)} style={{ ...inp, fontFamily:'monospace' }} /></div>
-                    <div style={{ gridColumn:'span 2' }}><label style={lbl}>Indirizzo</label><input value={form.indirizzo} onChange={e=>setF('indirizzo',e.target.value)} style={inp} /></div>
-                    <div><label style={lbl}>Città</label><input value={form.citta} onChange={e=>setF('citta',e.target.value)} style={inp} /></div>
-                    <div>
-                      <label style={lbl}>Provincia</label>
-                      <select value={form.provincia} onChange={e=>setF('provincia',e.target.value)} style={{ ...inp, width:'100%' }}>
-                        {PROVINCE_IT.map(p=><option key={p} value={p}>{p}</option>)}
-                      </select>
-                    </div>
-                    <div><label style={lbl}>CAP</label><input value={form.cap} onChange={e=>setF('cap',e.target.value)} style={inp} /></div>
-                    <div><label style={lbl}>ATECO</label><input value={form.codice_ateco} onChange={e=>setF('codice_ateco',e.target.value)} placeholder="41.20.00" style={{ ...inp, fontFamily:'monospace' }} /></div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
-                    {/* SOA */}
-                    <div style={{ gridColumn:'span 2', background:'rgba(59,130,246,0.04)', border:'1px solid rgba(59,130,246,0.15)', borderRadius:9, padding:'12px 14px' }}>
-                      <div style={{ fontSize:11, fontWeight:700, color:'#334155', marginBottom:10 }}>🏗 Qualificazione SOA</div>
-                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 }}>
-                        <div><label style={lbl}>Categoria SOA</label><input value={form.categoria_soa} onChange={e=>setF('categoria_soa',e.target.value)} placeholder="OG1, OG3..." style={inp} /></div>
-                        <div><label style={lbl}>Classifica SOA</label><input value={form.classifica_soa} onChange={e=>setF('classifica_soa',e.target.value)} placeholder="I, II, III..." style={inp} /></div>
-                        <div><label style={lbl}>Scadenza SOA</label><input type="date" value={form.soa_scadenza} onChange={e=>setF('soa_scadenza',e.target.value)} style={inp} /></div>
-                      </div>
-                    </div>
-
-                    {/* DURC */}
-                    <div>
-                      <label style={lbl}>Scadenza DURC</label>
-                      <input type="date" value={form.durc_scadenza} onChange={e=>setF('durc_scadenza',e.target.value)} style={inp} />
-                      {form.durc_scadenza && (
-                        <div style={{ marginTop:4, fontSize:10, color:durcInfo(form.durc_scadenza).color, fontWeight:600, display:'flex', alignItems:'center', gap:4 }}>
-                          <CheckCircle size={10} /> {durcInfo(form.durc_scadenza).label}
-                        </div>
-                      )}
-                    </div>
-                    <div><label style={lbl}>Note</label><textarea value={form.note} onChange={e=>setF('note',e.target.value)} rows={2} style={{ ...inp, resize:'vertical', width:'100%' }} /></div>
-                  </div>
-                </div>
-                <div style={{ marginTop:20, display:'flex', justifyContent:'space-between' }}>
-                  <button onClick={()=>setStep('UPLOAD')} className="btn-secondary" style={{ fontSize:12 }}>← Importa documento</button>
-                  <div style={{ display:'flex', gap:10 }}>
-                    <button onClick={()=>setShowNuovo(false)} className="btn-secondary">Annulla</button>
-                    <button onClick={creaFornitore} disabled={saving||!form.ragione_sociale} className="btn-primary">
-                      <Save size={14} /> {saving?'Salvataggio...':'Salva fornitore'}
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
+      {/* DETAIL DRAWER */}
+      {detail && (
+        <div style={{ position: 'fixed', top: 0, right: 0, width: 360, height: '100vh', background: 'var(--panel)', borderLeft: '1px solid var(--border)', zIndex: 200, display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 20px rgba(0,0,0,0.15)' }}>
+          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700 }}>Anagrafica</h3>
+            <button onClick={() => setDetail(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--t3)' }}>✕</button>
+          </div>
+          <div style={{ padding: 16, overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ padding: '12px 14px', background: 'var(--bg)', borderRadius: 10 }}>
+              <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--t1)' }}>{fNome(detail)}</p>
+              <span style={{ display: 'inline-block', marginTop: 4, padding: '2px 10px', borderRadius: 10, background: (TIPI_COLOR[detail.tipo] || '#ccc') + '22', color: TIPI_COLOR[detail.tipo] || '#666', fontSize: 11, fontWeight: 600 }}>{detail.tipo}</span>
+            </div>
+            {detail.specializzazione && <Row label="Specializzazione" value={detail.specializzazione} />}
+            {detail.ordine_professionale && <Row label="Ordine" value={detail.ordine_professionale + (detail.numero_iscrizione ? ' n. ' + detail.numero_iscrizione : '')} />}
+            {detail.categoria_soa && <Row label="SOA" value={detail.categoria_soa} />}
+            {detail.pec && <Row label="PEC" value={detail.pec} href={'mailto:' + detail.pec} />}
+            {detail.email && <Row label="Email" value={detail.email} href={'mailto:' + detail.email} />}
+            {detail.telefono && <Row label="Telefono" value={detail.telefono} href={'tel:' + detail.telefono} />}
+            {detail.studio && <Row label="Studio" value={detail.studio} />}
+          </div>
+          <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8 }}>
+            <button style={{ flex: 1, padding: '8px', borderRadius: 8, border: '1px solid var(--border)', background: 'none', cursor: 'pointer', fontSize: 12 }}
+              onClick={() => { setEdit(detail); setForm(true); setDetail(null) }}>✎ Modifica</button>
+            <button style={{ flex: 1, padding: '8px', borderRadius: 8, border: '1px solid #ef4444', color: '#ef4444', background: 'none', cursor: 'pointer', fontSize: 12 }}
+              onClick={() => elimina(detail)}>✕ Elimina</button>
           </div>
         </div>
+      )}
+
+      {/* FORM MODAL */}
+      {form && edit && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) { setForm(false); setEdit(null) } }}>
+          <div className="modal-box" style={{ maxWidth: 520, width: '92%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700 }}>{edit.id ? 'Modifica' : 'Nuovo'} soggetto</h3>
+              <button onClick={() => { setForm(false); setEdit(null) }} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--t3)' }}>✕</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={{ gridColumn: '1/-1' }}>
+                <label style={lbl}>Tipo *</label>
+                <select style={inp} value={edit.tipo || 'professionista'} onChange={e => setEdit({ ...edit, tipo: e.target.value })}>
+                  {TIPI.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              {(edit.tipo === 'fornitore' || edit.tipo === 'subappaltatore' || edit.tipo === 'nolo') ? (
+                <div style={{ gridColumn: '1/-1' }}>
+                  <label style={lbl}>Ragione Sociale *</label>
+                  <input style={inp} value={edit.ragione_sociale || ''} onChange={e => setEdit({ ...edit, ragione_sociale: e.target.value })} placeholder="Nome azienda" />
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label style={lbl}>Nome *</label>
+                    <input style={inp} value={edit.nome || ''} onChange={e => setEdit({ ...edit, nome: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={lbl}>Cognome *</label>
+                    <input style={inp} value={edit.cognome || ''} onChange={e => setEdit({ ...edit, cognome: e.target.value })} />
+                  </div>
+                </>
+              )}
+              <div style={{ gridColumn: '1/-1' }}>
+                <label style={lbl}>Specializzazione / Ruolo</label>
+                <input style={inp} value={edit.specializzazione || ''} onChange={e => setEdit({ ...edit, specializzazione: e.target.value })} placeholder="Es. Ingegnere strutturale, Fornitura calcestruzzo..." />
+              </div>
+              <div>
+                <label style={lbl}>PEC</label>
+                <input type="email" style={inp} value={edit.pec || ''} onChange={e => setEdit({ ...edit, pec: e.target.value })} />
+              </div>
+              <div>
+                <label style={lbl}>Email</label>
+                <input type="email" style={inp} value={edit.email || ''} onChange={e => setEdit({ ...edit, email: e.target.value })} />
+              </div>
+              <div>
+                <label style={lbl}>Telefono</label>
+                <input style={inp} value={edit.telefono || ''} onChange={e => setEdit({ ...edit, telefono: e.target.value })} />
+              </div>
+              <div>
+                <label style={lbl}>Ordine professionale</label>
+                <input style={inp} value={edit.ordine_professionale || ''} onChange={e => setEdit({ ...edit, ordine_professionale: e.target.value })} placeholder="OAI Roma, Geometri..." />
+              </div>
+              <div>
+                <label style={lbl}>N. iscrizione</label>
+                <input style={inp} value={edit.numero_iscrizione || ''} onChange={e => setEdit({ ...edit, numero_iscrizione: e.target.value })} />
+              </div>
+              <div>
+                <label style={lbl}>Cat. SOA</label>
+                <input style={inp} value={edit.categoria_soa || ''} onChange={e => setEdit({ ...edit, categoria_soa: e.target.value })} placeholder="OS1, OG1..." />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+              <button onClick={() => { setForm(false); setEdit(null) }} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'none', cursor: 'pointer', fontSize: 12 }}>Annulla</button>
+              <button onClick={salva} disabled={saving} className="btn-primary" style={{ fontSize: 12, padding: '8px 16px' }}>{saving ? '...' : 'Salva'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 20, right: 20, background: '#14532d', color: '#fff', padding: '10px 18px', borderRadius: 10, fontSize: 12, fontWeight: 700, zIndex: 1000 }}>
+          {toast}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Row({ label, value, href }: { label: string; value: string; href?: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase' }}>{label}</span>
+      {href ? (
+        <a href={href} style={{ fontSize: 13, color: 'var(--accent)' }}>{value}</a>
+      ) : (
+        <span style={{ fontSize: 13, color: 'var(--t1)' }}>{value}</span>
       )}
     </div>
   )
