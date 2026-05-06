@@ -26,6 +26,31 @@ interface Soggetto {
 
 const fNome = (s: Soggetto) => s.ragione_sociale || ((s.nome || '') + ' ' + (s.cognome || '')).trim()
 
+function NuovoReferente({ soggetto_id, onAdd }: { soggetto_id: string; onAdd: (n: string, r: string, e: string, t: string) => void }) {
+  const [open, setOpen] = React.useState(false)
+  const [nome, setNome] = React.useState('')
+  const [ruolo, setRuolo] = React.useState('tecnico')
+  const [email, setEmail] = React.useState('')
+  const [telefono, setTelefono] = React.useState('')
+  const RUOLI = ['tecnico','amministrativo','commerciale','collaboratore','segreteria','sicurezza','altro']
+  const inpS: React.CSSProperties = { width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 11, background: 'var(--panel)', color: 'var(--t1)', outline: 'none', marginBottom: 6 }
+  if (!open) return <button onClick={() => setOpen(true)} style={{ marginTop: 8, fontSize: 11, color: 'var(--accent)', background: 'none', border: '1px dashed var(--accent)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', width: '100%' }}>+ Aggiungi referente</button>
+  return (
+    <div style={{ marginTop: 8, padding: 10, background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)' }}>
+      <input style={inpS} placeholder="Nome *" value={nome} onChange={e => setNome(e.target.value)} />
+      <select style={inpS} value={ruolo} onChange={e => setRuolo(e.target.value)}>
+        {RUOLI.map(r => <option key={r} value={r}>{r}</option>)}
+      </select>
+      <input style={inpS} placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} />
+      <input style={inpS} placeholder="Telefono" value={telefono} onChange={e => setTelefono(e.target.value)} />
+      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+        <button onClick={() => setOpen(false)} style={{ fontSize: 11, padding: '4px 10px', border: '1px solid var(--border)', borderRadius: 6, background: 'none', cursor: 'pointer' }}>Annulla</button>
+        <button onClick={() => { if (nome.trim()) { onAdd(nome, ruolo, email, telefono); setOpen(false); setNome(''); setEmail(''); setTelefono('') } }} style={{ fontSize: 11, padding: '4px 10px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Salva</button>
+      </div>
+    </div>
+  )
+}
+
 export default function FornitoriPage() {
   const [lista, setLista] = useState<Soggetto[]>([])
   const [loading, setLoading] = useState(true)
@@ -36,6 +61,9 @@ export default function FornitoriPage() {
   const [edit, setEdit] = useState<Partial<Soggetto> | null>(null)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState('')
+  const [confirmDel, setConfirmDel] = useState<Soggetto | null>(null)
+  const [referenti, setReferenti] = useState<any[]>([])
+  const [loadingRef, setLoadingRef] = useState(false)
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
@@ -68,13 +96,24 @@ export default function FornitoriPage() {
   }
 
   const elimina = async (s: Soggetto) => {
-    const nome = fNome(s)
-    if (!window.confirm(`Eliminare "${nome}" dal database?`)) return
-    if (!window.confirm(`Conferma definitiva: "${nome}" verrà rimosso permanentemente e da tutte le commesse collegate.`)) return
-    await supabase.from('professionisti_fornitori').delete().eq('id', s.id)
-    if (detail?.id === s.id) setDetail(null)
-    showToast('Eliminato')
-    carica()
+    setConfirmDel(s)
+  }
+
+  const confermaElimina = async () => {
+    if (!confirmDel) return
+    const { error } = await supabase.from('professionisti_fornitori').delete().eq('id', confirmDel.id)
+    if (error) {
+      if (error.code === '23503') {
+        showToast('Impossibile eliminare: questo soggetto è ancora assegnato a una commessa. Rimuovilo prima dall\'anagrafica commessa.')
+      } else {
+        showToast('Errore eliminazione: ' + error.message)
+      }
+    } else {
+      if (detail?.id === confirmDel.id) setDetail(null)
+      showToast('Eliminato correttamente')
+      carica()
+    }
+    setConfirmDel(null)
   }
 
   const filtrati = lista.filter(s => {
@@ -82,6 +121,25 @@ export default function FornitoriPage() {
     const tipo = filtroTipo === 'tutti' || s.tipo === filtroTipo
     return match && tipo
   })
+
+  const caricaReferenti = async (soggetto_id: string) => {
+    setLoadingRef(true)
+    const { data } = await supabase.from('soggetto_referenti')
+      .select('*').eq('soggetto_id', soggetto_id).order('created_at')
+    setReferenti(data || [])
+    setLoadingRef(false)
+  }
+
+  const aggiungiReferente = async (soggetto_id: string, nome: string, ruolo: string, email: string, telefono: string) => {
+    if (!nome.trim()) return
+    await supabase.from('soggetto_referenti').insert({ soggetto_id, nome: nome.trim(), ruolo, email, telefono })
+    caricaReferenti(soggetto_id)
+  }
+
+  const eliminaReferente = async (id: string, soggetto_id: string) => {
+    await supabase.from('soggetto_referenti').delete().eq('id', id)
+    caricaReferenti(soggetto_id)
+  }
 
   const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 12, background: 'var(--panel)', color: 'var(--t1)', outline: 'none' }
   const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: 'var(--t2)', display: 'block', marginBottom: 4 }
@@ -140,7 +198,7 @@ export default function FornitoriPage() {
                   <tr key={s.id} style={{ cursor: 'pointer' }}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--accent-light)'}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
-                    onClick={() => setDetail(s)}>
+                    onClick={() => { setDetail(s); caricaReferenti(s.id) }}>
                     <td style={{ padding: '10px 12px', fontSize: 12, fontWeight: 600, color: 'var(--t1)', borderBottom: '1px solid var(--border)' }}>{fNome(s)}</td>
                     <td style={{ padding: '10px 12px', fontSize: 11, borderBottom: '1px solid var(--border)' }}>
                       <span style={{ padding: '2px 8px', borderRadius: 10, background: (TIPI_COLOR[s.tipo] || '#ccc') + '22', color: TIPI_COLOR[s.tipo] || '#666', fontWeight: 600 }}>{s.tipo}</span>
@@ -185,6 +243,29 @@ export default function FornitoriPage() {
             {detail.email && <Row label="Email" value={detail.email} href={'mailto:' + detail.email} />}
             {detail.telefono && <Row label="Telefono" value={detail.telefono} href={'tel:' + detail.telefono} />}
             {detail.studio && <Row label="Studio" value={detail.studio} />}
+          {/* SEZIONE REFERENTI */}
+          <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <h4 style={{ fontSize: 12, fontWeight: 700, color: 'var(--t2)', textTransform: 'uppercase' as const }}>Collaboratori / Referenti</h4>
+              <span style={{ fontSize: 10, color: 'var(--t3)' }}>{referenti.length}</span>
+            </div>
+            {loadingRef ? <p style={{ fontSize: 11, color: 'var(--t3)' }}>Caricamento...</p> : (
+              <>
+                {referenti.map((r: any) => (
+                  <div key={r.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontSize: 12, fontWeight: 600 }}>{r.nome} {r.cognome || ''}</p>
+                      <p style={{ fontSize: 10, color: 'var(--accent)' }}>{r.ruolo}</p>
+                      {r.email && <a href={'mailto:'+r.email} style={{ fontSize: 10, color: 'var(--t3)' }}>{r.email}</a>}
+                      {r.telefono && <p style={{ fontSize: 10, color: 'var(--t3)' }}>{r.telefono}</p>}
+                    </div>
+                    <button onClick={() => detail && eliminaReferente(r.id, detail.id)}
+                      style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14, padding: '2px 4px' }}>✕</button>
+                  </div>
+                ))}
+                <NuovoReferente soggetto_id={detail!.id} onAdd={(n,ru,e,t) => aggiungiReferente(detail!.id,n,ru,e,t)} />
+              </>
+            )}
           </div>
           <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8 }}>
             <button style={{ flex: 1, padding: '8px', borderRadius: 8, border: '1px solid var(--border)', background: 'none', cursor: 'pointer', fontSize: 12 }}
@@ -264,6 +345,38 @@ export default function FornitoriPage() {
         </div>
       )}
 
+      {/* CONFIRM DIALOG elimina soggetto */}
+      {confirmDel && (
+        <div className="modal-overlay" onClick={() => setConfirmDel(null)}>
+          <div className="modal-box" style={{ maxWidth: 420, width: '92%' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <span style={{ fontSize: 20 }}>⚠️</span>
+              </div>
+              <div>
+                <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: 'var(--t1)' }}>Elimina dal database</h3>
+                <p style={{ fontSize: 12, color: 'var(--t3)', margin: 0 }}>Operazione irreversibile</p>
+              </div>
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--t2)', marginBottom: 8, lineHeight: 1.5 }}>
+              Stai per eliminare <strong>{fNome(confirmDel)}</strong> dal database.
+            </p>
+            <p style={{ fontSize: 12, color: '#dc2626', marginBottom: 20, lineHeight: 1.5 }}>
+              Se questo soggetto è ancora assegnato a una commessa, l'operazione non sarà possibile.
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setConfirmDel(null)}
+                style={{ padding: '8px 16px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--panel)', cursor: 'pointer', fontSize: 13 }}>
+                Annulla
+              </button>
+              <button onClick={confermaElimina}
+                style={{ padding: '8px 16px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                Elimina definitivamente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {toast && (
         <div style={{ position: 'fixed', bottom: 20, right: 20, background: '#14532d', color: '#fff', padding: '10px 18px', borderRadius: 10, fontSize: 12, fontWeight: 700, zIndex: 1000 }}>
           {toast}
