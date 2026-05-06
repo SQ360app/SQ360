@@ -50,7 +50,8 @@ export default function CommessaLayout({ children }: { children: React.ReactNode
 
   async function handleDelete() {
     setDeleting(true)
-    await supabase.from('commesse').delete().eq('id', id)
+        const { error: delErr } = await supabase.from('commesse').delete().eq('id', id)
+        if (delErr) { setDeleting(false); return }
     router.push('/dashboard/commesse')
   }
 
