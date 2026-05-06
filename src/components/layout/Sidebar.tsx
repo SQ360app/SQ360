@@ -1,4 +1,4 @@
-'use client'
+h'use client'
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -11,7 +11,7 @@ const NAV = [
   { href: '/dashboard',             icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/dashboard/gare',        icon: Search,          label: 'Analisi Gare' },
   { href: '/dashboard/commesse',    icon: FolderOpen,      label: 'Commesse' },
-  { href: '/dashboard/fornitori',   icon: Users,           label: 'Fornitori' },
+  { href: '/dashboard/fornitori',   icon: Users,           label: 'Contatti' },
   { href: '/dashboard/scadenzario', icon: Calendar,        label: 'Scadenzario' },
   { href: '/dashboard/amministrazione', icon: CreditCard,  label: 'Amministrazione' },
   { href: '/dashboard/impostazioni',icon: Settings,        label: 'Impostazioni' },
