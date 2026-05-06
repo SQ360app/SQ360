@@ -243,6 +243,7 @@ export default function FornitoriPage() {
             {detail.email && <Row label="Email" value={detail.email} href={'mailto:' + detail.email} />}
             {detail.telefono && <Row label="Telefono" value={detail.telefono} href={'tel:' + detail.telefono} />}
             {detail.studio && <Row label="Studio" value={detail.studio} />}
+          </div>
           {/* SEZIONE REFERENTI */}
           <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
