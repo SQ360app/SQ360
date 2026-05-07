@@ -224,7 +224,7 @@ export default function DashboardPage() {
     const [{ data: kpi }, { data: scad }, { data: det }] = await Promise.all([
       supabase.from('v_commesse_kpi').select('*').order('stato'),
       supabase.from('v_scadenze_prossime').select('*').limit(8),
-      supabase.from('commesse').select('id,provincia,dl_nome,dl_email')
+      supabase.from('commesse').select('id,provincia,provincia')
     ])
     if (kpi && det) {
       const merged = kpi.map((k: Record<string, unknown>) => {
