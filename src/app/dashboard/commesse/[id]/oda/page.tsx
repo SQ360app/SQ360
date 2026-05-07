@@ -103,9 +103,9 @@ export default function ODAPage() {
       <div className="grid grid-cols-4 gap-3">
         {[
           ['ODA emessi', String(oda.filter(o => o.stato !== 'ANNULLATO').length)],
-          ['Costi impegnati', '\u20ac ' + fmt(totImpegnato)],
-          ['Ritenute accumulate', '\u20ac ' + fmt(totRitenute)],
-          ['Da pagare netto', '\u20ac ' + fmt(totImpegnato - totRitenute)],
+          ['Costi impegnati', '€ ' + fmt(totImpegnato)],
+          ['Ritenute accumulate', '€ ' + fmt(totRitenute)],
+          ['Da pagare netto', '€ ' + fmt(totImpegnato - totRitenute)],
         ].map(([l, v], i) => (
           <div key={i} className="bg-gray-50 border border-gray-100 rounded-lg p-3">
             <p className="text-xs text-gray-500 mb-1">{l}</p>
@@ -116,7 +116,7 @@ export default function ODAPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-gray-900">Ordini di Acquisto (ODA)</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Subappalto \u2192 contratto sub \u00b7 Materiale \u2192 DAM automatici</p>
+          <p className="text-xs text-gray-500 mt-0.5">Subappalto → contratto sub · Materiale → DAM automatici</p>
         </div>
         <button onClick={() => setModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
           <Plus className="w-4 h-4" /> Nuovo ODA
@@ -139,8 +139,8 @@ export default function ODAPage() {
                     {TIPI_ODA.find(t => t.value === o.tipo)?.label}
                   </span>
                   <span className="flex-1 text-sm text-gray-800 truncate">{o.oggetto}</span>
-                  <span className="text-xs text-gray-500 shrink-0">{o.fornitore?.ragione_sociale || '\u2014'}</span>
-                  <span className="text-sm font-medium text-gray-900 w-32 text-right shrink-0">\u20ac {fmt(o.importo_netto)}</span>
+                  <span className="text-xs text-gray-500 shrink-0">{o.fornitore?.ragione_sociale || '—'}</span>
+                  <span className="text-sm font-medium text-gray-900 w-32 text-right shrink-0">€ {fmt(o.importo_netto)}</span>
                   <span className={`shrink-0 text-xs px-2 py-0.5 rounded font-medium ${STATI[o.stato]?.color || ''}`}>
                     {STATI[o.stato]?.label}
                   </span>
@@ -149,20 +149,20 @@ export default function ODAPage() {
                   <div className="border-t border-gray-100 bg-gray-50/50 p-4 space-y-3">
                     <div className="grid grid-cols-3 gap-4 text-sm">
                       <div><p className="text-xs text-gray-400 mb-0.5">Data</p><p>{o.data_emissione}</p></div>
-                      <div><p className="text-xs text-gray-400 mb-0.5">Consegna</p><p>{o.data_consegna_prevista || '\u2014'}</p></div>
-                      <div><p className="text-xs text-gray-400 mb-0.5">Pagamento</p><p>{o.condizioni_pagamento || '\u2014'}</p></div>
+                      <div><p className="text-xs text-gray-400 mb-0.5">Consegna</p><p>{o.data_consegna_prevista || '—'}</p></div>
+                      <div><p className="text-xs text-gray-400 mb-0.5">Pagamento</p><p>{o.condizioni_pagamento || '—'}</p></div>
                     </div>
                     <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div><p className="text-xs text-gray-400 mb-0.5">Totale + IVA</p><p>\u20ac {fmt(o.importo_netto * (1 + o.iva_pct / 100))}</p></div>
-                      <div><p className="text-xs text-gray-400 mb-0.5">Ritenuta {o.ritenuta_pct}%</p><p className="text-purple-700">\u20ac {fmt(o.ritenuta_importo || 0)}</p></div>
-                      <div><p className="text-xs text-gray-400 mb-0.5">Da pagare</p><p className="font-semibold">\u20ac {fmt(o.importo_netto - (o.ritenuta_importo || 0))}</p></div>
+                      <div><p className="text-xs text-gray-400 mb-0.5">Totale + IVA</p><p>€ {fmt(o.importo_netto * (1 + o.iva_pct / 100))}</p></div>
+                      <div><p className="text-xs text-gray-400 mb-0.5">Ritenuta {o.ritenuta_pct}%</p><p className="text-purple-700">€ {fmt(o.ritenuta_importo || 0)}</p></div>
+                      <div><p className="text-xs text-gray-400 mb-0.5">Da pagare</p><p className="font-semibold">€ {fmt(o.importo_netto - (o.ritenuta_importo || 0))}</p></div>
                     </div>
                     <div className="flex gap-2 flex-wrap">
-                      {o.contratto_sub_id && <span className="text-xs px-2.5 py-1.5 bg-purple-50 text-purple-700 rounded-lg border border-purple-100">\u2713 Contratto sub generato</span>}
-                      {o.dam_id && <span className="text-xs px-2.5 py-1.5 bg-green-50 text-green-700 rounded-lg border border-green-100">\u2713 DAM generato</span>}
+                      {o.contratto_sub_id && <span className="text-xs px-2.5 py-1.5 bg-purple-50 text-purple-700 rounded-lg border border-purple-100">✓ Contratto sub generato</span>}
+                      {o.dam_id && <span className="text-xs px-2.5 py-1.5 bg-green-50 text-green-700 rounded-lg border border-green-100">✓ DAM generato</span>}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs text-gray-500">Stato \u2192</span>
+                      <span className="text-xs text-gray-500">Stato →</span>
                       {['CONFERMATO', 'PARZ_EVASO', 'EVASO'].filter(s => s !== o.stato).map(s => (
                         <button key={s} onClick={() => cambiaStato(o.id, s)}
                           className="text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-100">
@@ -192,8 +192,8 @@ export default function ODAPage() {
                 </button>
               ))}
             </div>
-            {tipo === 'SUBAPPALTO' && <p className="text-xs p-2 bg-purple-50 text-purple-700 rounded-lg">\u2192 Genera contratto sub automatico (D.Lgs. 36/2023)</p>}
-            {tipo === 'MATERIALE' && <p className="text-xs p-2 bg-green-50 text-green-700 rounded-lg">\u2192 Genera DAM per Direzione Lavori automatico</p>}
+            {tipo === 'SUBAPPALTO' && <p className="text-xs p-2 bg-purple-50 text-purple-700 rounded-lg">→ Genera contratto sub automatico (D.Lgs. 36/2023)</p>}
+            {tipo === 'MATERIALE' && <p className="text-xs p-2 bg-green-50 text-green-700 rounded-lg">→ Genera DAM per Direzione Lavori automatico</p>}
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Oggetto *</label>
               <input value={oggetto} onChange={e => setOggetto(e.target.value)}
@@ -209,7 +209,7 @@ export default function ODAPage() {
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Importo netto \u20ac</label>
+                <label className="text-xs text-gray-500 mb-1 block">Importo netto €</label>
                 <input type="number" step="0.01" value={importoNetto} onChange={e => setImportoNetto(e.target.value)}
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 text-right" />
               </div>
@@ -232,17 +232,17 @@ export default function ODAPage() {
             <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
               <div className="flex justify-between text-gray-600">
                 <span>Totale + IVA</span>
-                <span className="font-medium">\u20ac {fmt(totale)}</span>
+                <span className="font-medium">€ {fmt(totale)}</span>
               </div>
               {ritenutaImporto > 0 && (
                 <>
                   <div className="flex justify-between text-purple-600 text-xs">
                     <span>Ritenuta {ritenuta}%</span>
-                    <span>- \u20ac {fmt(ritenutaImporto)}</span>
+                    <span>- € {fmt(ritenutaImporto)}</span>
                   </div>
                   <div className="flex justify-between font-semibold border-t border-gray-200 pt-1 mt-1">
                     <span>Da pagare</span>
-                    <span>\u20ac {fmt(importoNum - ritenutaImporto)}</span>
+                    <span>€ {fmt(importoNum - ritenutaImporto)}</span>
                   </div>
                 </>
               )}
