@@ -63,7 +63,7 @@ export default function OdaPage() {
   useEffect(() => { load() }, [load])
 
   const submit = async () => {
-    if (!oggetto.trim()) { setErr('Inserisci l\\oggetto'); return }
+    if (!oggetto.trim()) { setErr('Inserisci oggetto'); return }
     if (!fornitoreId) { setErr('Seleziona un fornitore/appaltatore'); return }
     setSaving(true); setErr('')
     const { count } = await supabase.from('oda').select('*', { count:'exact', head:true }).eq('commessa_id', id)
