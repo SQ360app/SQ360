@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { Plus, FileText, Loader2, ChevronDown, ChevronRight } from 'lucide-react'
 
 const fmt = (n: number) => Number(n||0).toLocaleString('it-IT', { minimumFractionDigits:2 })
-const fLabel = (f: any) => f.ragione_sociale || ((f.nome||'')+' '+(f.cognome||''')).trim()
+const fLabel = (f: any) => f.ragione_sociale || ((f.nome||'')+' '+(f.cognome || '')).trim()
 
 const TIPI_ODA = [
   { key:'MAT', label:'Fornitura Materiali', bg:'#eff6ff', fg:'#1d4ed8' },
