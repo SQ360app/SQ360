@@ -75,7 +75,44 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
         .limit(8)
       setFResults((data as Fornitore[]) || [])
     }, 300)
-    return () => clearTimeout(t)
+   const generaPdf = async (rdo: any) => {
+  const { data: com } = await supabase.from('commesse')
+    .select('codice,nome,committente').eq('id', commessaId).single()
+  let voci: any[] = []
+  if (rdo.rda_id) {
+    const { data: rda } = await supabase.from('rda')
+      .select('voci_ids').eq('id', rdo.rda_id).single()
+    if (rda?.voci_ids?.length) {
+      const { data: v } = await supabase.from('computo_metrico')
+        .select('descrizione,unita_misura,quantita').in('id', rda.voci_ids)
+      voci = v || []
+    }
+  }
+  const rows = voci.map((v,i) => `<tr><td>${i+1}</td><td>${v.descrizione}</td><td>${v.unita_misura||'—'}</td><td>${v.quantita!=null?Number(v.quantita).toLocaleString('it-IT'):'—'}</td></tr>`).join('')
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>RDO ${rdo.codice}</title>
+<style>body{font-family:Arial;font-size:12px;margin:40px}table{width:100%;border-collapse:collapse}th,td{padding:6px 8px;border:1px solid #ccc;text-align:left}th{background:#f5f5f5}.firma{margin-top:40px;display:flex;gap:30px}.fbox{flex:1;border-top:1px solid #333;padding-top:8px;font-size:11px;color:#555}</style>
+</head><body>
+<div style="border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:18px">
+  <div style="font-size:10px;color:#777;text-transform:uppercase">Richiesta di Offerta</div>
+  <h1 style="font-size:18px;margin:4px 0">${rdo.codice}</h1>
+  ${com ? `<div><b>Commessa:</b> ${com.codice} — ${com.nome}</div>` : ''}
+  ${com?.committente ? `<div><b>Committente:</b> ${com.committente}</div>` : ''}
+</div>
+<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px">
+  <span><b>Tipo:</b> ${rdo.tipo}</span>
+  <span><b>Oggetto:</b> ${rdo.oggetto}</span>
+  ${rdo.fornitore ? `<span><b>A:</b> ${rdo.fornitore}</span>` : ''}
+  ${rdo.data_scadenza ? `<span><b>Scadenza:</b> ${rdo.data_scadenza}</span>` : ''}
+</div>
+${rdo.note ? `<p><b>Note:</b> ${rdo.note}</p>` : ''}
+${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descrizione</th><th>U.M.</th><th>Quantità</th></tr></thead><tbody>${rows}</tbody></table>` : '<p style="color:#777;font-style:italic">Nessuna voce collegata.</p>'}
+<p style="margin-top:16px;font-size:11px;color:#666">Formulare offerta con prezzi unitari IVA esclusa.</p>
+<div class="firma"><div class="fbox">Firma Fornitore</div><div class="fbox">Prezzo offerto €</div><div class="fbox">Note</div></div>
+</body></html>`
+  const w = window.open('','_blank')
+  if(w){w.document.write(html);w.document.close();setTimeout(()=>w.print(),400)}
+}
+     return () => clearTimeout(t)
   }, [fSearch])
 
   const fLabel = (f: Fornitore) => f.ragione_sociale || ((f.nome || '') + ' ' + (f.cognome || '')).trim()
@@ -185,6 +222,14 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
           <button className="btn-primary" style={{ fontSize:12, padding:'8px 14px' }}
             onClick={() => { setEditRdo({ stato:'bozza', importo_offerta:0 }); setFSearch(''); setForm(true) }}>
             + Nuova RDO
+        <button style={{...styleBtn('#475569'),fontSize:11,marginLeft:4}}
+  onClick={() => generaPdf(r)}>📄 PDF</button>
+{r.stato === 'aggiudicata' && (
+  <button style={{...styleBtn('#10b981'),fontSize:11,marginLeft:4}}
+    onClick={() => { window.location.href = window.location.pathname.replace('/rdo','/oda') }}>
+    ✅ Genera ODA
+  </button>
+)}
           </button>
         </div>
 
