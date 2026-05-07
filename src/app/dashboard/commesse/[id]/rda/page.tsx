@@ -22,7 +22,9 @@ interface RDA {
   tipo: string; oggetto: string; qta_stimata: number; um: string
   data_necessita: string; stato: string; fornitore_sugg: string
   note: string; created_at: string; wbs_id?: string
+  voci_ids?: string[]
 }
+interface VoceComputo { id: string; descrizione: string; unita_misura?: string; quantita?: number }
 
 interface Fornitore {
   id: string; ragione_sociale?: string; nome?: string; cognome?: string
@@ -68,6 +70,10 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState('')
   const [viewFornitore, setViewFornitore] = useState<string | null>(null)
+  const [detailRda, setDetailRda] = useState<RDA | null>(null)
+  const [vociRda, setVociRda] = useState<VoceComputo[]>([])
+  const [loadingVoci, setLoadingVoci] = useState(false)
+  const [generandoRdo, setGenerandoRdo] = useState(false)
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
@@ -127,6 +133,23 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
     carica()
   }
 
+  const caricaVoci = async (r: RDA) => {
+    setDetailRda(r); setVociRda([])
+    if (!r.voci_ids?.length) return
+    setLoadingVoci(true)
+    const { data } = await supabase.from('computo_metrico')
+      .select('id,descrizione,unita_misura,quantita').in('id', r.voci_ids)
+    setVociRda((data as VoceComputo[]) || [])
+    setLoadingVoci(false)
+  }
+  const generaRDO = async (r: RDA) => {
+    setGenerandoRdo(true)
+    const codice = 'RDO-' + id.slice(0,8).toUpperCase() + '-' + Date.now().toString().slice(-4)
+    const { error } = await supabase.from('rdo').insert({ commessa_id: id, rda_id: r.id, codice, tipo: r.tipo, oggetto: r.oggetto, note: r.note || '', stato: 'bozza', importo_offerta: 0 })
+    if (error) { showToast('Errore: ' + error.message) }
+    else { await supabase.from('rda').update({ stato: 'inviata' }).eq('id', r.id); showToast('✅ RDO creata — vai alla tab RDO'); setDetailRda(null); carica() }
+    setGenerandoRdo(false)
+  }
   const elimina = async (rda: RDA) => {
     if (!window.confirm(`Eliminare la RDA ${rda.codice}?`)) return
     if (!window.confirm(`Conferma definitiva: la RDA "${rda.codice}" verrà eliminata permanentemente.`)) return
@@ -212,7 +235,8 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
               </thead>
               <tbody>
                 {rdaFiltrate.map(r => (
-                  <tr key={r.id} style={{ transition:'background .1s' }}
+                  <tr key={r.id} style={{ transition:'background .1s', cursor:'pointer' }}
+                    onClick={() => caricaVoci(r)}
                     onMouseEnter={e=>(e.currentTarget.style.background='var(--accent-light)')}
                     onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
                     <td style={{ ...(styleObj as any).td, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>{r.codice}</td>
@@ -221,8 +245,25 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
                     <td style={{ ...(styleObj as any).td, fontSize:11 }}>{r.data_necessita || '—'}</td>
                     <td style={{ ...(styleObj as any).td, fontSize:11 }}>
   {r.fornitore_sugg
-    ? <button onClick={() => setViewFornitore(r.fornitore_sugg)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--accent)', textDecoration:'underline', fontSize:11, padding:0 }}>{r.fornitore_sugg}</button>
+    ? <button onClick={e => { e.stopPropagation(); setViewFornitore(r.fornitore_sugg) }} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--accent)', textDecoration:'underline', fontSize:11, padding:0 }}>{r.fornitore_sugg}</button>
     : '—'}
+</td>
+                    <td style={{ ...(styleObj as any).td, fontSize:11 }} onClick={e => e.stopPropagation()}>
+  {r.stato === 'approvata' ? (
+    <button onClick={() => generaRDO(r)} disabled={generandoRdo}
+      style={{ padding:'4px 10px', borderRadius:6, background:'#3b82f6', color:'#fff', border:'none', cursor:'pointer', fontSize:10, fontWeight:700, whiteSpace:'nowrap' as const }}>
+      📋 Genera RDO
+    </button>
+  ) : r.stato === 'bozza' ? (
+    <button onClick={async e => { e.stopPropagation(); await supabase.from('rda').update({stato:'approvata'}).eq('id',r.id); carica() }}
+      style={{ padding:'4px 10px', borderRadius:6, background:'#10b981', color:'#fff', border:'none', cursor:'pointer', fontSize:10, fontWeight:700, whiteSpace:'nowrap' as const }}>
+      ✅ Approva
+    </button>
+  ) : (
+    <span style={{ fontSize:10, color:'var(--t3)' }}>
+      {r.stato === 'inviata' ? '🔵 RDO in corso' : r.stato === 'chiusa' ? '✅ Chiusa' : ''}
+    </span>
+  )}
 </td>
                     <td style={(styleObj as any).td as React.CSSProperties}>
                       <select value={r.stato}
@@ -321,6 +362,51 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
         </div>
       )}
 
+      {detailRda && (
+        <div className="modal-overlay" onClick={() => setDetailRda(null)}>
+          <div style={{ position:'fixed', top:0, right:0, width:520, maxWidth:'95vw', height:'100vh', background:'var(--panel)', borderLeft:'1px solid var(--border)', zIndex:300, display:'flex', flexDirection:'column', boxShadow:'-4px 0 20px rgba(0,0,0,0.15)' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ padding:'14px 16px', borderBottom:'1px solid var(--border)', display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--bg)' }}>
+              <div>
+                <h3 style={{ fontSize:14, fontWeight:700, margin:0 }}>{detailRda.codice}</h3>
+                <p style={{ fontSize:11, color:'var(--t3)', margin:0 }}>{detailRda.tipo} · {detailRda.wbs_id || 'WBS non specificato'}</p>
+              </div>
+              <button onClick={() => setDetailRda(null)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'var(--t3)' }}>✕</button>
+            </div>
+            <div style={{ flex:1, overflowY:'auto', padding:16, display:'flex', flexDirection:'column', gap:12 }}>
+              <div style={{ background:'var(--bg)', borderRadius:10, padding:12, border:'1px solid var(--border)' }}>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                  {[['Tipo',detailRda.tipo],['Stato',detailRda.stato],['Data necessità',detailRda.data_necessita||'—'],['Fornitore sugg.',detailRda.fornitore_sugg||'—']].map(([l,v]) => (
+                    <div key={l}><p style={{ fontSize:10, color:'var(--t3)', fontWeight:700, textTransform:'uppercase' as const, margin:0 }}>{l}</p><p style={{ fontSize:13, margin:'2px 0 0' }}>{v}</p></div>
+                  ))}
+                </div>
+                <div style={{ marginTop:8 }}>
+                  <p style={{ fontSize:10, color:'var(--t3)', fontWeight:700, textTransform:'uppercase' as const, margin:0 }}>Oggetto</p>
+                  <p style={{ fontSize:13, margin:'2px 0 0' }}>{detailRda.oggetto}</p>
+                </div>
+                {detailRda.note && <div style={{ marginTop:8 }}><p style={{ fontSize:10, color:'var(--t3)', fontWeight:700, textTransform:'uppercase' as const, margin:0 }}>Note</p><p style={{ fontSize:12, color:'var(--t2)', margin:'2px 0 0' }}>{detailRda.note}</p></div>}
+              </div>
+              <div style={{ background:'var(--bg)', borderRadius:10, padding:12, border:'1px solid var(--border)' }}>
+                <h4 style={{ fontSize:12, fontWeight:700, marginBottom:10, color:'var(--t2)', margin:'0 0 10px' }}>
+                  Voci computo incluse {vociRda.length > 0 && <span style={{ color:'var(--t3)', fontWeight:400 }}>({vociRda.length})</span>}
+                </h4>
+                {loadingVoci ? <p style={{ fontSize:12, color:'var(--t3)' }}>Caricamento...</p>
+                : vociRda.length === 0 ? <p style={{ fontSize:12, color:'var(--t3)', fontStyle:'italic' }}>Nessuna voce di computo collegata.</p>
+                : <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
+                    <thead><tr>{['Descrizione','U.M.','Qtà'].map(h=><th key={h} style={{ padding:'6px 8px', textAlign:'left' as const, fontWeight:700, color:'var(--t3)', borderBottom:'1px solid var(--border)', fontSize:10 }}>{h}</th>)}</tr></thead>
+                    <tbody>{vociRda.map(v=><tr key={v.id}><td style={{ padding:'7px 8px', borderBottom:'1px solid var(--border)', color:'var(--t1)', lineHeight:1.4 }}>{v.descrizione}</td><td style={{ padding:'7px 8px', borderBottom:'1px solid var(--border)', color:'var(--t2)', whiteSpace:'nowrap' as const }}>{v.unita_misura||'—'}</td><td style={{ padding:'7px 8px', borderBottom:'1px solid var(--border)', color:'var(--t2)' }}>{v.quantita!=null?Number(v.quantita).toLocaleString('it-IT'):'—'}</td></tr>)}</tbody>
+                  </table>}
+              </div>
+            </div>
+            <div style={{ padding:'12px 16px', borderTop:'1px solid var(--border)', display:'flex', gap:8 }}>
+              {detailRda.stato === 'approvata' && <button onClick={() => generaRDO(detailRda)} disabled={generandoRdo} style={{ flex:1, padding:'10px', background:'#3b82f6', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontSize:13, fontWeight:700 }}>{generandoRdo ? 'Creazione...' : '📋 Genera RDO'}</button>}
+              {detailRda.stato === 'bozza' && <button onClick={async () => { await supabase.from('rda').update({stato:'approvata'}).eq('id',detailRda.id); showToast('RDA approvata'); setDetailRda({...detailRda,stato:'approvata'}); carica() }} style={{ flex:1, padding:'10px', background:'#10b981', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontSize:13, fontWeight:700 }}>✅ Approva RDA</button>}
+              {['inviata','chiusa'].includes(detailRda.stato) && <p style={{ flex:1, fontSize:12, color:'var(--t3)', textAlign:'center' as const, padding:'10px', margin:0 }}>{detailRda.stato === 'inviata' ? '🔵 RDO in corso' : '✅ Acquisizione completata'}</p>}
+              <button onClick={() => setDetailRda(null)} style={{ padding:'10px 16px', border:'1px solid var(--border)', borderRadius:8, background:'none', cursor:'pointer', fontSize:12 }}>Chiudi</button>
+            </div>
+          </div>
+        </div>
+      )}
       {viewFornitore && (
         <div className="modal-overlay" onClick={() => setViewFornitore(null)}>
           <div className="modal-box" style={{ maxWidth:480, width:'92%' }} onClick={e => e.stopPropagation()}>
