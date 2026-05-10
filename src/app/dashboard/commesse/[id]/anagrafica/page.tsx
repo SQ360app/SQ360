@@ -146,6 +146,7 @@ function RicercaProfessionista({ figura, valore, onSeleziona, onNuovo }: {
   const [risultati, setRisultati] = useState<Professionista[]>([])
   const [aperto, setAperto] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [showProfile, setShowProfile] = useState(false)
   const [hover, setHover] = useState<string | null>(null)
   const dropRef = useRef<HTMLDivElement>(null)
 
@@ -175,7 +176,9 @@ function RicercaProfessionista({ figura, valore, onSeleziona, onNuovo }: {
       <div style={S.selectedCard}>
         <div style={S.selectedAvatar}>{valore.nome[0]}{valore.cognome?.[0]}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={S.selectedName} className="truncate">{valore.nome} {valore.cognome}</p>
+            <button onClick={() => setShowProfile(true)} style={{ background:'none', border:'none', padding:0, cursor:'pointer', textAlign:'left' as const, width:'100%' }}>
+              <p style={{...S.selectedName, textDecoration:'underline', textDecorationColor:'var(--accent)'}} className="truncate">{valore.nome} {valore.cognome}</p>
+            </button>
           <p style={S.selectedSub} className="truncate">
             {valore.ordine_professionale || valore.specializzazione || valore.tipo}
             {valore.pec && <span style={{ marginLeft: 6, color: 'var(--accent)' }}>{valore.pec}</span>}
@@ -189,6 +192,26 @@ function RicercaProfessionista({ figura, valore, onSeleziona, onNuovo }: {
         }} title="Rimuovi">
           <X size={14} />
         </button>
+            {showProfile && (
+              <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}
+                onClick={() => setShowProfile(false)}>
+                <div style={{ background:'var(--panel)', borderRadius:16, padding:24, width:420, maxWidth:'92vw', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}
+                  onClick={e => e.stopPropagation()}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+                    <h3 style={{ margin:0, fontSize:15, fontWeight:700 }}>Anagrafica professionista</h3>
+                    <button onClick={() => setShowProfile(false)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'var(--t3)' }}>✕</button>
+                  </div>
+                  <div style={{ display:'flex', flexDirection:'column' as const, gap:8, fontSize:13 }}>
+                    <div style={{ fontSize:16, fontWeight:700 }}>{valore.nome} {valore.cognome}</div>
+                    {valore.ordine_professionale && <div><b>Ordine:</b> {valore.ordine_professionale}{valore.numero_iscrizione ? ' n. '+valore.numero_iscrizione : ''}</div>}
+                    {(valore.studio || valore.specializzazione) && <div><b>Studio:</b> {valore.studio || valore.specializzazione}</div>}
+                    {valore.pec && <div><b>PEC:</b> <a href={'mailto:'+valore.pec} style={{ color:'var(--accent)' }}>{valore.pec}</a></div>}
+                    {valore.email && <div><b>Email:</b> <a href={'mailto:'+valore.email} style={{ color:'var(--accent)' }}>{valore.email}</a></div>}
+                    {valore.telefono && <div><b>Tel:</b> {valore.telefono}</div>}
+                  </div>
+                </div>
+              </div>
+            )}
       </div>
     )
   }
