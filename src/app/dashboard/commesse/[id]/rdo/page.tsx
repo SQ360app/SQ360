@@ -75,6 +75,9 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
         .limit(8)
       setFResults((data as Fornitore[]) || [])
     }, 300)
+        return () => clearTimeout(t)
+  }, [fSearch])
+  
    const generaPdf = async (rdo: any) => {
   const { data: com } = await supabase.from('commesse')
     .select('codice,nome,committente').eq('id', id).single()
