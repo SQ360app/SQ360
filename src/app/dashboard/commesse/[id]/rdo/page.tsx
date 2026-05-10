@@ -115,8 +115,6 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
   const w = window.open('','_blank')
   if(w){w.document.write(html);w.document.close();setTimeout(()=>w.print(),400)}
 }
-     return () => clearTimeout(t)
-  }, [fSearch])
 
   const fLabel = (f: Fornitore) => f.ragione_sociale || ((f.nome || '') + ' ' + (f.cognome || '')).trim()
 
