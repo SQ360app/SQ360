@@ -223,14 +223,6 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
           <button className="btn-primary" style={{ fontSize:12, padding:'8px 14px' }}
             onClick={() => { setEditRdo({ stato:'bozza', importo_offerta:0 }); setFSearch(''); setForm(true) }}>
             + Nuova RDO
-        <button style={{...styleBtn('#475569'),fontSize:11,marginLeft:4}}
-  onClick={() => generaPdf(r)}>📄 PDF</button>
-{r.stato === 'aggiudicata' && (
-  <button style={{...styleBtn('#10b981'),fontSize:11,marginLeft:4}}
-    onClick={() => { window.location.href = window.location.pathname.replace('/rdo','/oda') }}>
-    ✅ Genera ODA
-  </button>
-)}
           </button>
         </div>
 
@@ -273,6 +265,8 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
                         <button style={styleBtn('#3b82f6')} onClick={() => { setEditRdo(r); setFSearch(r.fornitore || ''); setForm(true) }}>
                           Modifica
                         </button>
+                  <button style={{...styleBtn('#475569'),fontSize:11,marginLeft:4}} onClick={() => generaPdf(r)}>📄 PDF</button>
+                  {r.stato === 'aggiudicata' && (<button style={{...styleBtn('#10b981'),fontSize:11,marginLeft:4}} onClick={() => { window.location.href = window.location.pathname.replace('/rdo','/oda') }}>✅ Genera ODA</button>)}
                       </td>
                     </tr>
                   )
