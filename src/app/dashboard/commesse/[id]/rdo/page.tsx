@@ -77,7 +77,7 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
     }, 300)
    const generaPdf = async (rdo: any) => {
   const { data: com } = await supabase.from('commesse')
-    .select('codice,nome,committente').eq('id', commessaId).single()
+    .select('codice,nome,committente').eq('id', id).single()
   let voci: any[] = []
   if (rdo.rda_id) {
     const { data: rda } = await supabase.from('rda')
