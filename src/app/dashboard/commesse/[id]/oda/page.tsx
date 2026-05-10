@@ -50,7 +50,7 @@ export default function ODAPage() {
   async function load() {
     setLoading(true)
     const { data } = await supabase.from('oda').select('*').eq('commessa_id', commessaId).order('created_at', { ascending: false })
-    const { data: forn } = await supabase.from('professionisti_fornitori').select('id, ragione_sociale, nome, cognome').order('ragione_sociale')
+    const { data: forn } = await supabase.from('professionisti_fornitori').select('id, ragione_sociale, nome, cognome').order('id', { ascending: true })
     setOda(data || [])
     setFornitori(forn || [])
     setLoading(false)
