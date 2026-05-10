@@ -142,7 +142,7 @@ export default function CommessaLayout({ children }: { children: React.ReactNode
             </div>
             <p style={{ fontSize: 13, color: '#374151', margin: '0 0 16px', lineHeight: 1.5 }}>
               Stai per eliminare <strong>{commessa?.nome}</strong> ({commessa?.codice}).
-              Tutti i dati collegati (computo, RDA, RDO, ODA, SAL) verranno eliminati definitivamente.
+              Tutti i dati collegati (computo, RDA, RDO, ODA, SAL) verranno eliminati definitivamente. Il database Contatti (fornitori, professionisti) NON viene eliminato.
             </p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button onClick={() => setShowDeleteConfirm(false)}
