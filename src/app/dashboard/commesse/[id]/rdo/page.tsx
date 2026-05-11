@@ -38,6 +38,25 @@ const styleBtn = (c: string): React.CSSProperties => ({ padding:'8px 16px', bord
 const styleTh = { padding:'7px 10px', fontSize:10, fontWeight:700 as const, color:'var(--t3)', textTransform:'uppercase' as const, background:'var(--bg)', borderBottom:'1px solid var(--border)', textAlign:'left' as const, whiteSpace:'nowrap' as const }
 const styleTd = { padding:'10px 10px', fontSize:12, color:'var(--t2)', borderBottom:'1px solid var(--border)' }
 
+
+function FlowThreadRDO({ rdoId, rdaId, supabase }: { rdoId: string; rdaId?: string; supabase: any }) {
+  const [rda, setRda] = React.useState<{codice:string;stato:string}|null>(null)
+  const [oda, setOda] = React.useState<{numero:string;stato:string}|null>(null)
+  React.useEffect(() => {
+    if (rdaId) supabase.from('rda').select('codice,stato').eq('id', rdaId).single().then(({ data }: any) => data && setRda(data))
+    supabase.from('oda').select('numero,stato').eq('rdo_id', rdoId).limit(1).then(({ data }: any) => data?.[0] && setOda(data[0]))
+  }, [rdoId, rdaId])
+  if (!rda && !oda) return null
+  const C: Record<string,string> = { bozza:'#f59e0b',approvata:'#3b82f6',inviata:'#8b5cf6',aggiudicata:'#10b981',EVASO:'#10b981',EMESSO:'#3b82f6',BOZZA:'#f59e0b' }
+  return (
+    <div style={{ display:'flex',alignItems:'center',gap:4,marginTop:3,flexWrap:'wrap' as const }}>
+      {rda&&<span style={{ fontSize:10,padding:'1px 5px',borderRadius:4,background:(C[rda.stato]||'#6b7280')+'20',color:C[rda.stato]||'#6b7280',fontWeight:600 }}>📋 {rda.codice?.slice(0,12)}</span>}
+      {rda&&<span style={{ color:'var(--t4)',fontSize:10 }}>→</span>}
+      {oda&&<><span style={{ color:'var(--t4)',fontSize:10 }}>→</span><span style={{ fontSize:10,padding:'1px 5px',borderRadius:4,background:(C[oda.stato]||'#6b7280')+'20',color:C[oda.stato]||'#6b7280',fontWeight:600 }}>📦 {oda.numero||'ODA'}</span></>}
+    </div>
+  )
+}
+
 export default function RDOPage({ params: p }: { params: Promise<{ id: string }> }) {
   const { id } = use(p)
   const [rdoList, setRdoList] = useState<RDO[]>([])
@@ -247,7 +266,7 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
                     <tr key={r.id}
                       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--accent-light)' }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
-                      <td style={{ ...styleTd, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>{r.codice}</td>
+                      <td style={{ ...styleTd, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>{r.codice}<FlowThreadRDO rdoId={r.id} rdaId={r.rda_id} supabase={supabase} /></td>
                       <td style={{ ...styleTd, fontWeight:600 }}>{r.fornitore}</td>
                       <td style={{ ...styleTd, fontSize:11 }}>{r.email_fornitore || '—'}</td>
                       <td style={{ ...styleTd, fontSize:11 }}>{rda ? rda.codice : '—'}</td>
