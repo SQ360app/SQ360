@@ -264,8 +264,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
       return
     }
     // Raggruppa per WBS se le voci hanno wbs_id diversi
-    const wbsGroups: Record<string, string[]> = {}
-    ids.forEach(vid => {
+fix: generaRDA salva voci_ids e origine nel DB    ids.forEach(vid => {
       const v = voci.find(x => x.id === vid)
       const key = v?.wbs_id || 'nessun_wbs'
       if (!wbsGroups[key]) wbsGroups[key] = []
