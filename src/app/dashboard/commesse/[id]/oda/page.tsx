@@ -23,6 +23,42 @@ const STATI: Record<string, { label: string; color: string }> = {
   ANNULLATO: { label: 'Annullato', color: 'bg-red-50 text-red-700' },
 }
 
+
+function VociRdaSection({ rdoId, supabase }: { rdoId?: string; supabase: any }) {
+  const [voci,setVoci]=React.useState<any[]>([])
+  const [loading,setLoading]=React.useState(false)
+  const [open,setOpen]=React.useState(false)
+  const carica=async()=>{
+    if(!rdoId||voci.length>0)return;setLoading(true)
+    const{data:rdo}=await supabase.from('rdo').select('rda_id').eq('id',rdoId).single()
+    if(rdo?.rda_id){
+      const{data:rda}=await supabase.from('rda').select('voci_ids').eq('id',rdo.rda_id).single()
+      if(rda?.voci_ids?.length){
+        const{data:v}=await supabase.from('computo_metrico').select('id,descrizione,unita_misura,quantita').in('id',rda.voci_ids)
+        setVoci(v||[])
+      }
+    }
+    setLoading(false)
+  }
+  if(!rdoId)return null
+  return(
+    <div style={{marginTop:8}}>
+      <button onClick={()=>{setOpen(!open);if(!open)carica()}} style={{fontSize:11,padding:'3px 8px',borderRadius:6,border:'1px solid var(--accent)',background:'none',cursor:'pointer',color:'var(--accent)',fontWeight:600}}>
+        {open?'▼':'▶'} Voci computo {voci.length>0&&`(${voci.length})`}
+      </button>
+      {open&&<div style={{marginTop:6,background:'var(--bg)',borderRadius:8,border:'1px solid var(--border)',overflow:'hidden',maxHeight:180,overflowY:'auto' as const}}>
+        {loading?<p style={{fontSize:11,color:'var(--t3)',padding:'8px',margin:0}}>...</p>
+        :voci.length===0?<p style={{fontSize:11,color:'var(--t3)',padding:'8px',margin:0,fontStyle:'italic'}}>Nessuna voce</p>
+        :<table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}><tbody>{voci.map(v=><tr key={v.id}>
+          <td style={{padding:'4px 6px',borderBottom:'1px solid var(--border)',color:'var(--t1)'}}>{v.descrizione?.slice(0,80)}</td>
+          <td style={{padding:'4px 6px',borderBottom:'1px solid var(--border)',color:'var(--t2)',whiteSpace:'nowrap' as const}}>{v.unita_misura||'—'}</td>
+          <td style={{padding:'4px 6px',borderBottom:'1px solid var(--border)',color:'var(--t2)'}}>{v.quantita!=null?Number(v.quantita).toLocaleString('it-IT'):'—'}</td>
+        </tr>)}</tbody></table>}
+      </div>}
+    </div>
+  )
+}
+
 export default function ODAPage() {
   const params = useParams()
   const commessaId = params.id as string
