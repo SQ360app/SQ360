@@ -55,6 +55,53 @@ function FornitoreCard({ nome }: { nome: string }) {
   )
 }
 
+
+// ─── FlowThread Inline ─────────────────────────────────────────────────────
+function FlowThreadInline({ rdaId, supabase, commessaId }: { rdaId: string; supabase: any; commessaId: string }) {
+  const [rdos, setRdos] = React.useState<{id:string;codice:string;stato:string}[]>([])
+  const [loaded, setLoaded] = React.useState(false)
+
+  React.useEffect(() => {
+    supabase.from('rdo').select('id,codice,stato').eq('rda_id', rdaId).then(({ data }: any) => {
+      setRdos(data || [])
+      setLoaded(true)
+    })
+  }, [rdaId])
+
+  if (!loaded || rdos.length === 0) return null
+
+  const COLORI: Record<string,string> = {
+    bozza:'#f59e0b', inviata:'#8b5cf6', risposta_ricevuta:'#6366f1',
+    comparativa:'#f97316', aggiudicata:'#10b981', annullata:'#ef4444'
+  }
+
+  return (
+    <div style={{ margin:'8px 16px', padding:'10px 12px', background:'var(--bg)', borderRadius:8, border:'1px solid var(--border)' }}>
+      <div style={{ fontSize:10, fontWeight:700, color:'var(--t3)', textTransform:'uppercase' as const, letterSpacing:'0.06em', marginBottom:6 }}>
+        Flusso documentale
+      </div>
+      <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' as const }}>
+        <span style={{ fontSize:11, fontWeight:700, color:'var(--accent)', padding:'2px 8px', background:'var(--accent-light)', borderRadius:4 }}>
+          📋 Questa RDA
+        </span>
+        {rdos.map((rdo, i) => (
+          <React.Fragment key={rdo.id}>
+            <span style={{ color:'var(--t4)', fontSize:12 }}>→</span>
+            <span style={{
+              fontSize:11, fontWeight:600, padding:'2px 8px', borderRadius:4,
+              background: (COLORI[rdo.stato] || '#6b7280') + '20',
+              color: COLORI[rdo.stato] || '#6b7280',
+              border: '1px solid ' + (COLORI[rdo.stato] || '#6b7280') + '44'
+            }}>
+              📤 {rdo.codice?.slice(0,14)} · {rdo.stato}
+            </span>
+          </React.Fragment>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function RDAPage({ params: p }: { params: Promise<{ id: string }> }) {
   const { id } = use(p)
   const [rdaList, setRdaList] = useState<RDA[]>([])
@@ -67,6 +114,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
   const [fornitori, setFornitori] = useState<Fornitore[]>([])
   const [fSearch, setFSearch] = useState('')
   const [fResults, setFResults] = useState<Fornitore[]>([])
+  const [modRapida, setModRapida] = useState(false)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState('')
   const [viewFornitore, setViewFornitore] = useState<string | null>(null)
@@ -213,8 +261,12 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
               {STATI.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
             <button className="btn-primary" style={{ fontSize:12, padding:'8px 14px', whiteSpace:'nowrap' as const }}
-              onClick={() => { setEditRda({ tipo:'MAT', stato:'bozza', qta_stimata:1, um:'nr' }); setForm(true) }}>
+              onClick={() => { setEditRda({ tipo:'MAT', stato:'bozza', qta_stimata:1, um:'nr' }); setModRapida(false); setForm(true) }}>
               + Nuova RDA
+            </button>
+            <button className="btn-secondary" style={{ fontSize:12, padding:'8px 10px', whiteSpace:'nowrap' as const, background:'var(--bg)', border:'1px solid var(--border)', borderRadius:8, cursor:'pointer', color:'var(--t2)' }}
+              onClick={() => { setEditRda({ tipo:'MAT', stato:'bozza', qta_stimata:1, um:'nr' }); setModRapida(true); setForm(true) }}>
+              ⚡ Rapida
             </button>
           </div>
         </div>
@@ -295,10 +347,19 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
         <div className="modal-overlay" onClick={e => { if(e.target===e.currentTarget){setForm(false);setEditRda(null)} }}>
           <div className="modal-box" style={{ maxWidth:560, width:'90%' }}>
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:20 }}>
-              <h3 style={{ fontSize:14, fontWeight:700, color:'var(--t1)' }}>{editRda.id ? 'Modifica RDA' : 'Nuova Richiesta di Acquisto'}</h3>
+              <h3 style={{ fontSize:14, fontWeight:700, color:'var(--t1)' }}>{editRda.id ? 'Modifica RDA' : modRapida ? '⚡ RDA Rapida (Cantiere)' : 'Nuova Richiesta di Acquisto'}</h3>
               <button onClick={() => { setForm(false); setEditRda(null) }} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'var(--t3)' }}>✕</button>
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+              {/* Toggle modalità */}
+              <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background: modRapida ? '#fef9c3' : 'var(--bg)', borderRadius:8, border:'1px solid var(--border)' }}>
+                <button onClick={() => setModRapida(!modRapida)} style={{ padding:'4px 10px', borderRadius:6, fontSize:11, fontWeight:700, border:'none', cursor:'pointer', background: modRapida ? '#eab308' : 'var(--border)', color: modRapida ? '#fff' : 'var(--t2)' }}>
+                  {modRapida ? '⚡ Rapida (Cantiere)' : '📋 Completa (Ufficio)'}
+                </button>
+                <span style={{ fontSize:11, color:'var(--t3)' }}>
+                  {modRapida ? 'Solo i campi essenziali. I dettagli si aggiungono in ufficio.' : 'Tutti i campi disponibili.'}
+                </span>
+              </div>
               <div>
                 <label style={(styleObj as any).lbl as React.CSSProperties}>Oggetto *</label>
                 <input style={(styleObj as any).inp as React.CSSProperties} value={editRda.oggetto||''} onChange={e=>setEditRda({...editRda, oggetto:e.target.value})} placeholder="Descrivi la richiesta..." />
@@ -331,7 +392,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
                 <label style={(styleObj as any).lbl as React.CSSProperties}>Data necessità</label>
                 <input type="date" style={(styleObj as any).inp as React.CSSProperties} value={editRda.data_necessita||''} onChange={e=>setEditRda({...editRda, data_necessita:e.target.value})} />
               </div>
-              <div style={{ position:'relative' }}>
+              {!modRapida && <div style={{ position:'relative' }}>
                 <label style={(styleObj as any).lbl as React.CSSProperties}>Fornitore suggerito</label>
                 <input style={(styleObj as any).inp as React.CSSProperties} value={fSearch} onChange={e=>{setFSearch(e.target.value); setEditRda({...editRda, fornitore_sugg:e.target.value})}} placeholder="Cerca per nome o ragione sociale..." />
                 {fResults.length > 0 && (
@@ -348,7 +409,8 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
                     ))}
                   </div>
                 )}
-              </div>
+ }
+             </div>
               <div>
                 <label style={(styleObj as any).lbl as React.CSSProperties}>Note</label>
                 <textarea style={{ ...(styleObj as any).inp, resize:'vertical' as const, minHeight:60 }} value={editRda.note||''} onChange={e=>setEditRda({...editRda, note:e.target.value})} />
@@ -398,6 +460,11 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
                   </table>}
               </div>
             </div>
+
+              {/* FlowThread — flusso documentale */}
+              {detailRda.stato !== 'bozza' && (
+                <FlowThreadInline rdaId={detailRda.id} supabase={supabase} commessaId={id} />
+              )}
             <div style={{ padding:'12px 16px', borderTop:'1px solid var(--border)', display:'flex', gap:8 }}>
               {detailRda.stato === 'approvata' && <button onClick={() => generaRDO(detailRda)} disabled={generandoRdo} style={{ flex:1, padding:'10px', background:'#3b82f6', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontSize:13, fontWeight:700 }}>{generandoRdo ? 'Creazione...' : '📋 Genera RDO'}</button>}
               {detailRda.stato === 'bozza' && <button onClick={async () => { await supabase.from('rda').update({stato:'approvata'}).eq('id',detailRda.id); showToast('RDA approvata'); setDetailRda({...detailRda,stato:'approvata'}); carica() }} style={{ flex:1, padding:'10px', background:'#10b981', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontSize:13, fontWeight:700 }}>✅ Approva RDA</button>}
