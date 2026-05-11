@@ -409,8 +409,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
                     ))}
                   </div>
                 )}
- }
-             </div>
+             </div>}
               <div>
                 <label style={(styleObj as any).lbl as React.CSSProperties}>Note</label>
                 <textarea style={{ ...(styleObj as any).inp, resize:'vertical' as const, minHeight:60 }} value={editRda.note||''} onChange={e=>setEditRda({...editRda, note:e.target.value})} />
