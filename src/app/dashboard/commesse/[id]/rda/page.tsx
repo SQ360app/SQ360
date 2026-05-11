@@ -116,6 +116,9 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
   const [fResults, setFResults] = useState<Fornitore[]>([])
   const [modRapida, setModRapida] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [wizardRdo, setWizardRdo] = useState<RDA | null>(null)
+  const [wizardTipo, setWizardTipo] = useState('MAT')
+  const [wizardNote, setWizardNote] = useState('')
   const [toast, setToast] = useState('')
   const [viewFornitore, setViewFornitore] = useState<string | null>(null)
   const [detailRda, setDetailRda] = useState<RDA | null>(null)
@@ -190,12 +193,13 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
     setVociRda((data as VoceComputo[]) || [])
     setLoadingVoci(false)
   }
-  const generaRDO = async (r: RDA) => {
-    setGenerandoRdo(true)
-    const codice = 'RDO-' + id.slice(0,8).toUpperCase() + '-' + Date.now().toString().slice(-4)
-    const { error } = await supabase.from('rdo').insert({ commessa_id: id, rda_id: r.id, codice, tipo: r.tipo, oggetto: r.oggetto, note: r.note || '', stato: 'bozza', importo_offerta: 0 })
-    if (error) { showToast('Errore: ' + error.message) }
-    else { await supabase.from('rda').update({ stato: 'inviata' }).eq('id', r.id); showToast('✅ RDO creata — vai alla tab RDO'); setDetailRda(null); carica() }
+  const generaRDO = (r: RDA) => { setWizardRdo(r); setWizardTipo(r.tipo||'MAT'); setWizardNote('') }
+  const creaRDO = async () => {
+    if(!wizardRdo) return; setGenerandoRdo(true)
+    const codice='RDO-'+id.slice(0,8).toUpperCase()+'-'+Date.now().toString().slice(-4)
+    const {error}=await supabase.from('rdo').insert({commessa_id:id,rda_id:wizardRdo.id,rda_ids:[wizardRdo.id],codice,tipo:wizardTipo,oggetto:wizardRdo.oggetto,note:wizardNote,stato:'bozza',importo_offerta:0})
+    if(error){showToast('Errore: '+error.message)}
+    else{await supabase.from('rda').update({stato:'inviata'}).eq('id',wizardRdo.id);showToast('✅ RDO creata — vai alla tab RDO');setWizardRdo(null);carica()}
     setGenerandoRdo(false)
   }
   const elimina = async (rda: RDA) => {
@@ -487,6 +491,32 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
       {toast && (
         <div style={{ position:'fixed', bottom:20, right:20, background:'#14532d', color:'#fff', padding:'10px 18px', borderRadius:10, fontSize:12, fontWeight:700, zIndex:1000, boxShadow:'var(--shadow-lg)' }}>
           {toast}
+        </div>
+      )}
+
+      {wizardRdo&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>!generandoRdo&&setWizardRdo(null)}>
+          <div style={{background:'var(--panel)',borderRadius:16,padding:24,width:460,maxWidth:'92vw',boxShadow:'0 20px 60px rgba(0,0,0,0.25)'}} onClick={e=>e.stopPropagation()}>
+            <h3 style={{margin:'0 0 4px',fontSize:15,fontWeight:700}}>Genera RDO da {wizardRdo.codice}</h3>
+            <p style={{margin:'0 0 12px',fontSize:12,color:'var(--t3)'}}>{wizardRdo.oggetto}</p>
+            {wizardRdo.voci_ids?.length?<div style={{marginBottom:12,padding:'6px 10px',background:'var(--bg)',borderRadius:6,fontSize:11,color:'var(--t2)'}}>📋 {wizardRdo.voci_ids.length} voci computo collegate</div>:null}
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--t3)',marginBottom:6}}>TIPO RDO</div>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap' as const}}>
+                {['MAT','SUB','NOL','MAN','MIX'].map(t=>(
+                  <button key={t} onClick={()=>setWizardTipo(t)} style={{padding:'6px 12px',borderRadius:8,border:'2px solid',cursor:'pointer',fontSize:11,fontWeight:700,borderColor:wizardTipo===t?'var(--accent)':'var(--border)',background:wizardTipo===t?'var(--accent-light)':'none',color:wizardTipo===t?'var(--accent)':'var(--t2)'}}>
+                    {t==='MAT'?'Materiale':t==='SUB'?'Subappalto':t==='NOL'?'Nolo':t==='MAN'?'Manodopera':'Misto'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <textarea value={wizardNote} onChange={e=>setWizardNote(e.target.value)} placeholder="Note / specifiche tecniche..." style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid var(--border)',fontSize:12,resize:'vertical' as const,minHeight:50,outline:'none',background:'var(--panel)',color:'var(--t1)',boxSizing:'border-box' as const,marginBottom:12}}/>
+            <div style={{padding:'8px 10px',background:'#eff6ff',borderRadius:6,fontSize:11,color:'#1e40af',marginBottom:14}}>💡 Puoi generare più RDO dalla stessa RDA per fornitori o tipi diversi</div>
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+              <button onClick={()=>setWizardRdo(null)} disabled={generandoRdo} style={{padding:'8px 16px',borderRadius:8,border:'1px solid var(--border)',background:'none',cursor:'pointer',fontSize:12}}>Annulla</button>
+              <button onClick={creaRDO} disabled={generandoRdo} style={{padding:'8px 20px',borderRadius:8,border:'none',background:'var(--accent)',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>{generandoRdo?'Creazione...':'📤 Crea RDO'}</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
