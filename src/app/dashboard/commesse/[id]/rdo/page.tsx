@@ -57,6 +57,41 @@ function FlowThreadRDO({ rdoId, rdaId, supabase }: { rdoId: string; rdaId?: stri
   )
 }
 
+
+function VociRdaSection({ rdaId, supabase }: { rdaId: string; supabase: any }) {
+  const [voci, setVoci] = React.useState<any[]>([])
+  const [loading, setLoading] = React.useState(false)
+  const [open, setOpen] = React.useState(false)
+  const carica = async () => {
+    if (voci.length > 0) return; setLoading(true)
+    const { data: rda } = await supabase.from('rda').select('voci_ids').eq('id', rdaId).single()
+    if (rda?.voci_ids?.length) {
+      const { data: v } = await supabase.from('computo_metrico').select('id,descrizione,unita_misura,quantita').in('id', rda.voci_ids)
+      setVoci(v || [])
+    }
+    setLoading(false)
+  }
+  if (!rdaId) return null
+  return (
+    <div style={{ marginTop:4 }}>
+      <button onClick={()=>{ setOpen(!open); if(!open) carica() }} style={{ fontSize:10,padding:'1px 6px',borderRadius:4,border:'1px solid var(--border)',background:'none',cursor:'pointer',color:'var(--t3)' }}>
+        {open?'▼':'▶'} Voci {voci.length>0&&`(${voci.length})`}
+      </button>
+      {open&&<div style={{ marginTop:4,background:'var(--bg)',borderRadius:6,border:'1px solid var(--border)',overflow:'hidden',maxHeight:160,overflowY:'auto' as const }}>
+        {loading?<p style={{fontSize:10,color:'var(--t3)',padding:'6px',margin:0}}>...</p>
+        :voci.length===0?<p style={{fontSize:10,color:'var(--t3)',padding:'6px',margin:0,fontStyle:'italic'}}>Nessuna voce</p>
+        :<table style={{width:'100%',borderCollapse:'collapse',fontSize:10}}>
+          <tbody>{voci.map(v=><tr key={v.id}>
+            <td style={{padding:'3px 6px',borderBottom:'1px solid var(--border)',color:'var(--t1)'}}>{v.descrizione?.slice(0,70)}</td>
+            <td style={{padding:'3px 6px',borderBottom:'1px solid var(--border)',color:'var(--t2)',whiteSpace:'nowrap' as const}}>{v.unita_misura||'—'}</td>
+            <td style={{padding:'3px 6px',borderBottom:'1px solid var(--border)',color:'var(--t2)'}}>{v.quantita!=null?Number(v.quantita).toLocaleString('it-IT'):'—'}</td>
+          </tr>)}</tbody>
+        </table>}
+      </div>}
+    </div>
+  )
+}
+
 export default function RDOPage({ params: p }: { params: Promise<{ id: string }> }) {
   const { id } = use(p)
   const [rdoList, setRdoList] = useState<RDO[]>([])
@@ -267,6 +302,7 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
                       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--accent-light)' }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
                       <td style={{ ...styleTd, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>{r.codice}<FlowThreadRDO rdoId={r.id} rdaId={r.rda_id} supabase={supabase} /></td>
+                    <VociRdaSection rdaId={r.rda_id} supabase={supabase} />
                       <td style={{ ...styleTd, fontWeight:600 }}>{r.fornitore}</td>
                       <td style={{ ...styleTd, fontSize:11 }}>{r.email_fornitore || '—'}</td>
                       <td style={{ ...styleTd, fontSize:11 }}>{rda ? rda.codice : '—'}</td>
