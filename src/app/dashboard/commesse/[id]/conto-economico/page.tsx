@@ -15,38 +15,62 @@ export default function ContoEconomicoPage() {
   async function load() {
     setLoading(true)
 
-    // IMPORTO CONTRATTO: legge SUM reale dal computo (non campo statico)
-    const { data: voci } = await supabase
-      .from('voci_computo')
-      .select('importo')
-      .eq('commessa_id', id)
-    const importoContratto = (voci || []).reduce((s: number, v: any) => s + (Number(v.importo) || 0), 0)
+    // 1. Ricavo contrattuale ufficiale (da commessa)
+    const { data: commessa } = await supabase
+      .from('commesse')
+      .select('importo_contratto')
+      .eq('id', id)
+      .single()
+    const ricavoContratto = commessa?.importo_contratto || 0
 
-    // SAL attivi (ricavi maturati)
+    // 2. Budget computo (somma voci_computo via computo_metrico)
+    const { data: computo } = await supabase
+      .from('computo_metrico')
+      .select('id')
+      .eq('commessa_id', id)
+      .single()
+    let budgetComputo = 0
+    if (computo) {
+      const { data: voci } = await supabase
+        .from('voci_computo')
+        .select('importo')
+        .eq('computo_id', computo.id)
+      budgetComputo = (voci || []).reduce((s: number, v: any) => s + (Number(v.importo) || 0), 0)
+    }
+
+    // 3. SAL attivi (ricavi maturati)
     const { data: sal } = await supabase
       .from('sal_attivi')
       .select('importo_netto_sal, stato')
       .eq('commessa_id', id)
-    const ricaviEmessi   = (sal || []).filter((s: any) => s.stato !== 'BOZZA').reduce((s: number, x: any) => s + (x.importo_netto_sal || 0), 0)
+    const ricaviEmessi    = (sal || []).filter((s: any) => s.stato !== 'BOZZA').reduce((s: number, x: any) => s + (x.importo_netto_sal || 0), 0)
     const ricaviIncassati = (sal || []).filter((s: any) => s.stato === 'PAGATO').reduce((s: number, x: any) => s + (x.importo_netto_sal || 0), 0)
 
-    // Costi da ODA e contratti
+    // 4. Costi da ODA impegnati
     const { data: odaList } = await supabase.from('oda').select('importo_netto, stato').eq('commessa_id', id)
     const costiOda = (odaList || []).filter((o: any) => o.stato !== 'ANNULLATO').reduce((s: number, x: any) => s + (x.importo_netto || 0), 0)
 
-    // Spese cantiere
+    // 5. Costi da fatture passive effettivamente pagate (consuntivo reale)
+    const { data: fatture } = await supabase
+      .from('fatture_passive')
+      .select('totale, stato')
+      .eq('commessa_id', id)
+    const costiPagati = (fatture || []).filter((f: any) => f.stato === 'pagata').reduce((s: number, f: any) => s + (f.totale || 0), 0)
+    const costiDaPagare = (fatture || []).filter((f: any) => !['pagata','contestata'].includes(f.stato)).reduce((s: number, f: any) => s + (f.totale || 0), 0)
+
+    // 6. Spese cantiere
     const { data: speseList } = await supabase.from('spese_cantiere').select('importo_netto, stato').eq('commessa_id', id)
     const costiSpese = (speseList || []).filter((s: any) => ['REGISTRATA', 'APPROVATA'].includes(s.stato)).reduce((s: number, x: any) => s + (x.importo_netto || 0), 0)
 
-    // Ritenute accumulate (svincolate a collaudo)
+    // 7. Ritenute accumulate
     const { data: salP } = await supabase.from('sal_passivi').select('ritenuta_importo, stato').eq('commessa_id', id)
     const ritenute = (salP || []).filter((s: any) => ['APPROVATO', 'PAGATO'].includes(s.stato)).reduce((s: number, x: any) => s + (x.ritenuta_importo || 0), 0)
 
-    // Contratti sub impegnati
+    // 8. Contratti sub impegnati
     const { data: contSub } = await supabase.from('contratti_sub').select('importo_netto, stato').eq('commessa_id', id)
     const costiContrattiSub = (contSub || []).filter((c: any) => c.stato !== 'ANNULLATO').reduce((s: number, x: any) => s + (x.importo_netto || 0), 0)
 
-    setCe({ importoContratto, ricaviEmessi, ricaviIncassati, costiOda, costiSpese, ritenute, costiContrattiSub })
+    setCe({ ricavoContratto, budgetComputo, ricaviEmessi, ricaviIncassati, costiOda, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub })
     setLoading(false)
   }
 
@@ -58,22 +82,25 @@ export default function ContoEconomicoPage() {
     </div>
   )
 
-  const { importoContratto, ricaviEmessi, ricaviIncassati, costiOda, costiSpese, ritenute, costiContrattiSub } = ce
-  const totCosti = costiOda + costiSpese
-  const margineNetto = importoContratto - totCosti
-  const marginePerc = importoContratto > 0 ? (margineNetto / importoContratto) * 100 : 0
-  const avanzamento = importoContratto > 0 ? (ricaviEmessi / importoContratto) * 100 : 0
+  const { ricavoContratto, budgetComputo, ricaviEmessi, ricaviIncassati, costiOda, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub } = ce
+  const totCostiImpegnati = costiOda + costiSpese + costiContrattiSub
+  const margineAtteso  = ricavoContratto - totCostiImpegnati
+  const margineAttuale = ricavoContratto - costiPagati
+  const margineAttesoPerc  = ricavoContratto > 0 ? (margineAtteso  / ricavoContratto) * 100 : 0
+  const margineAttualePerc = ricavoContratto > 0 ? (margineAttuale / ricavoContratto) * 100 : 0
+  const avanzamento = ricavoContratto > 0 ? (ricaviEmessi / ricavoContratto) * 100 : 0
 
-  const MargineIcon = marginePerc >= 15 ? TrendingUp : marginePerc >= 5 ? Minus : TrendingDown
-  const margineColor = marginePerc >= 15 ? '#059669' : marginePerc >= 5 ? '#d97706' : '#dc2626'
+  const MargineIcon = margineAttesoPerc >= 15 ? TrendingUp : margineAttesoPerc >= 5 ? Minus : TrendingDown
+  const margineColor = margineAttesoPerc >= 15 ? '#059669' : margineAttesoPerc >= 5 ? '#d97706' : '#dc2626'
+  const margineAttualeColor = margineAttualePerc >= 15 ? '#059669' : margineAttualePerc >= 5 ? '#d97706' : '#dc2626'
 
   const Row = ({ label, value, sub, color, bold }: any) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f3f4f6' }}>
       <span style={{ fontSize: 13, color: sub ? '#9ca3af' : '#374151', paddingLeft: sub ? 20 : 0, fontWeight: bold ? 600 : 400 }}>{label}</span>
       <div style={{ textAlign: 'right' }}>
-        <span style={{ fontSize: 13, fontWeight: bold ? 700 : 500, color: color || '#111827' }}>EUR {fmt(value)}</span>
-        {importoContratto > 0 && !sub && (
-          <span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 8 }}>{pct(value, importoContratto)}</span>
+        <span style={{ fontSize: 13, fontWeight: bold ? 700 : 500, color: color || '#111827' }}>€ {fmt(value)}</span>
+        {ricavoContratto > 0 && !sub && (
+          <span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 8 }}>{pct(value, ricavoContratto)}</span>
         )}
       </div>
     </div>
@@ -82,61 +109,78 @@ export default function ContoEconomicoPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-      {/* Margine lordo previsto */}
-      <div style={{ background: marginePerc >= 15 ? '#f0fdf4' : marginePerc >= 5 ? '#fffbeb' : '#fef2f2', border: '1px solid ' + (marginePerc >= 15 ? '#bbf7d0' : marginePerc >= 5 ? '#fde68a' : '#fecaca'), borderRadius: 12, padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 4px', fontWeight: 500 }}>Margine lordo previsto</p>
-          <p style={{ fontSize: 28, fontWeight: 700, color: margineColor, margin: 0 }}>EUR {fmt(margineNetto)}</p>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', marginBottom: 4 }}>
-            <MargineIcon size={20} style={{ color: margineColor }} />
-            <span style={{ fontSize: 32, fontWeight: 800, color: margineColor }}>{marginePerc.toFixed(1)}%</span>
+      {/* Doppio margine: atteso vs attuale */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ background: margineAttesoPerc >= 15 ? '#f0fdf4' : margineAttesoPerc >= 5 ? '#fffbeb' : '#fef2f2', border: '1px solid ' + (margineAttesoPerc >= 15 ? '#bbf7d0' : margineAttesoPerc >= 5 ? '#fde68a' : '#fecaca'), borderRadius: 12, padding: '20px 24px' }}>
+          <p style={{ fontSize: 11, color: '#6b7280', margin: '0 0 4px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Margine atteso (ODA impegnati)</p>
+          <p style={{ fontSize: 26, fontWeight: 700, color: margineColor, margin: '0 0 4px' }}>€ {fmt(margineAtteso)}</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <MargineIcon size={16} style={{ color: margineColor }} />
+            <span style={{ fontSize: 20, fontWeight: 800, color: margineColor }}>{margineAttesoPerc.toFixed(1)}%</span>
+            <span style={{ fontSize: 11, color: '#9ca3af' }}>su contratto</span>
           </div>
-          <p style={{ fontSize: 11, color: '#6b7280', margin: 0 }}>su importo contratto</p>
+        </div>
+        <div style={{ background: costiPagati > 0 ? (margineAttualePerc >= 15 ? '#f0fdf4' : margineAttualePerc >= 5 ? '#fffbeb' : '#fef2f2') : '#f9fafb', border: '1px solid ' + (costiPagati > 0 ? (margineAttualePerc >= 15 ? '#bbf7d0' : margineAttualePerc >= 5 ? '#fde68a' : '#fecaca') : '#e5e7eb'), borderRadius: 12, padding: '20px 24px' }}>
+          <p style={{ fontSize: 11, color: '#6b7280', margin: '0 0 4px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Margine attuale (fatture pagate)</p>
+          {costiPagati > 0 ? (
+            <>
+              <p style={{ fontSize: 26, fontWeight: 700, color: margineAttualeColor, margin: '0 0 4px' }}>€ {fmt(margineAttuale)}</p>
+              <span style={{ fontSize: 20, fontWeight: 800, color: margineAttualeColor }}>{margineAttualePerc.toFixed(1)}%</span>
+              <span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 6 }}>su contratto</span>
+            </>
+          ) : (
+            <p style={{ fontSize: 13, color: '#9ca3af', margin: '8px 0 0', fontStyle: 'italic' }}>Nessuna fattura pagata ancora</p>
+          )}
         </div>
       </div>
 
       {/* Conto economico dettaglio */}
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '16px 20px' }}>
-
-        <Row label="Importo contratto netto (da computo)" value={importoContratto} bold />
+        <h3 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 4px', color: '#374151', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Ricavi</h3>
+        <Row label="Ricavo contrattuale ufficiale" value={ricavoContratto} bold />
+        <Row label="Budget computo di lista" value={budgetComputo} sub color={budgetComputo > ricavoContratto ? '#dc2626' : '#6b7280'} />
         <Row label="SAL attivi emessi (ricavo maturato)" value={ricaviEmessi} color="#059669" />
         <Row label="di cui incassati dal committente" value={ricaviIncassati} sub color="#059669" />
 
-        <div style={{ height: 8 }} />
-
-        <Row label="Costi da ODA impegnati" value={costiOda} color="#dc2626" />
+        <div style={{ height: 12 }} />
+        <h3 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 4px', color: '#374151', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Costi impegnati (ODA)</h3>
+        <Row label="Costi da ODA attivi" value={costiOda} color="#dc2626" />
         <Row label="Costi da contratti sub" value={costiContrattiSub} color="#dc2626" />
         <Row label="Spese cantiere contabilizzate" value={costiSpese} color="#dc2626" />
-        <Row label="Totale costi impegnati" value={totCosti} bold color="#dc2626" />
+        <Row label="Totale costi impegnati" value={totCostiImpegnati} bold color="#dc2626" />
+
+        <div style={{ height: 12 }} />
+        <h3 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 4px', color: '#374151', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Costi consuntivati (fatture)</h3>
+        <Row label="Fatture pagate" value={costiPagati} color="#7c3aed" bold />
+        <Row label="Fatture da pagare" value={costiDaPagare} sub color="#d97706" />
 
         {ritenute > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid #f3f4f6' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid #f3f4f6', marginTop: 4 }}>
             <AlertTriangle size={13} style={{ color: '#d97706', flexShrink: 0 }} />
             <span style={{ fontSize: 12, color: '#d97706', flex: 1 }}>Ritenute accumulate (sbloccate a collaudo)</span>
-            <span style={{ fontSize: 13, fontWeight: 500, color: '#d97706' }}>EUR {fmt(ritenute)}</span>
+            <span style={{ fontSize: 13, fontWeight: 500, color: '#d97706' }}>€ {fmt(ritenute)}</span>
           </div>
         )}
 
-        <div style={{ height: 8 }} />
-        <Row label="Margine lordo previsto" value={margineNetto} bold color={margineColor} />
+        <div style={{ height: 12 }} />
+        <Row label="Margine atteso (contratto − ODA)" value={margineAtteso} bold color={margineColor} />
+        <Row label="Margine attuale (contratto − fatture pagate)" value={margineAttuale} bold color={margineAttualeColor} />
       </div>
 
       {/* Avanzamento commessa */}
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '16px 20px' }}>
         <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 14px', color: '#374151' }}>Avanzamento commessa</h3>
-
         {[
-          { label: 'Ricavo contratto', value: importoContratto, color: '#6b7280', pctVal: 100 },
+          { label: 'Ricavo contratto', value: ricavoContratto, color: '#6b7280', pctVal: 100 },
           { label: 'SAL emessi (ricavo maturato)', value: ricaviEmessi, color: '#059669', pctVal: avanzamento },
-          { label: 'SAL incassati', value: ricaviIncassati, color: '#2563eb', pctVal: importoContratto > 0 ? (ricaviIncassati / importoContratto) * 100 : 0 },
-          { label: 'Costi impegnati', value: totCosti, color: '#dc2626', pctVal: importoContratto > 0 ? (totCosti / importoContratto) * 100 : 0 },
+          { label: 'SAL incassati', value: ricaviIncassati, color: '#2563eb', pctVal: ricavoContratto > 0 ? (ricaviIncassati / ricavoContratto) * 100 : 0 },
+          { label: 'Costi ODA impegnati', value: totCostiImpegnati, color: '#dc2626', pctVal: ricavoContratto > 0 ? (totCostiImpegnati / ricavoContratto) * 100 : 0 },
+          { label: 'Fatture pagate (consuntivo)', value: costiPagati, color: '#7c3aed', pctVal: ricavoContratto > 0 ? (costiPagati / ricavoContratto) * 100 : 0 },
         ].map(({ label, value, color, pctVal }) => (
           <div key={label} style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
               <span style={{ fontSize: 12, color: '#6b7280' }}>{label}</span>
-              <span style={{ fontSize: 12, fontWeight: 500 }}>EUR {fmt(value)} ({pctVal.toFixed(1)}%)</span>
+              <span style={{ fontSize: 12, fontWeight: 500 }}>€ {fmt(value)} ({pctVal.toFixed(1)}%)</span>
             </div>
             <div style={{ height: 6, background: '#f3f4f6', borderRadius: 4, overflow: 'hidden' }}>
               <div style={{ height: '100%', background: color, borderRadius: 4, width: Math.min(100, pctVal) + '%', transition: 'width 0.8s ease' }} />
