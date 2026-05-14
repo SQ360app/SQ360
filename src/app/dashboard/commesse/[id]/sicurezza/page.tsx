@@ -17,8 +17,6 @@ const TIPI_DOC: { categoria: string; tipi: string[] }[] = [
   { categoria: 'Cantiere',           tipi: ['DVR','POS','PSC','PIMUS','Notifica preliminare','Piano smaltimento rifiuti'] },
   { categoria: 'Mezzi',              tipi: ['Revisione mezzo','Assicurazione mezzo','Libretto immatricolazione','Omologazione mezzo'] },
 ]
-const TUTTI_TIPI = TIPI_DOC.flatMap(g => g.tipi)
-
 const SOGGETTO_TIPI = ['azienda','lavoratore','subappaltatore','mezzo']
 
 // ─── Tipi ────────────────────────────────────────────────────────────────────
@@ -94,7 +92,7 @@ export default function SicurezzaPage({ params: p }: { params: Promise<{ id: str
       .from('documenti_sicurezza')
       .select('*')
       .eq('commessa_id', id)
-      .order('data_scadenza', { ascending: true, nullsFirst: false })
+      .order('data_scadenza', { ascending: true })
     setDocs((data as DocSicurezza[]) || [])
     setLoading(false)
   }, [id])
@@ -379,7 +377,7 @@ export default function SicurezzaPage({ params: p }: { params: Promise<{ id: str
                   <input type="date" style={s.inp} value={editDoc.data_scadenza || ''}
                     onChange={e => setEditDoc({ ...editDoc, data_scadenza: e.target.value })} />
                   {editDoc.data_scadenza && (() => {
-                    const tmp: DocSicurezza = { ...editDoc, id: editDoc.id || '', commessa_id: id, created_at: '' }
+                    const tmp: DocSicurezza = { ...editDoc, tipo: editDoc.tipo || '', id: editDoc.id || '', commessa_id: id, created_at: '' }
                     const stato = statoDoc(tmp)
                     const gg = ggAllaScadenza(tmp)
                     const cfg = STATO_CFG[stato]
