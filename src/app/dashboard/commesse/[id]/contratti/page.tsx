@@ -28,7 +28,7 @@ export default function ContrattiPage() {
   const load = useCallback(async () => {
     setLoading(true)
     const { data: c } = await supabase.from('contratti_sub')
-      .select('*, fornitore:fornitori(ragione_sociale, piva)')
+      .select('*, fornitore:professionisti_fornitori(ragione_sociale, piva)')
       .eq('commessa_id', id)
       .order('created_at', { ascending: false })
     setContratti(c || [])

@@ -109,7 +109,7 @@ export default function AssegnazioneVociPage() {
         ? supabase.from('voci_computo').select('*').eq('computo_id',computoId).order('capitolo').order('codice')
         : supabase.from('voci_computo').select('*').eq('commessa_id',id).order('ordine'),
       supabase.from('voce_assegnazione').select('*').eq('commessa_id',id),
-      supabase.from('fornitori').select('id,ragione_sociale').order('ragione_sociale'),
+      supabase.from('professionisti_fornitori').select('id,ragione_sociale').order('ragione_sociale'),
     ])
     const assMap:Record<string,Ass[]>={}
     for(const a of (assRes.data||[])){
