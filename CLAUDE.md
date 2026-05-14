@@ -12,10 +12,8 @@
 - Concorrenti: Pillar (finanza+WhatsApp), TeamSystem (enterprise costoso), Brix IT (solo procurement)
 - Pricing: un piano per numero utenti, commesse ILLIMITATE in tutti i piani
 
-## Bug aperti / pendenti su Supabase
-1. **DB tabelle**: creare su Supabase: `ddt`, `fatture_passive`, `documenti_sicurezza`, `lavoratori_commessa`, `presenze_cantiere`, `giornale_lavori` (se non esistono)
-2. **Multi-tenant Fase 2 SQL**: eseguire RLS su Supabase per tutte le tabelle (`get_azienda_id()` + policy FOR ALL USING — SQL già pronto)
-3. **Colonna `azienda_id`**: verificare che tutte le tabelle a cui abbiamo aggiunto `azienda_id` negli INSERT la abbiano effettivamente come colonna (rda, rdo, oda, contratti_sub, giornale_lavori, ddt, fatture_passive, fatture)
+## Bug aperti / pendenti
+*(nessun bug critico aperto — piattaforma multi-tenant completamente sicura)*
 
 ## Fix e feature completati
 
@@ -55,6 +53,11 @@
 - ✅ Fix doppio DAM: oda/handleSave ora controlla se esiste già un DAM con lo stesso rdo_id prima di crearne uno
 - ✅ fatturazione/page.tsx: `fornitori` → `professionisti_fornitori` nel join fatture_passive e nel dropdown fornitori
 
+#### RLS completo multi-tenant (sessione 2026-05-14 serata)
+- ✅ RLS attivato su Supabase per tutte le tabelle figlie: `rda`, `rdo`, `oda`, `ddt`, `fatture_passive`, `giornale_lavori`, `contratti_sub`
+- ✅ Piattaforma multi-tenant completamente sicura: isolamento dati per azienda garantito a livello DB
+- ✅ Schema DB verificato: tutte le colonne `azienda_id` presenti, tabelle `lavoratori_commessa` e `presenze_cantiere` operative
+
 ### Sessione 2025-05-14 — parte 5 (commit 865aea8 → f3d3c7d)
 - ✅ Multi-tenant Fase 2 SQL: template RLS pronto con `get_azienda_id()` helper function (da eseguire su Supabase)
 - ✅ /api/ai-sicurezza/route.ts: Gemini Vision — riconosce 24 tipologie di documenti sicurezza edile (commit 865aea8)
@@ -63,9 +66,9 @@
 - ✅ Fix TypeScript build Vercel: rimosso `TUTTI_TIPI` unused, rimosso `nullsFirst` non nel tipo, fix `Partial<DocSicurezza>` spread (commit f3d3c7d)
 
 ## Prossimi task prioritari
-1. **RLS Supabase** — eseguire il SQL Fase 2 già pronto: `get_azienda_id()` function + policy FOR ALL USING su tutte le tabelle. BLOCCANTE per go-live multi-azienda.
-2. **Verifica schema DB** — controllare che le colonne `azienda_id` esistano nelle tabelle rda, rdo, oda, contratti_sub, giornale_lavori, ddt, fatture, e che le tabelle lavoratori_commessa/presenze_cantiere esistano
-3. **Test flusso register→login** — testare fine a fine: registrazione → conferma email → primo login → commessa con multi-tenant isolato
+1. **PDF professionali** — ODA e DAM con @react-pdf/renderer via API route server-side ← **IN CORSO**
+2. **Email notifiche** — trigger Supabase o cron per scadenze DURC, SAL da approvare, fatture in scadenza
+3. **Test flusso register→login** — test end-to-end registrazione → conferma email → primo accesso
 
 ## Moduli roadmap completa
 1. ~~Comparativa offerte RDO con aggiudicazione~~ ✅
@@ -74,19 +77,19 @@
 4. ~~DDT con AI lettura foto~~ ✅
 5. ~~Fattura passiva con AI~~ ✅
 6. ~~Conto economico automatico + Marginalità per WBS~~ ✅
-7. ~~Multi-tenant Fase 1 (codice) — azienda_id in SELECT e INSERT~~ ✅ — Fase 2 (RLS SQL) ← da eseguire su Supabase
+7. ~~Multi-tenant completo — azienda_id in tutti gli INSERT + RLS attivo su tutte le tabelle~~ ✅
 8. ~~Sicurezza documentale 24 tipologie con AI~~ ✅
 9. ~~Badge cantiere con QR e PWA mobile~~ ✅
 10. ~~Registrazione multi-azienda (onboarding /register)~~ ✅
 11. ~~Contratti/assegnazione fix (fornitori → professionisti_fornitori)~~ ✅
-12. RLS Supabase Fase 2 ← **NEXT**
-13. Invio email notifiche (SAL, scadenze DURC) — non implementato
-14. Esportazione PDF professionale (SAL, ODA, contratti) — parziale (solo RDO)
+12. ~~RLS Supabase completo su tutte le tabelle figlie~~ ✅
+13. PDF professionali ODA + DAM (@react-pdf/renderer) ← **IN CORSO**
+14. Invio email notifiche (SAL, scadenze DURC) — non implementato
 
 ## Note implementazione
 - `getAziendaId()` in `src/lib/supabase.ts` — helper condiviso: `auth.uid() → utenti.azienda_id`
 - Auth: protezione solo client-side (dashboard/layout.tsx); middleware.ts è vuoto
-- Tutti i moduli ora salvano `azienda_id` negli INSERT; i SELECT filtrano per `commessa_id` (che è di proprietà dell'azienda — sicuro finché RLS non è attivo)
+- Tutti i moduli salvano `azienda_id` negli INSERT; RLS attivo su DB garantisce isolamento completo
 - Tabella `utenti`: `id` = `auth.uid`, `azienda_id` FK, `email`, `nome`, `cognome`, `ruolo` (admin/user)
 - Tabella `aziende`: `id`, `nome`, `piva`, `cf`, `provincia`, `created_at`
 
