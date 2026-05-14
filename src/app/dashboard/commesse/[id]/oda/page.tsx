@@ -25,9 +25,9 @@ const STATI: Record<string, { label: string; color: string }> = {
 
 
 function VociRdaSection({ rdoId, supabase }: { rdoId?: string; supabase: any }) {
-  const [voci,setVoci]=React.useState<any[]>([])
-  const [loading,setLoading]=React.useState(false)
-  const [open,setOpen]=React.useState(false)
+  const [voci,setVoci]=useState<any[]>([])
+  const [loading,setLoading]=useState(false)
+  const [open,setOpen]=useState(false)
   const carica=async()=>{
     if(!rdoId||voci.length>0)return;setLoading(true)
     const{data:rdo}=await supabase.from('rdo').select('rda_id').eq('id',rdoId).single()
@@ -210,6 +210,7 @@ export default function ODAPage() {
                         Annulla
                       </button>
                     </div>
+                    <VociRdaSection rdoId={o.rdo_id} supabase={supabase} />
                   </div>
                 )}
               </div>
