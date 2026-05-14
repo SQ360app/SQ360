@@ -16,27 +16,33 @@
 1. contratti/assegnazione: tabella `fornitori` vs `professionisti_fornitori` — verificare nome corretto
 2. DB: tabelle `ddt` e `fatture_passive` vanno create su Supabase prima di testare i nuovi moduli
 
-## Fix completati (sessione 2025-05-14)
-- ✅ rda/page.tsx: `computo_metrico` → `voci_computo`, `unita_misura` → `um` (commit 527a0f4)
-- ✅ computo/page.tsx: WBS context menu `multiSel.size > 1` → `> 0` (commit 527a0f4)
-- ✅ rdo/page.tsx: `voci_computo`/`um` in VociRdaSection + generaPdf; HTML struttura; Genera ODA URL params (commit c8b3cd0)
-- ✅ oda/page.tsx: `useSearchParams` + `rdo_id` nel payload (commit c8b3cd0)
-- ✅ rdo/page.tsx: pulsante "✓ Aggiudica" nel quadro comparativo + "📋 Crea DAM" (commit 2ac8fa2)
-- ✅ dam/page.tsx: `rdo_id`/`fornitore_id` in payload; prefill da URL params; campo fornitore nel form (commit 2ac8fa2)
-- ✅ oda/page.tsx: join fornitore `select('*, fornitore:professionisti_fornitori(...)')` (commit 8ffd70b)
-- ✅ oda/page.tsx: DAM auto → `materiale` + stato `bozza`; VociRdaSection → `voci_computo`/`um` (commit 8ffd70b)
-- ✅ layout.tsx: tab DDT e Fatt. passive aggiunti (commit 8ffd70b)
-- ✅ /api/ai-ddt/route.ts: Gemini Vision per lettura foto DDT (commit 8ffd70b)
-- ✅ /api/ai-fattura/route.ts: Gemini Vision per lettura PDF/foto fattura (commit 8ffd70b)
-- ✅ ddt/page.tsx: modulo DDT completo con AI scansione (commit 8ffd70b)
-- ✅ fatture/page.tsx: modulo Fatture passive con AI estrazione (commit 8ffd70b)
-- ✅ rda/page.tsx: rimossi campi inesistenti (oggetto, tipo, rda_ids) da insert rdo (commit e4f8ec9)
+## Fix e feature completati
 
-## Prossimi task prioritari
-1. **Conto economico + Marginalità per WBS** — ce/page.tsx già funzionante (legge ODA+SAL+spese), manca: `fatture_passive` pagate come costo attuale, `commessa.importo_contratto` come ricavo ufficiale; marginalita/page.tsx è placeholder vuoto — va costruito con breakdown per WBS (budget da voci_computo, costi da ODA→RDO→RDA→wbs_id)
-2. **Multi-tenant** (azienda_id + RLS su tutte le tabelle)
-3. **Sicurezza documentale** — 65+ tipologie come Pillar
-4. **Badge cantiere** con QR e PWA mobile
+### Sessione 2025-05-14 — parte 1 (commit 527a0f4 → c8b3cd0)
+- ✅ rda/page.tsx: `computo_metrico` → `voci_computo`, `unita_misura` → `um`
+- ✅ computo/page.tsx: WBS context menu `multiSel.size > 1` → `> 0`
+- ✅ rdo/page.tsx: stessa fix `voci_computo`/`um`; HTML struttura VociRdaSection; Genera ODA via URL params
+- ✅ oda/page.tsx: `useSearchParams` + `rdo_id` nel payload
+
+### Sessione 2025-05-14 — parte 2 (commit 2ac8fa2 → 8ffd70b)
+- ✅ rdo/page.tsx: pulsante "✓ Aggiudica" nel quadro comparativo + "📋 Crea DAM" su righe aggiudicate
+- ✅ dam/page.tsx: `rdo_id`/`fornitore_id` in payload; prefill da URL params; campo fornitore nel form
+- ✅ oda/page.tsx: join fornitore; DAM auto campi corretti (`materiale` + stato `bozza`); VociRdaSection fix
+- ✅ layout.tsx: tab DDT e Fatt. passive aggiunti
+- ✅ /api/ai-ddt/route.ts: Gemini Vision per lettura foto DDT
+- ✅ /api/ai-fattura/route.ts: Gemini Vision per lettura PDF/foto fattura
+- ✅ ddt/page.tsx: modulo DDT completo con AI scansione
+- ✅ fatture/page.tsx: modulo Fatture passive con AI estrazione
+
+### Sessione 2025-05-14 — parte 3 (commit e4f8ec9 → 25c22f7)
+- ✅ rda/page.tsx: rimossi campi inesistenti (oggetto, tipo, rda_ids) da insert rdo (commit e4f8ec9)
+- ✅ ce/page.tsx: fix query `voci_computo` (ora via `computo_metrico`); aggiunto `commessa.importo_contratto`; aggiunto `fatture_passive` pagate; doppio margine atteso/attuale (commit 25c22f7)
+- ✅ marginalita/page.tsx: costruito da zero — KPI, tabella WBS con budget/ODA/Δ/%, join ODA→RDO→RDA→wbs_id, alert ODA senza WBS (commit 25c22f7)
+
+## Prossimi 3 task prioritari
+1. **Multi-tenant** — aggiungere `azienda_id` a tutte le tabelle + Row Level Security (RLS) su Supabase; registrazione/login multi-azienda
+2. **Sicurezza documentale** — 65+ tipologie come Pillar (DVR, POS, DURC, visure, polizze…); upload + scadenzario + alert
+3. **Badge cantiere con QR** — PWA mobile, QR code per accesso cantiere, registro presenze
 
 ## Moduli roadmap completa
 1. ~~Comparativa offerte RDO con aggiudicazione~~ ✅
@@ -44,10 +50,10 @@
 3. ~~Fix ODA (join fornitore, DAM auto, VociRdaSection)~~ ✅
 4. ~~DDT con AI lettura foto~~ ✅
 5. ~~Fattura passiva con AI~~ ✅
-6. Conto economico automatico + Marginalità per WBS ← **NEXT**
-7. Multi-tenant (azienda_id + RLS)
-8. Sicurezza documentale 65+ tipologie
-9. Badge cantiere con QR e PWA mobile
+6. ~~Conto economico automatico + Marginalità per WBS~~ ✅
+7. Multi-tenant (azienda_id + RLS) ← **NEXT**
+8. Sicurezza documentale 65+ tipologie ← **NEXT**
+9. Badge cantiere con QR e PWA mobile ← **NEXT**
 
 ## Principi UX
 - Semplicità estrema: max 3 tap per qualsiasi azione
