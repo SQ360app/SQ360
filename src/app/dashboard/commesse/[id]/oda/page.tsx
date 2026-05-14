@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { Plus, FileText, Loader2, ChevronDown, ChevronRight, Package, Wrench, Truck, ShoppingCart, Receipt } from 'lucide-react'
 
@@ -62,6 +62,7 @@ function VociRdaSection({ rdoId, supabase }: { rdoId?: string; supabase: any }) 
 export default function ODAPage() {
   const params = useParams()
   const commessaId = params.id as string
+  const searchParams = useSearchParams()
   const [oda, setOda] = useState<any[]>([])
   const [fornitori, setFornitori] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -70,6 +71,7 @@ export default function ODAPage() {
   const [tipo, setTipo] = useState('MATERIALE')
   const [oggetto, setOggetto] = useState('')
   const [fornitoreId, setFornitoreId] = useState('')
+  const [rdoId, setRdoId] = useState('')
   const [importoNetto, setImportoNetto] = useState('')
   const [ivaPct, setIvaPct] = useState('22')
   const [ritenuta, setRitenuta] = useState('0')
@@ -95,6 +97,20 @@ export default function ODAPage() {
   useEffect(() => { load() }, [commessaId])
   useEffect(() => { setRitenuta(String(TIPI_ODA.find(x => x.value === tipo)?.ritenuta || 0)) }, [tipo])
 
+  useEffect(() => {
+    const rdo = searchParams.get('rdo_id')
+    const imp = searchParams.get('importo')
+    const forn = searchParams.get('fornitore')
+    if (!rdo) return
+    setRdoId(rdo)
+    if (imp) setImportoNetto(imp)
+    if (forn && fornitori.length > 0) {
+      const match = fornitori.find((f: any) => f.ragione_sociale === forn)
+      if (match) setFornitoreId(match.id)
+    }
+    setModalOpen(true)
+  }, [searchParams, fornitori])
+
   async function handleSave() {
     if (!oggetto.trim() || importoNum <= 0 || !fornitoreId) { setErr('Compila tutti i campi obbligatori'); return }
     setSaving(true)
@@ -105,6 +121,7 @@ export default function ODAPage() {
       fornitore_id: fornitoreId, importo_netto: importoNum, iva_pct: parseFloat(ivaPct),
       ritenuta_pct: parseFloat(ritenuta), condizioni_pagamento: condPag || null,
       data_consegna_prevista: dataConsegna || null, note: note || null, stato: 'EMESSO',
+      rdo_id: rdoId || null,
     }).select().single()
     if (error) { setErr(error.message); setSaving(false); return }
     if (tipo === 'SUBAPPALTO' && odaData) {
