@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, use } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -27,7 +28,7 @@ interface DAM {
   stato: string; dl_nome: string; dl_email: string
   note_dl: string; note_interne: string
   data_emissione: string; data_invio_dl: string; data_risposta_dl: string
-  motivo_rifiuto: string; fornitore_id: string
+  motivo_rifiuto: string; fornitore_id: string; rdo_id?: string
 }
 
 interface Fornitore {
@@ -54,6 +55,7 @@ const CheckIcon = ({ ok }: { ok: boolean }) => (
 
 export default function DAMPage({ params: p }: { params: Promise<{ id: string }> }) {
   const { id } = use(p)
+  const searchParams = useSearchParams()
   const [damList, setDamList] = useState<DAM[]>([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(false)
@@ -88,6 +90,33 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
     return () => clearTimeout(t)
   }, [fSearch])
 
+  useEffect(() => {
+    const rdoId = searchParams.get('rdo_id')
+    const fornitore = searchParams.get('fornitore')
+    const importo = searchParams.get('importo')
+    const rdaId = searchParams.get('rda_id')
+    if (!rdoId) return
+    const prefill = async () => {
+      const dam: Partial<DAM> = {
+        stato: 'bozza', revisione: 0, quantita: 1, um: 'nr',
+        rdo_id: rdoId,
+        note_interne: importo ? `Offerta aggiudicata: EUR ${Number(importo).toLocaleString('it-IT', { minimumFractionDigits: 2 })}` : '',
+      }
+      if (rdaId) {
+        const { data: rda } = await supabase.from('rda').select('oggetto').eq('id', rdaId).single()
+        if (rda?.oggetto) dam.materiale = rda.oggetto
+      }
+      if (fornitore) {
+        const { data: f } = await supabase.from('professionisti_fornitori')
+          .select('id,ragione_sociale,nome,cognome').eq('ragione_sociale', fornitore).limit(1)
+        if (f?.[0]) { dam.fornitore_id = f[0].id; setFSearch(f[0].ragione_sociale || '') }
+      }
+      setEditDam(dam)
+      setForm(true)
+    }
+    prefill()
+  }, [searchParams])
+
   const fLabel = (f: Fornitore) => f.ragione_sociale || `${f.nome||''} ${f.cognome||''}`.trim()
 
   const salva = async () => {
@@ -119,6 +148,8 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
         note_interne: editDam.note_interne || '',
         data_emissione: editDam.data_emissione || new Date().toISOString().split('T')[0],
         motivo_rifiuto: editDam.motivo_rifiuto || '',
+        fornitore_id: editDam.fornitore_id || null,
+        rdo_id: editDam.rdo_id || null,
       }
       if (editDam.id) {
         await supabase.from('dam').update(payload).eq('id', editDam.id)
@@ -313,6 +344,29 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
                 <DocCheck label="Conformità CAM" val={editDam.cam_compliant||false} key_="cam_compliant" />
                 <DocCheck label="Campione richiesto" val={editDam.campione_richiesto||false} key_="campione_richiesto" />
                 <DocCheck label="Campione inviato" val={editDam.campione_inviato||false} key_="campione_inviato" />
+              </div>
+
+              {/* Fornitore */}
+              <p style={{ fontSize:11, fontWeight:700, color:'var(--t3)', textTransform:'uppercase', letterSpacing:'0.04em', marginTop:4 }}>Fornitore</p>
+              <div style={{ position:'relative' }}>
+                <label style={(styleObj as any).lbl as React.CSSProperties}>Fornitore aggiudicatario</label>
+                <input style={(styleObj as any).inp as React.CSSProperties} value={fSearch}
+                  onChange={e => { setFSearch(e.target.value) }}
+                  placeholder="Cerca fornitore nel database..." />
+                {fResults.length > 0 && (
+                  <div style={{ position:'absolute', zIndex:100, width:'100%', background:'var(--panel)', border:'1px solid var(--border)', borderRadius:8, boxShadow:'0 4px 16px rgba(0,0,0,.12)', maxHeight:180, overflowY:'auto' as const }}>
+                    {fResults.map(f => (
+                      <div key={f.id}
+                        style={{ padding:'8px 12px', cursor:'pointer', fontSize:12, borderBottom:'1px solid var(--border)' }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--accent-light)' }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
+                        onClick={() => { setEditDam({...editDam!, fornitore_id: f.id}); setFSearch(fLabel(f)); setFResults([]) }}>
+                        <span style={{ fontWeight:600 }}>{fLabel(f)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {editDam?.fornitore_id && <span style={{ fontSize:10, color:'var(--success)', marginTop:3, display:'block' }}>✓ Fornitore selezionato</span>}
               </div>
 
               {/* DL */}

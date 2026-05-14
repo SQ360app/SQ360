@@ -205,6 +205,14 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
     showToast('RDO aggiornata'); carica()
   }
 
+  const aggiudica = async (vincitrice: RDO, group: RDO[]) => {
+    await supabase.from('rdo').update({ stato: 'aggiudicata' }).eq('id', vincitrice.id)
+    const altriIds = group.filter(r => r.id !== vincitrice.id).map(r => r.id)
+    if (altriIds.length) await supabase.from('rdo').update({ stato: 'annullata' }).in('id', altriIds)
+    showToast(`✓ Aggiudicata a ${vincitrice.fornitore}`)
+    carica()
+  }
+
   const rdoFiltrate = rdoList.filter(r => filtroStato === 'tutti' || r.stato === filtroStato)
 
   const compareGroups = rdoList.reduce((acc: Record<string, RDO[]>, r) => {
@@ -260,6 +268,12 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
                           {r.importo_offerta ? 'EUR ' + fi(r.importo_offerta) : '—'}
                         </p>
                         <span style={{ fontSize:10, color:'var(--t3)' }}>{r.stato}</span>
+                        {r.id === best?.id && r.stato !== 'aggiudicata' && (
+                          <button onClick={e => { e.stopPropagation(); aggiudica(r, group) }}
+                            style={{ marginTop:6, width:'100%', padding:'3px 8px', background:'#10b981', color:'#fff', border:'none', borderRadius:4, fontSize:10, fontWeight:700, cursor:'pointer' }}>
+                            ✓ Aggiudica
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -321,6 +335,7 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
                         </button>
                   <button style={{...styleBtn('#475569'),fontSize:11,marginLeft:4}} onClick={() => generaPdf(r)}>📄 PDF</button>
                   {r.stato === 'aggiudicata' && (<button style={{...styleBtn('#10b981'),fontSize:11,marginLeft:4}} onClick={() => { const base = window.location.pathname.replace('/rdo','/oda'); const p = new URLSearchParams({ rdo_id: r.id, importo: String(r.importo_offerta||0), fornitore: r.fornitore||'' }); window.location.href = base + '?' + p.toString() }}>✅ Genera ODA</button>)}
+                  {r.stato === 'aggiudicata' && (<button style={{...styleBtn('#0d9488'),fontSize:11,marginLeft:4}} onClick={() => { const base = window.location.pathname.replace('/rdo','/dam'); const p = new URLSearchParams({ rdo_id: r.id, fornitore: r.fornitore||'', importo: String(r.importo_offerta||0), rda_id: r.rda_id||'' }); window.location.href = base + '?' + p.toString() }}>📋 Crea DAM</button>)}
                       </td>
                     </tr>
                   )
