@@ -14,35 +14,39 @@
 
 ## Bug aperti (priorità alta)
 1. contratti/assegnazione: tabella `fornitori` vs `professionisti_fornitori` — verificare nome corretto
-2. oda/page.tsx: join fornitore mancante — `select('*')` non popola `o.fornitore?.ragione_sociale` (serve `select('*, fornitore:professionisti_fornitori(id,ragione_sociale)')`)
-3. oda/page.tsx: DAM auto-generato usa campi sbagliati (`denominazione_materiale` → `materiale`, stato `IN_ATTESA` → `bozza`)
-4. oda/page.tsx: VociRdaSection ancora su `computo_metrico` + `unita_misura` (riga 37) — non fixata in sessione 2025-05-14
+2. DB: tabelle `ddt` e `fatture_passive` vanno create su Supabase prima di testare i nuovi moduli
 
 ## Fix completati (sessione 2025-05-14)
 - ✅ rda/page.tsx: `computo_metrico` → `voci_computo`, `unita_misura` → `um` (commit 527a0f4)
-- ✅ computo/page.tsx: WBS context menu — condizione `multiSel.size > 1` → `> 0` (commit 527a0f4)
-- ✅ rdo/page.tsx: stessa fix `voci_computo`/`um` in VociRdaSection e generaPdf (commit c8b3cd0)
-- ✅ rdo/page.tsx: VociRdaSection spostata dentro `<td>` — HTML valido (commit c8b3cd0)
-- ✅ rdo/page.tsx: bottone "Genera ODA" passa `rdo_id`, `importo`, `fornitore` via URL params (commit c8b3cd0)
-- ✅ oda/page.tsx: `useSearchParams` + `rdo_id` nel payload di `handleSave` (commit c8b3cd0)
-- ✅ rdo/page.tsx: pulsante "✓ Aggiudica" nel quadro comparativo (card BEST) — setta vincitrice + annulla altri (commit 2ac8fa2)
-- ✅ rdo/page.tsx: pulsante "📋 Crea DAM" su righe aggiudicate — naviga con URL params (commit 2ac8fa2)
-- ✅ dam/page.tsx: `rdo_id` in interfaccia e payload; `fornitore_id` nel payload; `useSearchParams` + prefill asincrono da RDA/fornitore; campo fornitore nel form (commit 2ac8fa2)
+- ✅ computo/page.tsx: WBS context menu `multiSel.size > 1` → `> 0` (commit 527a0f4)
+- ✅ rdo/page.tsx: `voci_computo`/`um` in VociRdaSection + generaPdf; HTML struttura; Genera ODA URL params (commit c8b3cd0)
+- ✅ oda/page.tsx: `useSearchParams` + `rdo_id` nel payload (commit c8b3cd0)
+- ✅ rdo/page.tsx: pulsante "✓ Aggiudica" nel quadro comparativo + "📋 Crea DAM" (commit 2ac8fa2)
+- ✅ dam/page.tsx: `rdo_id`/`fornitore_id` in payload; prefill da URL params; campo fornitore nel form (commit 2ac8fa2)
+- ✅ oda/page.tsx: join fornitore `select('*, fornitore:professionisti_fornitori(...)')` (commit 8ffd70b)
+- ✅ oda/page.tsx: DAM auto → `materiale` + stato `bozza`; VociRdaSection → `voci_computo`/`um` (commit 8ffd70b)
+- ✅ layout.tsx: tab DDT e Fatt. passive aggiunti (commit 8ffd70b)
+- ✅ /api/ai-ddt/route.ts: Gemini Vision per lettura foto DDT (commit 8ffd70b)
+- ✅ /api/ai-fattura/route.ts: Gemini Vision per lettura PDF/foto fattura (commit 8ffd70b)
+- ✅ ddt/page.tsx: modulo DDT completo con AI scansione (commit 8ffd70b)
+- ✅ fatture/page.tsx: modulo Fatture passive con AI estrazione (commit 8ffd70b)
+- ✅ rda/page.tsx: rimossi campi inesistenti (oggetto, tipo, rda_ids) da insert rdo (commit e4f8ec9)
 
-## Prossimi 3 task prioritari
-1. **Fix ODA** (3 bug in oda/page.tsx): join fornitore con `select('*, fornitore:professionisti_fornitori(...)')`, fix DAM auto (`materiale` + stato `bozza`), fix VociRdaSection (`voci_computo`/`um`)
-2. **DDT con AI lettura foto** — route `/api/ai-extract-document` già pronta, costruire il modulo DDT con upload foto e estrazione automatica campi
-3. **Fattura passiva con AI** — upload PDF fattura, estrazione campi con AI, collegamento a ODA/DAM
+## Prossimi task prioritari
+1. **Conto economico + Marginalità per WBS** — ce/page.tsx già funzionante (legge ODA+SAL+spese), manca: `fatture_passive` pagate come costo attuale, `commessa.importo_contratto` come ricavo ufficiale; marginalita/page.tsx è placeholder vuoto — va costruito con breakdown per WBS (budget da voci_computo, costi da ODA→RDO→RDA→wbs_id)
+2. **Multi-tenant** (azienda_id + RLS su tutte le tabelle)
+3. **Sicurezza documentale** — 65+ tipologie come Pillar
+4. **Badge cantiere** con QR e PWA mobile
 
 ## Moduli roadmap completa
-1. ~~Comparativa offerte RDO con aggiudicazione~~ ✅ FATTO
-2. ~~DAM nel flusso corretto (dopo comparativa, prima ODA)~~ ✅ FATTO
-3. Fix ODA (vedere bug aperti sopra) ← **NEXT**
-4. DDT con AI lettura foto ← **NEXT**
-5. Fattura passiva con AI ← **NEXT**
-6. Conto economico automatico alimentato da ODA
+1. ~~Comparativa offerte RDO con aggiudicazione~~ ✅
+2. ~~DAM nel flusso corretto~~ ✅
+3. ~~Fix ODA (join fornitore, DAM auto, VociRdaSection)~~ ✅
+4. ~~DDT con AI lettura foto~~ ✅
+5. ~~Fattura passiva con AI~~ ✅
+6. Conto economico automatico + Marginalità per WBS ← **NEXT**
 7. Multi-tenant (azienda_id + RLS)
-8. Sicurezza documentale 65+ tipologie (come Pillar)
+8. Sicurezza documentale 65+ tipologie
 9. Badge cantiere con QR e PWA mobile
 
 ## Principi UX
