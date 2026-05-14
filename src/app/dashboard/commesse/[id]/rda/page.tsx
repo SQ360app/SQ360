@@ -24,7 +24,7 @@ interface RDA {
   note: string; created_at: string; wbs_id?: string
   voci_ids?: string[]
 }
-interface VoceComputo { id: string; descrizione: string; unita_misura?: string; quantita?: number }
+interface VoceComputo { id: string; descrizione: string; um?: string; quantita?: number }
 
 interface Fornitore {
   id: string; ragione_sociale?: string; nome?: string; cognome?: string
@@ -188,8 +188,8 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
     setDetailRda(r); setVociRda([])
     if (!r.voci_ids?.length) return
     setLoadingVoci(true)
-    const { data } = await supabase.from('computo_metrico')
-      .select('id,descrizione,unita_misura,quantita').in('id', r.voci_ids)
+    const { data } = await supabase.from('voci_computo')
+      .select('id,descrizione,um,quantita').in('id', r.voci_ids)
     setVociRda((data as VoceComputo[]) || [])
     setLoadingVoci(false)
   }
@@ -459,7 +459,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
                 : vociRda.length === 0 ? <p style={{ fontSize:12, color:'var(--t3)', fontStyle:'italic' }}>Nessuna voce di computo collegata.</p>
                 : <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
                     <thead><tr>{['Descrizione','U.M.','Qtà'].map(h=><th key={h} style={{ padding:'6px 8px', textAlign:'left' as const, fontWeight:700, color:'var(--t3)', borderBottom:'1px solid var(--border)', fontSize:10 }}>{h}</th>)}</tr></thead>
-                    <tbody>{vociRda.map(v=><tr key={v.id}><td style={{ padding:'7px 8px', borderBottom:'1px solid var(--border)', color:'var(--t1)', lineHeight:1.4 }}>{v.descrizione}</td><td style={{ padding:'7px 8px', borderBottom:'1px solid var(--border)', color:'var(--t2)', whiteSpace:'nowrap' as const }}>{v.unita_misura||'—'}</td><td style={{ padding:'7px 8px', borderBottom:'1px solid var(--border)', color:'var(--t2)' }}>{v.quantita!=null?Number(v.quantita).toLocaleString('it-IT'):'—'}</td></tr>)}</tbody>
+                    <tbody>{vociRda.map(v=><tr key={v.id}><td style={{ padding:'7px 8px', borderBottom:'1px solid var(--border)', color:'var(--t1)', lineHeight:1.4 }}>{v.descrizione}</td><td style={{ padding:'7px 8px', borderBottom:'1px solid var(--border)', color:'var(--t2)', whiteSpace:'nowrap' as const }}>{v.um||'—'}</td><td style={{ padding:'7px 8px', borderBottom:'1px solid var(--border)', color:'var(--t2)' }}>{v.quantita!=null?Number(v.quantita).toLocaleString('it-IT'):'—'}</td></tr>)}</tbody>
                   </table>}
               </div>
             </div>
