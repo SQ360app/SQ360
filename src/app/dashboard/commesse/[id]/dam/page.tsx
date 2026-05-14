@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, use } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { getAziendaId } from '@/lib/supabase'
+// pdf download functions are dynamically imported in handlers
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -67,6 +68,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
   const [toast, setToast] = useState('')
   const [fSearch, setFSearch] = useState('')
   const [fResults, setFResults] = useState<Fornitore[]>([])
+  const [pdfLoading, setPdfLoading] = useState<string | null>(null)
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
@@ -163,6 +165,31 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
       }
       setForm(false); setEditDam(null); carica()
     } finally { setSaving(false) }
+  }
+
+  const downloadPdf = async (d: DAM) => {
+    setPdfLoading(d.id)
+    try {
+      const [{ data: commessa }, { data: forn }] = await Promise.all([
+        supabase.from('commesse').select('codice,nome,committente').eq('id', id).single(),
+        d.fornitore_id
+          ? supabase.from('professionisti_fornitori').select('ragione_sociale').eq('id', d.fornitore_id).single()
+          : Promise.resolve({ data: null }),
+      ])
+      const [pdfrMod, docMod] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/pdf/DamDocument'),
+      ])
+      const element = React.createElement(docMod.DamDocument, {
+        dam: d,
+        commessa: commessa || { codice: '', nome: '' },
+        fornitore: forn || undefined,
+      })
+      const blob = await pdfrMod.pdf(element as any).toBlob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = `${d.codice || 'DAM'}-Rev${d.revisione}.pdf`; a.click()
+      URL.revokeObjectURL(url)
+    } finally { setPdfLoading(null) }
   }
 
   const cambiaStato = async (dam: DAM, stato: string) => {
@@ -273,6 +300,11 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
                     <td style={(styleObj as any).td as React.CSSProperties}>
                       <button style={{ ...(styleObj as any).btn('#3b82f6'), padding:'4px 10px', fontSize:11 }}
                         onClick={() => { setEditDam(d); setFSearch(''); setForm(true) }}>✎</button>
+                      <button style={{ ...(styleObj as any).btn('#6366f1'), padding:'4px 8px', fontSize:11, marginLeft:4 }}
+                        disabled={pdfLoading === d.id}
+                        onClick={() => downloadPdf(d)}>
+                        {pdfLoading === d.id ? '⏳' : '📄'}
+                      </button>
                     </td>
                   </tr>
                 ))}

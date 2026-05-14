@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import React from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { getAziendaId } from '@/lib/supabase'
@@ -81,6 +82,7 @@ export default function ODAPage() {
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
+  const [pdfLoading, setPdfLoading] = useState<string | null>(null)
 
   const importoNum = parseFloat(importoNetto) || 0
   const totale = importoNum * (1 + parseFloat(ivaPct) / 100)
@@ -155,6 +157,24 @@ export default function ODAPage() {
     setSaving(false); setModalOpen(false)
     setOggetto(''); setFornitoreId(''); setImportoNetto(''); setNote('')
     await load()
+  }
+
+  async function downloadPdf(o: any) {
+    setPdfLoading(o.id)
+    try {
+      const { data: commessa } = await supabase.from('commesse').select('codice,nome,committente').eq('id', commessaId).single()
+      const [pdfrMod, docMod] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/pdf/OdaDocument'),
+      ])
+      const element = React.createElement(docMod.OdaDocument, {
+        oda: o, commessa: commessa || { codice: '', nome: '' }, fornitore: o.fornitore,
+      })
+      const blob = await pdfrMod.pdf(element as any).toBlob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = `${o.numero || 'ODA'}.pdf`; a.click()
+      URL.revokeObjectURL(url)
+    } finally { setPdfLoading(null) }
   }
 
   async function cambiaStato(id: string, stato: string) {
@@ -239,6 +259,10 @@ export default function ODAPage() {
                       <button onClick={() => cambiaStato(o.id, 'ANNULLATO')}
                         className="text-xs px-2.5 py-1 rounded border border-red-100 text-red-500 hover:bg-red-50 ml-auto">
                         Annulla
+                      </button>
+                      <button onClick={() => downloadPdf(o)} disabled={pdfLoading === o.id}
+                        className="text-xs px-2.5 py-1 rounded border border-blue-200 text-blue-600 hover:bg-blue-50 flex items-center gap-1 ml-2">
+                        {pdfLoading === o.id ? '⏳' : '📄'} PDF
                       </button>
                     </div>
                     <VociRdaSection rdoId={o.rdo_id} supabase={supabase} />
