@@ -21,6 +21,7 @@ const TABS = [
   { key: 'dam',           label: 'DAM',              path: '/dam' },
   { key: 'ddt',           label: 'DDT',              path: '/ddt' },
   { key: 'cantiere',      label: 'Cantiere',         path: '/cantiere' },
+  { key: 'sicurezza',     label: 'Sicurezza',        path: '/sicurezza' },
   { key: 'spese',         label: 'Spese',            path: '/spese' },
   { key: 'sal-attivi',    label: 'SAL Attivi',       path: '/sal-attivi' },
   { key: 'sal-passivi',   label: 'SAL Passivi',      path: '/sal-passivi' },
