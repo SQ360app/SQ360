@@ -116,7 +116,11 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p style={{ textAlign: 'center', color: '#475569', fontSize: 11, marginTop: 20 }}>
+        <p style={{ textAlign: 'center', color: '#64748b', fontSize: 13, marginTop: 18 }}>
+          Non hai un account?{' '}
+          <a href="/register" style={{ color: '#60a5fa', fontWeight: 600, textDecoration: 'none' }}>Registra la tua azienda</a>
+        </p>
+        <p style={{ textAlign: 'center', color: '#475569', fontSize: 11, marginTop: 10 }}>
           SQ360 v3.0 · Dal bando al collaudo
         </p>
       </div>
