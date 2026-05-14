@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
+import { getAziendaId } from '@/lib/supabase'
 import { Plus, FileText, Loader2, ChevronDown, ChevronRight, Package, Wrench, Truck, ShoppingCart, Receipt } from 'lucide-react'
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
@@ -114,10 +115,12 @@ export default function ODAPage() {
   async function handleSave() {
     if (!oggetto.trim() || importoNum <= 0 || !fornitoreId) { setErr('Compila tutti i campi obbligatori'); return }
     setSaving(true)
+    const aziendaId = await getAziendaId()
     const { count } = await supabase.from('oda').select('*', { count: 'exact', head: true }).eq('commessa_id', commessaId)
     const numero = `ODA-${new Date().getFullYear()}-${String((count || 0) + 1).padStart(3, '0')}`
     const { data: odaData, error } = await supabase.from('oda').insert({
-      commessa_id: commessaId, numero, tipo, oggetto: oggetto.trim(),
+      commessa_id: commessaId, azienda_id: aziendaId || null,
+      numero, tipo, oggetto: oggetto.trim(),
       fornitore_id: fornitoreId, importo_netto: importoNum, iva_pct: parseFloat(ivaPct),
       ritenuta_pct: parseFloat(ritenuta), condizioni_pagamento: condPag || null,
       data_consegna_prevista: dataConsegna || null, note: note || null, stato: 'EMESSO',
@@ -126,17 +129,28 @@ export default function ODAPage() {
     if (error) { setErr(error.message); setSaving(false); return }
     if (tipo === 'SUBAPPALTO' && odaData) {
       const { data: cs } = await supabase.from('contratti_sub').insert({
-        commessa_id: commessaId, fornitore_id: fornitoreId, importo_netto: importoNum,
+        commessa_id: commessaId, azienda_id: aziendaId || null,
+        fornitore_id: fornitoreId, importo_netto: importoNum,
         ritenuta_pct: parseFloat(ritenuta), stato: 'BOZZA'
       }).select().single()
       if (cs) await supabase.from('oda').update({ contratto_sub_id: cs.id }).eq('id', odaData.id)
     }
     if (tipo === 'MATERIALE' && odaData) {
-      const { data: dam } = await supabase.from('dam').insert({
-        commessa_id: commessaId, fornitore_id: fornitoreId,
-        materiale: oggetto.trim(), stato: 'bozza'
-      }).select().single()
-      if (dam) await supabase.from('oda').update({ dam_id: dam.id }).eq('id', odaData.id)
+      // Passo 2: evita doppio DAM se ne esiste già uno per questo rdo_id
+      let damId: string | null = null
+      if (rdoId) {
+        const { data: existing } = await supabase.from('dam').select('id').eq('rdo_id', rdoId).maybeSingle()
+        damId = existing?.id || null
+      }
+      if (!damId) {
+        const { data: dam } = await supabase.from('dam').insert({
+          commessa_id: commessaId, azienda_id: aziendaId || null,
+          fornitore_id: fornitoreId, materiale: oggetto.trim(),
+          stato: 'bozza', rdo_id: rdoId || null,
+        }).select().single()
+        damId = dam?.id || null
+      }
+      if (damId) await supabase.from('oda').update({ dam_id: damId }).eq('id', odaData.id)
     }
     setSaving(false); setModalOpen(false)
     setOggetto(''); setFornitoreId(''); setImportoNetto(''); setNote('')

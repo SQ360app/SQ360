@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import { getAziendaId } from '@/lib/supabase'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -112,6 +113,7 @@ export default function DDTPage({ params: p }: { params: Promise<{ id: string }>
       const codice = 'DDT-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.floor(Math.random() * 1000).toString().padStart(3, '0')
       const payload = {
         commessa_id: id,
+        azienda_id: await getAziendaId() || null,
         codice: editDdt.id ? editDdt.codice : codice,
         numero_ddt: editDdt.numero_ddt || '',
         data_ddt: editDdt.data_ddt || null,

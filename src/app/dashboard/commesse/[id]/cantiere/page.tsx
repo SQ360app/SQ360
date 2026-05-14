@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { supabase, getAziendaId } from '@/lib/supabase'
 import { Plus, Loader2, Cloud, Sun, CloudRain, Wind, Thermometer, Users, Truck, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react'
 
 const METEO = [
@@ -47,6 +47,7 @@ export default function CantierePage() {
     setSaving(true)
     await supabase.from('giornale_lavori').insert({
       commessa_id: id,
+      azienda_id: await getAziendaId() || null,
       data: form.data,
       meteo: form.meteo,
       temperatura_min: parseFloat(form.temperatura_min) || null,

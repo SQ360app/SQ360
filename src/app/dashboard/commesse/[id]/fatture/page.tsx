@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import { getAziendaId } from '@/lib/supabase'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -119,6 +120,7 @@ export default function FatturePage({ params: p }: { params: Promise<{ id: strin
       const importoIva = imponibile * ivaPct / 100
       const payload = {
         commessa_id: id,
+        azienda_id: await getAziendaId() || null,
         codice: editFattura.id ? editFattura.codice : codice,
         numero_fattura: editFattura.numero_fattura || '',
         data_fattura: editFattura.data_fattura || null,

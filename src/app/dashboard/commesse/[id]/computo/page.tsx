@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, use } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import { getAziendaId } from '@/lib/supabase'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -271,11 +272,13 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
       if (!wbsGroups[key]) wbsGroups[key] = []
       wbsGroups[key].push(vid)
     })
+    const aziendaId = await getAziendaId()
     let created = 0
     for (const [wbsId, voceIds] of Object.entries(wbsGroups)) {
       const codice = 'RDA-' + Date.now().toString(36).toUpperCase() + '-' + created
       await supabase.from('rda').insert({
-        commessa_id: id, codice, stato: 'bozza', tipo: 'MAT', qta_stimata: 1, um: 'nr',
+        commessa_id: id, azienda_id: aziendaId || null,
+        codice, stato: 'bozza', tipo: 'MAT', qta_stimata: 1, um: 'nr',
         oggetto: `RDA da computo (${voceIds.length} voci)`,
         voci_ids: voceIds,
         wbs_id: wbsId !== 'nessun_wbs' ? wbsId : null,

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { supabase, getAziendaId } from '@/lib/supabase'
 import { Plus, Loader2, CheckCircle2, Clock, AlertTriangle, FileText, TrendingUp, TrendingDown, ChevronDown, ChevronRight } from 'lucide-react'
 
 const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -42,8 +42,8 @@ export default function FatturazionePage() {
     setLoading(true)
     const [{ data: fa }, { data: fp }, { data: f }] = await Promise.all([
       supabase.from('fatture').select('*').eq('commessa_id', id).eq('tipo', 'ATTIVA').order('created_at', { ascending: false }),
-      supabase.from('fatture_passive').select('*, fornitore:fornitori(ragione_sociale)').eq('commessa_id', id).order('created_at', { ascending: false }),
-      supabase.from('fornitori').select('id, ragione_sociale').order('ragione_sociale'),
+      supabase.from('fatture_passive').select('*, fornitore:professionisti_fornitori(ragione_sociale)').eq('commessa_id', id).order('created_at', { ascending: false }),
+      supabase.from('professionisti_fornitori').select('id, ragione_sociale').order('ragione_sociale'),
     ])
     setFattureAttive(fa || [])
     setFatturePassive(fp || [])
@@ -59,7 +59,8 @@ export default function FatturazionePage() {
     const netto = parseFloat(formA.importo_netto)
     const iva = netto * parseFloat(formA.iva_pct) / 100
     await supabase.from('fatture').insert({
-      commessa_id: id, tipo: 'ATTIVA', numero: formA.numero,
+      commessa_id: id, azienda_id: await getAziendaId() || null,
+      tipo: 'ATTIVA', numero: formA.numero,
       data_emissione: formA.data || new Date().toISOString().split('T')[0],
       importo_netto: netto, importo_iva: iva, importo_totale: netto + iva,
       stato: 'EMESSA', note: formA.note || null,
@@ -75,7 +76,8 @@ export default function FatturazionePage() {
     const netto = parseFloat(formP.importo_netto)
     const iva = netto * parseFloat(formP.iva_pct) / 100
     await supabase.from('fatture_passive').insert({
-      commessa_id: id, fornitore_id: formP.fornitore_id,
+      commessa_id: id, azienda_id: await getAziendaId() || null,
+      fornitore_id: formP.fornitore_id,
       numero_fattura: formP.numero_fattura,
       data_fattura: formP.data_fattura || new Date().toISOString().split('T')[0],
       imponibile: netto, importo_iva: iva, importo_netto: netto,

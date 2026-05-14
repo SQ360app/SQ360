@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import { getAziendaId } from '@/lib/supabase'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -156,6 +157,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
     try {
       const payload = {
         commessa_id: id,
+        azienda_id: await getAziendaId() || null,
         tipo: editRda.tipo || 'MAT',
         oggetto: editRda.oggetto || '',
         qta_stimata: editRda.qta_stimata || 1,
@@ -197,7 +199,8 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
   const creaRDO = async () => {
     if(!wizardRdo) return; setGenerandoRdo(true)
     const codice='RDO-'+id.slice(0,8).toUpperCase()+'-'+Date.now().toString().slice(-4)
-    const {error}=await supabase.from('rdo').insert({commessa_id:id,rda_id:wizardRdo.id,codice,note:wizardNote,stato:'bozza',importo_offerta:0,fornitore:''})
+    const aziendaId=await getAziendaId()
+    const {error}=await supabase.from('rdo').insert({commessa_id:id,azienda_id:aziendaId||null,rda_id:wizardRdo.id,codice,note:wizardNote,stato:'bozza',importo_offerta:0,fornitore:''})
     if(error){showToast('Errore: '+error.message)}
     else{await supabase.from('rda').update({stato:'inviata'}).eq('id',wizardRdo.id);showToast('✅ RDO creata — vai alla tab RDO');setWizardRdo(null);carica()}
     setGenerandoRdo(false)

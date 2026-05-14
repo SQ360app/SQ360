@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import { getAziendaId } from '@/lib/supabase'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -179,6 +180,7 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
       const codice = 'RDO-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.floor(Math.random()*1000).toString().padStart(3,'0')
       const payload = {
         commessa_id: id,
+        azienda_id: await getAziendaId() || null,
         rda_id: editRdo.rda_id || null,
         codice: editRdo.id ? (editRdo.codice || codice) : codice,
         fornitore: editRdo.fornitore || '',
