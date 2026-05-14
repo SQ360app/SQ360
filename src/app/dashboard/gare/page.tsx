@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { supabase, getAziendaId } from '@/lib/supabase'
 import { Search, Plus, Upload, Sparkles, X, Save, CheckCircle, AlertCircle, ArrowRight, FileText, TrendingUp } from 'lucide-react'
 
 interface Gara {
@@ -58,8 +58,10 @@ export default function GarePage() {
 
   async function carica() {
     setLoading(true)
+    const aziendaId = await getAziendaId()
     const { data } = await supabase.from('gare')
       .select('id,codice_gara,nome,committente,importo_base,data_scadenza,stato,criterio_aggiudicazione,provincia,categoria_prevalente')
+      .eq('azienda_id', aziendaId)
       .order('data_scadenza', { ascending: true })
     if (data) setGare(data as Gara[])
     setLoading(false)

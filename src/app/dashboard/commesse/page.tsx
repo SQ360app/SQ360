@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { supabase, getAziendaId } from '@/lib/supabase'
 import { Plus, Search, Loader2, Building2, RefreshCw, AlertTriangle, CheckCircle2, Clock, XCircle, FileText } from  'lucide-react'
 import { AIImportButton } from '@/components/AIImportButton'
 const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })
@@ -115,13 +115,13 @@ function NuovaCommessaModal({ onClose, onCreated }: { onClose: () => void; onCre
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Utente non autenticato')
 
-      const { data: az } = await supabase.from('aziende').select('id').single()
-      if (!az) throw new Error('Azienda non trovata')
+      const aziendaId = await getAziendaId()
+      if (!aziendaId) throw new Error('Azienda non trovata')
 
       const fineCalc = form.data_fine_contrattuale || calcFineContrattuale()
 
       const { data: c, error } = await supabase.from('commesse').insert({
-        azienda_id: az.id,
+        azienda_id: aziendaId,
         codice: form.codice,
         nome: form.nome.trim(),
         committente: form.committente.trim(),
@@ -173,7 +173,7 @@ function NuovaCommessaModal({ onClose, onCreated }: { onClose: () => void; onCre
 
       // Crea automaticamente il computo_metrico collegato
       await supabase.from('computo_metrico').insert({
-        azienda_id: az.id,
+        azienda_id: aziendaId,
         commessa_id: c.id,
         nome: 'Computo metrico principale',
         tipo_uso: 'CONTRATTO',
@@ -570,8 +570,10 @@ export default function CommessePage() {
 
   const load = useCallback(async () => {
     setLoading(true)
+    const aziendaId = await getAziendaId()
     const { data } = await supabase.from('commesse')
       .select('id,codice,nome,committente,stato,importo_contratto,provincia,categoria,data_aggiudicazione,data_fine_contrattuale,giorni_contrattuali,data_inizio_lavori,tipo_contratto,fonte_finanziamento')
+      .eq('azienda_id', aziendaId)
       .order('created_at', { ascending: false })
     setCommesse(data || [])
     setLoading(false)

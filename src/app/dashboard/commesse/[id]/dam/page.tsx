@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
+import { getAziendaId } from '@/lib/supabase'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -124,9 +125,10 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
     setSaving(true)
     try {
       const nextRev = editDam.revisione || 0
+      const aziendaId = await getAziendaId()
       const payload = {
         commessa_id: id,
-        azienda_id: null,
+        azienda_id: aziendaId || null,
         revisione: nextRev,
         materiale: editDam.materiale || '',
         descrizione: editDam.descrizione || '',

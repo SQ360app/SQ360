@@ -85,9 +85,11 @@ export default function ContrattiPage() {
 
   async function carica() {
     setLoading(true)
+    const aziendaId = await getAziendaId()
     const { data, error } = await supabase
       .from('contratti')
       .select('*, voci_contratto(*)')
+      .eq('azienda_id', aziendaId)
       .order('created_at', { ascending: false })
     if (!error && data) setContratti(data)
     setLoading(false)
