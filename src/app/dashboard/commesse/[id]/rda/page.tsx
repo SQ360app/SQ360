@@ -197,7 +197,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
   const creaRDO = async () => {
     if(!wizardRdo) return; setGenerandoRdo(true)
     const codice='RDO-'+id.slice(0,8).toUpperCase()+'-'+Date.now().toString().slice(-4)
-    const {error}=await supabase.from('rdo').insert({commessa_id:id,rda_id:wizardRdo.id,rda_ids:[wizardRdo.id],codice,tipo:wizardTipo,oggetto:wizardRdo.oggetto,note:wizardNote,stato:'bozza',importo_offerta:0})
+    const {error}=await supabase.from('rdo').insert({commessa_id:id,rda_id:wizardRdo.id,codice,note:wizardNote,stato:'bozza',importo_offerta:0,fornitore:''})
     if(error){showToast('Errore: '+error.message)}
     else{await supabase.from('rda').update({stato:'inviata'}).eq('id',wizardRdo.id);showToast('✅ RDO creata — vai alla tab RDO');setWizardRdo(null);carica()}
     setGenerandoRdo(false)
