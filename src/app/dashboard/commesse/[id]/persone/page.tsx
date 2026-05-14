@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import { useRouter } from 'next/navigation'
 import { getAziendaId } from '@/lib/supabase'
 
 const supabase = createClient(
@@ -87,6 +88,117 @@ const s = {
   td:   { padding: '10px 12px', fontSize: 12, color: 'var(--t2)', borderBottom: '1px solid var(--border)', verticalAlign: 'middle' as const },
 }
 
+// ─── Report settimanale ───────────────────────────────────────────────────────
+
+function inizioSettimana(dataStr: string): string {
+  const d = new Date(dataStr)
+  const day = d.getDay() // 0=dom
+  const diff = day === 0 ? -6 : 1 - day
+  d.setDate(d.getDate() + diff)
+  return d.toISOString().split('T')[0]
+}
+
+function fineSettimana(inizioStr: string): string {
+  const d = new Date(inizioStr)
+  d.setDate(d.getDate() + 6)
+  return d.toISOString().split('T')[0]
+}
+
+function oreTraOrari(entrata?: string, uscita?: string): number {
+  if (!entrata || !uscita) return 0
+  const [he, me] = entrata.split(':').map(Number)
+  const [hu, mu] = uscita.split(':').map(Number)
+  return Math.max(0, (hu * 60 + mu - he * 60 - me) / 60)
+}
+
+function ReportSettimanale({ commessaId, lavoratori, dataRif }: { commessaId: string; lavoratori: Lavoratore[]; dataRif: string }) {
+  const [report, setReport] = useState<{ lavoratore_id: string; data: string; ore: number }[]>([])
+  const [loading, setLoading] = useState(false)
+  const [open, setOpen] = useState(false)
+
+  const inizio = inizioSettimana(dataRif)
+  const fine   = fineSettimana(inizio)
+
+  const carica = useCallback(async () => {
+    setLoading(true)
+    const { data } = await supabase
+      .from('presenze_cantiere')
+      .select('lavoratore_id, data, ora_entrata, ora_uscita, ore_lavorate')
+      .eq('commessa_id', commessaId)
+      .gte('data', inizio)
+      .lte('data', fine)
+    const righe = (data || []).map((p: any) => ({
+      lavoratore_id: p.lavoratore_id,
+      data: p.data,
+      ore: p.ore_lavorate ?? oreTraOrari(p.ora_entrata, p.ora_uscita),
+    }))
+    setReport(righe)
+    setLoading(false)
+  }, [commessaId, inizio, fine])
+
+  useEffect(() => { if (open) carica() }, [open, carica])
+
+  const orePerLav: Record<string, number> = {}
+  report.forEach(r => { orePerLav[r.lavoratore_id] = (orePerLav[r.lavoratore_id] || 0) + r.ore })
+  const totOre = Object.values(orePerLav).reduce((s, v) => s + v, 0)
+
+  return (
+    <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'var(--bg)', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: 'var(--t2)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        <span>📊 Report settimanale — {new Date(inizio).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })} / {new Date(fine).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}</span>
+        <span style={{ fontSize: 10, color: 'var(--t3)' }}>{open ? '▲ Chiudi' : '▼ Espandi'}</span>
+      </button>
+      {open && (
+        <div style={{ padding: '0 0 4px' }}>
+          {loading ? (
+            <p style={{ padding: '16px', fontSize: 12, color: 'var(--t3)', textAlign: 'center' }}>Caricamento…</p>
+          ) : lavoratori.length === 0 ? (
+            <p style={{ padding: '16px', fontSize: 12, color: 'var(--t3)', fontStyle: 'italic', textAlign: 'center' }}>Nessun lavoratore registrato</p>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '8px 16px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>Lavoratore</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>Tipo</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 10, fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>Giorni</th>
+                  <th style={{ padding: '8px 16px', textAlign: 'right', fontSize: 10, fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>Ore totali</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lavoratori.map(l => {
+                  const ore = orePerLav[l.id] || 0
+                  const giorni = report.filter(r => r.lavoratore_id === l.id).length
+                  const tipoInfo = TIPI_RAPPORTO.find(t => t.value === l.tipo_rapporto)
+                  return (
+                    <tr key={l.id} onMouseEnter={e => (e.currentTarget.style.background = 'var(--accent-light)')} onMouseLeave={e => (e.currentTarget.style.background = '')}>
+                      <td style={{ padding: '9px 16px', borderBottom: '1px solid var(--border)', fontWeight: 600, color: 'var(--t1)' }}>{l.cognome} {l.nome}</td>
+                      <td style={{ padding: '9px 12px', borderBottom: '1px solid var(--border)' }}>
+                        <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: (tipoInfo?.color || '#6b7280') + '22', color: tipoInfo?.color || '#6b7280', fontWeight: 700 }}>
+                          {tipoInfo?.label || l.tipo_rapporto}
+                        </span>
+                      </td>
+                      <td style={{ padding: '9px 12px', borderBottom: '1px solid var(--border)', textAlign: 'right', color: giorni > 0 ? 'var(--t1)' : 'var(--t4)' }}>{giorni > 0 ? giorni : '—'}</td>
+                      <td style={{ padding: '9px 16px', borderBottom: '1px solid var(--border)', textAlign: 'right', fontWeight: ore > 0 ? 700 : 400, color: ore > 0 ? 'var(--accent)' : 'var(--t4)', fontVariantNumeric: 'tabular-nums' }}>
+                        {ore > 0 ? ore.toFixed(1) + 'h' : '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
+                <tr style={{ background: '#1e3a5f' }}>
+                  <td colSpan={2} style={{ padding: '10px 16px', color: '#93c5fd', fontWeight: 700, fontSize: 13 }}>TOTALE SETTIMANA</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', color: '#bfdbfe', fontWeight: 700 }}>{report.length}</td>
+                  <td style={{ padding: '10px 16px', textAlign: 'right', color: '#4ade80', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{totOre.toFixed(1)}h</td>
+                </tr>
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Componente QR Code ───────────────────────────────────────────────────────
 
 function QRModal({ lavoratore, onClose }: { lavoratore: Lavoratore; onClose: () => void }) {
@@ -128,6 +240,7 @@ function QRModal({ lavoratore, onClose }: { lavoratore: Lavoratore; onClose: () 
 
 export default function PersonePage({ params: p }: { params: Promise<{ id: string }> }) {
   const { id } = use(p)
+  const router = useRouter()
   const [tab, setTab] = useState<'anagrafica' | 'presenze' | 'dashboard'>('anagrafica')
   const [lavoratori, setLavoratori] = useState<Lavoratore[]>([])
   const [presenze, setPresenze] = useState<Presenza[]>([])
@@ -258,10 +371,16 @@ export default function PersonePage({ params: p }: { params: Promise<{ id: strin
           <div style={s.card}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--t2)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Persone in cantiere</span>
-              <button style={s.btn('var(--accent)')}
-                onClick={() => { setEditLav({ tipo_rapporto: 'dipendente', attivo: true, patente_crediti_punti: 30 }); setForm(true) }}>
-                + Aggiungi lavoratore
-              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button style={s.btn('#7c3aed')}
+                  onClick={() => router.push(`/dashboard/commesse/${id}/persone/scan`)}>
+                  📱 Scansiona QR
+                </button>
+                <button style={s.btn('var(--accent)')}
+                  onClick={() => { setEditLav({ tipo_rapporto: 'dipendente', attivo: true, patente_crediti_punti: 30 }); setForm(true) }}>
+                  + Aggiungi lavoratore
+                </button>
+              </div>
             </div>
             {loading ? (
               <div style={{ padding: 40, textAlign: 'center' }}><span className="spinner" /></div>
@@ -284,7 +403,7 @@ export default function PersonePage({ params: p }: { params: Promise<{ id: strin
                   <tbody>
                     {lavAttivi.map(l => {
                       const durc = docStatus(l.durc_scadenza)
-                      const form = docStatus(l.formazione_scadenza)
+                      const formDoc = docStatus(l.formazione_scadenza)
                       const pat = patenteStatus(l.patente_crediti_punti)
                       const irreg = hasIrregolarita(l)
                       const warn = !irreg && hasWarning(l)
@@ -317,7 +436,7 @@ export default function PersonePage({ params: p }: { params: Promise<{ id: strin
                           </td>
                           {/* Formazione */}
                           <td style={s.td}>
-                            <span style={{ fontWeight: 700, color: STATUS_COLOR[form], fontSize: 13 }}>{STATUS_ICON[form]}</span>
+                            <span style={{ fontWeight: 700, color: STATUS_COLOR[formDoc], fontSize: 13 }}>{STATUS_ICON[formDoc]}</span>
                             {l.formazione_scadenza && <span style={{ display: 'block', fontSize: 10, color: 'var(--t3)' }}>{fmtData(l.formazione_scadenza)}</span>}
                           </td>
                           {/* Patente crediti */}
@@ -430,6 +549,9 @@ export default function PersonePage({ params: p }: { params: Promise<{ id: strin
               </table>
             )}
           </div>
+
+          {/* Report settimanale */}
+          <ReportSettimanale commessaId={id} lavoratori={lavAttivi} dataRif={dataPresenze} />
         </>
       )}
 
