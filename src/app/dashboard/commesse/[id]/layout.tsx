@@ -19,12 +19,14 @@ const TABS = [
   { key: 'oda',           label: 'ODA',              path: '/oda' },
   { key: 'contratti',     label: 'Contratti Sub',    path: '/contratti' },
   { key: 'dam',           label: 'DAM',              path: '/dam' },
+  { key: 'ddt',           label: 'DDT',              path: '/ddt' },
   { key: 'cantiere',      label: 'Cantiere',         path: '/cantiere' },
   { key: 'spese',         label: 'Spese',            path: '/spese' },
   { key: 'sal-attivi',    label: 'SAL Attivi',       path: '/sal-attivi' },
   { key: 'sal-passivi',   label: 'SAL Passivi',      path: '/sal-passivi' },
   { key: 'marginalita',   label: 'Marginalità',      path: '/marginalita' },
   { key: 'fatturazione',  label: 'Fatturazione',     path: '/fatturazione' },
+  { key: 'fatture',       label: 'Fatt. passive',    path: '/fatture' },
   { key: 'conto-economico', label: 'CE',             path: '/conto-economico' },
 ]
 

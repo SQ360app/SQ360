@@ -34,7 +34,7 @@ function VociRdaSection({ rdoId, supabase }: { rdoId?: string; supabase: any }) 
     if(rdo?.rda_id){
       const{data:rda}=await supabase.from('rda').select('voci_ids').eq('id',rdo.rda_id).single()
       if(rda?.voci_ids?.length){
-        const{data:v}=await supabase.from('computo_metrico').select('id,descrizione,unita_misura,quantita').in('id',rda.voci_ids)
+        const{data:v}=await supabase.from('voci_computo').select('id,descrizione,um,quantita').in('id',rda.voci_ids)
         setVoci(v||[])
       }
     }
@@ -51,7 +51,7 @@ function VociRdaSection({ rdoId, supabase }: { rdoId?: string; supabase: any }) 
         :voci.length===0?<p style={{fontSize:11,color:'var(--t3)',padding:'8px',margin:0,fontStyle:'italic'}}>Nessuna voce</p>
         :<table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}><tbody>{voci.map(v=><tr key={v.id}>
           <td style={{padding:'4px 6px',borderBottom:'1px solid var(--border)',color:'var(--t1)'}}>{v.descrizione?.slice(0,80)}</td>
-          <td style={{padding:'4px 6px',borderBottom:'1px solid var(--border)',color:'var(--t2)',whiteSpace:'nowrap' as const}}>{v.unita_misura||'—'}</td>
+          <td style={{padding:'4px 6px',borderBottom:'1px solid var(--border)',color:'var(--t2)',whiteSpace:'nowrap' as const}}>{v.um||'—'}</td>
           <td style={{padding:'4px 6px',borderBottom:'1px solid var(--border)',color:'var(--t2)'}}>{v.quantita!=null?Number(v.quantita).toLocaleString('it-IT'):'—'}</td>
         </tr>)}</tbody></table>}
       </div>}
@@ -87,7 +87,7 @@ export default function ODAPage() {
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase.from('oda').select('*').eq('commessa_id', commessaId).order('created_at', { ascending: false })
+    const { data } = await supabase.from('oda').select('*, fornitore:professionisti_fornitori(id,ragione_sociale)').eq('commessa_id', commessaId).order('created_at', { ascending: false })
     const { data: forn } = await supabase.from('professionisti_fornitori').select('id, ragione_sociale, nome, cognome').order('id', { ascending: true })
     setOda(data || [])
     setFornitori(forn || [])
@@ -134,7 +134,7 @@ export default function ODAPage() {
     if (tipo === 'MATERIALE' && odaData) {
       const { data: dam } = await supabase.from('dam').insert({
         commessa_id: commessaId, fornitore_id: fornitoreId,
-        denominazione_materiale: oggetto.trim(), stato: 'IN_ATTESA'
+        materiale: oggetto.trim(), stato: 'bozza'
       }).select().single()
       if (dam) await supabase.from('oda').update({ dam_id: dam.id }).eq('id', odaData.id)
     }
