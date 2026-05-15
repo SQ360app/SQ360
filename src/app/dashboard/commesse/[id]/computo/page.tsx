@@ -508,7 +508,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: V3_CSS }} />
-      <div className="cmp-root" style={{ height: '100%' }}>
+      <div className="cmp-root" style={{ height: 'calc(100vh - 180px)' }}>
 
         {/* SIDEBAR */}
         {!sbHidden && (
