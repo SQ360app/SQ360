@@ -30,6 +30,7 @@ const TABS = [
   { key: 'fatturazione',  label: 'Fatturazione',     path: '/fatturazione' },
   { key: 'fatture',       label: 'Fatt. passive',    path: '/fatture' },
   { key: 'conto-economico', label: 'CE',             path: '/conto-economico' },
+  { key: 'archivio',        label: 'Archivio',       path: '/archivio' },
 ]
 
 const STATI_COLOR: Record<string, string> = {
