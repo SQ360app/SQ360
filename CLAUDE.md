@@ -65,15 +65,27 @@
 - ✅ layout.tsx: tab "Sicurezza" aggiunto tra Cantiere e Spese (commit 865aea8)
 - ✅ Fix TypeScript build Vercel: rimosso `TUTTI_TIPI` unused, rimosso `nullsFirst` non nel tipo, fix `Partial<DocSicurezza>` spread (commit f3d3c7d)
 
-## Prossimi task prioritari
-1. **PDF professionali** — ODA e DAM con @react-pdf/renderer via API route server-side ← **IN CORSO**
-2. **Test flusso register→login** — test end-to-end registrazione → conferma email → primo accesso
+### Sessione 2026-05-15 — email notifiche + fix build (commit 042525c → 06745a6)
+- ✅ PDF professionali ODA + DAM completati con @react-pdf/renderer (OdaDocument.tsx, DamDocument.tsx)
+- ✅ Email notifiche con Resend — `resend@1.x` installato, `RESEND_API_KEY` configurato in produzione
+- ✅ `/api/email/route.ts`: route generica `POST { to, subject, html }` → Resend
+- ✅ `src/lib/emailTemplates.ts`: 5 template HTML (DURC scadenza, ODA creato, DAM approvato, Fattura scadenza, Report DURC settimanale)
+- ✅ `/api/cron/durc/route.ts`: cron settimanale — scansiona DURC in scadenza ≤30gg e invia report agli admin per azienda
+- ✅ `vercel.json`: cron ogni lunedì ore 8:00 → `/api/cron/durc`
+- ✅ Trigger ODA: dopo salvataggio invia email "Nuovo ODA [codice]" all'utente corrente (fire-and-forget)
+- ✅ Trigger DAM: aggiunti bottoni "Approva DL" / "Rifiuta" per stato INVIATO_DL; approvazione invia email con template
+- ✅ Trigger Sicurezza: bottone "📧 Invia alert DURC" nel banner scadenze — invia report consolidato DURC
+- ✅ Fix build Vercel: Supabase client e Resend client spostati dentro gli handler (non a livello modulo) — risolve "supabaseKey is required" durante build
 
-## Email notifiche (Resend) — configurazione richiesta
-- `RESEND_API_KEY`: ottieni da resend.com → Api Keys — **RESEND configurato** ✅
-- `CRON_SECRET`: stringa random per proteggere il cron endpoint
-- Dominio mittente: verifica `sq360.app` su Resend → Domains (altrimenti usa `onboarding@resend.dev` per test)
-- Cron DURC: ogni lunedì alle 8:00 → `/api/cron/durc` (Vercel Pro+)
+## Prossimi task prioritari
+1. **Test flusso register→login** — test end-to-end registrazione → conferma email → primo accesso
+2. **Verifica dominio Resend** — verificare `sq360.app` su Resend → Domains per mittente ufficiale
+
+## Email notifiche (Resend) — stato configurazione
+- `RESEND_API_KEY`: configurato in produzione ✅
+- `CRON_SECRET`: da aggiungere su Vercel → Environment Variables per proteggere `/api/cron/durc`
+- Dominio mittente: verificare `sq360.app` su Resend → Domains (ora usa `noreply@sq360.app`)
+- Cron DURC: ogni lunedì ore 8:00 → `/api/cron/durc` (richiede Vercel Pro+)
 
 ## Moduli roadmap completa
 1. ~~Comparativa offerte RDO con aggiudicazione~~ ✅
@@ -88,8 +100,8 @@
 10. ~~Registrazione multi-azienda (onboarding /register)~~ ✅
 11. ~~Contratti/assegnazione fix (fornitori → professionisti_fornitori)~~ ✅
 12. ~~RLS Supabase completo su tutte le tabelle figlie~~ ✅
-13. PDF professionali ODA + DAM (@react-pdf/renderer) ← **IN CORSO**
-14. ~~Invio email notifiche (ODA, DAM, DURC scadenze) — implementato con Resend~~ ✅
+13. ~~PDF professionali ODA + DAM (@react-pdf/renderer)~~ ✅
+14. ~~Invio email notifiche (ODA, DAM, DURC scadenze) con Resend + cron settimanale~~ ✅
 
 ## Note implementazione
 - `getAziendaId()` in `src/lib/supabase.ts` — helper condiviso: `auth.uid() → utenti.azienda_id`
