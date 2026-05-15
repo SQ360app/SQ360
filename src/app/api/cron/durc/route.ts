@@ -3,13 +3,12 @@ import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 import { emailDurcReport } from '@/lib/emailTemplates'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-const resend = new Resend(process.env.RESEND_API_KEY)
-
 export async function GET(req: NextRequest) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+  const resend = new Resend(process.env.RESEND_API_KEY)
   // Vercel cron verifica l'header Authorization
   const auth = req.headers.get('authorization')
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
