@@ -73,7 +73,7 @@ export default function CommessaLayout({ children }: { children: React.ReactNode
     <div style={{ minHeight: '100vh', background: '#f9fafb' }}>
 
       {/* Header */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', padding: '10px 20px' }}>
+      <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', padding: '10px 20px', position: 'sticky', top: 52, zIndex: 40 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
           <button onClick={() => router.push('/dashboard/commesse')}
             style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
