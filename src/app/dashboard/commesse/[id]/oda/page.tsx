@@ -6,6 +6,7 @@ import { useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { getAziendaId } from '@/lib/supabase'
 import { Plus, FileText, Loader2, ChevronDown, ChevronRight, Package, Wrench, Truck, ShoppingCart, Receipt } from 'lucide-react'
+import { emailOdaCreato } from '@/lib/emailTemplates'
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -154,9 +155,24 @@ export default function ODAPage() {
       }
       if (damId) await supabase.from('oda').update({ dam_id: damId }).eq('id', odaData.id)
     }
+    const fornitoreNome = fornitori.find((f: any) => f.id === fornitoreId)?.ragione_sociale || ''
+    const emailData = { numero: odaData?.numero || '', oggetto: oggetto.trim(), fornitore: fornitoreNome, importo: importoNum }
     setSaving(false); setModalOpen(false)
     setOggetto(''); setFornitoreId(''); setImportoNetto(''); setNote('')
     await load()
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user?.email) return
+      const { data: commessa } = await supabase.from('commesse').select('codice,nome').eq('id', commessaId).single()
+      const { subject, html } = emailOdaCreato({
+        codiceOda: emailData.numero,
+        oggetto: emailData.oggetto,
+        fornitore: emailData.fornitore,
+        importo: fmt(emailData.importo),
+        commessa: commessa ? `${commessa.codice} — ${commessa.nome}` : '',
+      })
+      fetch('/api/email', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: user.email, subject, html }) }).catch(() => {})
+    })
   }
 
   async function downloadPdf(o: any) {

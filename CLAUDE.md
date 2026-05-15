@@ -67,8 +67,13 @@
 
 ## Prossimi task prioritari
 1. **PDF professionali** — ODA e DAM con @react-pdf/renderer via API route server-side ← **IN CORSO**
-2. **Email notifiche** — trigger Supabase o cron per scadenze DURC, SAL da approvare, fatture in scadenza
-3. **Test flusso register→login** — test end-to-end registrazione → conferma email → primo accesso
+2. **Test flusso register→login** — test end-to-end registrazione → conferma email → primo accesso
+
+## Email notifiche (Resend) — configurazione richiesta
+- `RESEND_API_KEY`: ottieni da resend.com → Api Keys
+- `CRON_SECRET`: stringa random per proteggere il cron endpoint
+- Dominio mittente: verifica `sq360.app` su Resend → Domains (altrimenti usa `onboarding@resend.dev` per test)
+- Cron DURC: ogni lunedì alle 8:00 → `/api/cron/durc` (Vercel Pro+)
 
 ## Moduli roadmap completa
 1. ~~Comparativa offerte RDO con aggiudicazione~~ ✅
@@ -84,7 +89,7 @@
 11. ~~Contratti/assegnazione fix (fornitori → professionisti_fornitori)~~ ✅
 12. ~~RLS Supabase completo su tutte le tabelle figlie~~ ✅
 13. PDF professionali ODA + DAM (@react-pdf/renderer) ← **IN CORSO**
-14. Invio email notifiche (SAL, scadenze DURC) — non implementato
+14. ~~Invio email notifiche (ODA, DAM, DURC scadenze) — implementato con Resend~~ ✅
 
 ## Note implementazione
 - `getAziendaId()` in `src/lib/supabase.ts` — helper condiviso: `auth.uid() → utenti.azienda_id`

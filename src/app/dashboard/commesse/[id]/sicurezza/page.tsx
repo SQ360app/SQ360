@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { getAziendaId } from '@/lib/supabase'
+import { emailDurcReport } from '@/lib/emailTemplates'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -85,6 +86,26 @@ export default function SicurezzaPage({ params: p }: { params: Promise<{ id: str
   const [toast, setToast] = useState('')
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
+
+  const inviaAlertEmail = async () => {
+    const durcInScadenza = alertDocs.filter(d => d.tipo === 'DURC')
+    if (durcInScadenza.length === 0) { showToast('Nessun DURC in scadenza da notificare'); return }
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.email) { showToast('⚠ Email utente non trovata'); return }
+    const { data: commessa } = await supabase.from('commesse').select('codice,nome').eq('id', id).single()
+    const commessaLabel = commessa ? `${(commessa as any).codice} — ${(commessa as any).nome}` : ''
+    const scadenze = durcInScadenza.map(d => ({
+      fornitore: d.soggetto || 'N/D',
+      dataScadenza: fmtData(d.data_scadenza),
+      commessa: commessaLabel,
+      giorniRimanenti: ggAllaScadenza(d) ?? 0,
+    }))
+    const { subject, html } = emailDurcReport(scadenze)
+    const res = await fetch('/api/email', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: user.email, subject, html }) })
+    const json = await res.json()
+    showToast(json.ok ? '✓ Alert DURC inviato via email' : '⚠ Errore invio email')
+  }
 
   const carica = useCallback(async () => {
     setLoading(true)
@@ -199,9 +220,16 @@ export default function SicurezzaPage({ params: p }: { params: Promise<{ id: str
       {/* Alert banner scadenze */}
       {alertDocs.length > 0 && (
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: '12px 16px' }}>
-          <p style={{ fontSize: 12, fontWeight: 700, color: '#dc2626', margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
-            ⚠ {alertDocs.length} documento{alertDocs.length > 1 ? 'i' : ''} {scaduti > 0 ? 'scaduto/i o ' : ''}in scadenza
-          </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 8 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: '#dc2626', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+              ⚠ {alertDocs.length} documento{alertDocs.length > 1 ? 'i' : ''} {scaduti > 0 ? 'scaduto/i o ' : ''}in scadenza
+            </p>
+            {alertDocs.some(d => d.tipo === 'DURC') && (
+              <button onClick={inviaAlertEmail} style={{ ...s.btn('#d97706'), padding: '5px 12px', fontSize: 11, whiteSpace: 'nowrap' as const, flexShrink: 0 }}>
+                📧 Invia alert DURC
+              </button>
+            )}
+          </div>
           <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 6 }}>
             {alertDocs.slice(0, 8).map(d => {
               const gg = ggAllaScadenza(d)

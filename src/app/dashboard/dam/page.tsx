@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Search, X, Send, FileText, Upload, AlertTriangle, CheckCircle } from 'lucide-react'
 import { supabase, getAziendaId } from '@/lib/supabase'
+import { emailDamApprovato } from '@/lib/emailTemplates'
 
 type StatoDAM = 'BOZZA' | 'INVIATO_DL' | 'APPROVATO' | 'APPROVATO_NOTE' | 'RIFIUTATO' | 'REV_1' | 'REV_2'
 
@@ -124,6 +125,29 @@ export default function DAMPage() {
     setDams(prev => prev.map(d => d.id === id ? { ...d, stato: 'INVIATO_DL' } : d))
   }
 
+  async function approvaDAM(id: string) {
+    const dam = dams.find(d => d.id === id)
+    if (!dam) return
+    await supabase.from('dam').update({ stato: 'APPROVATO', data_risposta_dl: new Date().toISOString().slice(0, 10) }).eq('id', id)
+    setDams(prev => prev.map(d => d.id === id ? { ...d, stato: 'APPROVATO' as StatoDAM } : d))
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.email) return
+    const { data: commessa } = await supabase.from('commesse').select('codice,nome').eq('id', dam.commessa_id).single()
+    const { subject, html } = emailDamApprovato({
+      materiale: dam.materiale,
+      codice: dam.codice,
+      commessa: commessa ? `${(commessa as any).codice} — ${(commessa as any).nome}` : '',
+      dlNome: dam.dl_nome,
+    })
+    fetch('/api/email', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: user.email, subject, html }) }).catch(() => {})
+  }
+
+  async function rifiutaDAM(id: string) {
+    await supabase.from('dam').update({ stato: 'RIFIUTATO', data_risposta_dl: new Date().toISOString().slice(0, 10) }).eq('id', id)
+    setDams(prev => prev.map(d => d.id === id ? { ...d, stato: 'RIFIUTATO' as StatoDAM } : d))
+  }
+
   async function toggleCert(damId: string, certId: string, statoAttuale: string) {
     const nuovoStato = statoAttuale === 'presente' ? 'mancante' : 'presente'
     await supabase.from('certificazioni_dam').update({ stato: nuovoStato, file_caricato: nuovoStato === 'presente' }).eq('id', certId)
@@ -234,6 +258,16 @@ export default function DAMPage() {
                   <button onClick={() => inviaDL(damSelezionato.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                     <Send size={13} /> Invia a DL
                   </button>
+                )}
+                {damSelezionato.stato === 'INVIATO_DL' && (
+                  <>
+                    <button onClick={() => approvaDAM(damSelezionato.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#10b981', color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                      <CheckCircle size={13} /> Approva DL
+                    </button>
+                    <button onClick={() => rifiutaDAM(damSelezionato.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#ef4444', color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                      ✕ Rifiuta
+                    </button>
+                  </>
                 )}
                 <button style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--t2)', fontSize: 12, cursor: 'pointer' }}>
                   <FileText size={13} /> PDF per DL
