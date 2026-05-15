@@ -77,6 +77,18 @@
 - ✅ Trigger Sicurezza: bottone "📧 Invia alert DURC" nel banner scadenze — invia report consolidato DURC
 - ✅ Fix build Vercel: Supabase client e Resend client spostati dentro gli handler (non a livello modulo) — risolve "supabaseKey is required" durante build
 
+### Sessione 2026-05-15 — FLUX layout commessa (commit 8f28183)
+- ✅ `commesse/[id]/layout.tsx` riscritto con architettura a tre pannelli FLUX
+- ✅ Striscia commessa 32px: breadcrumb, codice badge, nome, KPI inline (contratto/ODA/% speso), alert badge scadenze, stato badge, bottone ⌘K, bottone Elimina
+- ✅ Pannello sinistro 220px: modulo attivo, navigazione raggruppata (CONTRATTO / ACQUISTI / CANTIERE / ECONOMICO), indicatore accent verticale, badge alert su Sicurezza
+- ✅ Area principale: `{children}` senza padding wrapper — ogni modulo mantiene il proprio padding
+- ✅ Pannello destro Intelligence 240px collassabile: KPI (contratto, ODA impegnati, margine, fatture), barra progresso spesa/budget, banner alert scadenze — stato persistito in localStorage (`sq360-right-panel`)
+- ✅ Command palette ⌘K / Ctrl+K: filtro su tutti i 20 moduli, Enter naviga al primo, Escape chiude
+- ✅ Mobile responsive <768px: pannelli laterali nascosti, bottombar 56px con 5 icone (Anagrafica, ODA, Cantiere, Sicurezza, CE)
+- ✅ Palette colori dark: bg #07090f, pannelli #0c1020, striscia #0a0d18, accent #4f8ef7
+- ✅ Mantenuti: caricamento commessa, modal elimina con doppia conferma, navigazione tutti i 20 moduli, breadcrumb ← Commesse
+- ✅ KPI destro: 3 query in parallelo — ODA impegnati, fatture da pagare, alert scadenze ≤30gg
+
 ### Sessione 2026-05-15 — Archivio Commessa + Dashboard homepage (commit 6c4bfe6 → 706cf6b)
 
 #### Archivio Commessa (6c4bfe6)
@@ -125,6 +137,7 @@
 14. ~~Invio email notifiche (ODA, DAM, DURC scadenze) con Resend + cron settimanale~~ ✅
 15. ~~Archivio Commessa — flusso documentale completo con checklist subappaltatori e export ZIP~~ ✅
 16. ~~Dashboard homepage — KPI aggregati, alert, scadenziario globale, attività recente~~ ✅
+17. ~~FLUX layout commessa — tre pannelli adattivi, command palette ⌘K, mobile responsive~~ ✅
 
 ## Note implementazione
 - `getAziendaId()` in `src/lib/supabase.ts` — helper condiviso: `auth.uid() → utenti.azienda_id`
