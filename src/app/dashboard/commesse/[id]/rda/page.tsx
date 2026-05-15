@@ -117,8 +117,12 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
   const [fResults, setFResults] = useState<Fornitore[]>([])
   const [modRapida, setModRapida] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [wizardRdo, setWizardRdo] = useState<RDA | null>(null)
-  const [wizardTipo, setWizardTipo] = useState('MAT')
+  const [wizardRda, setWizardRda] = useState<RDA | null>(null)
+  const [wizardFornitori, setWizardFornitori] = useState<Fornitore[]>([])
+  const [wizardSearch, setWizardSearch] = useState('')
+  const [wizardSearchResults, setWizardSearchResults] = useState<Fornitore[]>([])
+  const [wizardOggetto, setWizardOggetto] = useState('')
+  const [wizardScadenza, setWizardScadenza] = useState('')
   const [wizardNote, setWizardNote] = useState('')
   const [toast, setToast] = useState('')
   const [viewFornitore, setViewFornitore] = useState<string | null>(null)
@@ -150,6 +154,18 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
     }, 300)
     return () => clearTimeout(t)
   }, [fSearch])
+
+  useEffect(() => {
+    if (!wizardSearch || wizardSearch.length < 2) { setWizardSearchResults([]); return }
+    const t = setTimeout(async () => {
+      const { data } = await supabase.from('professionisti_fornitori')
+        .select('id,ragione_sociale,nome,cognome,email,pec,categoria_soa')
+        .or(`ragione_sociale.ilike.%${wizardSearch}%,nome.ilike.%${wizardSearch}%,cognome.ilike.%${wizardSearch}%`)
+        .limit(10)
+      setWizardSearchResults((data as Fornitore[]) || [])
+    }, 300)
+    return () => clearTimeout(t)
+  }, [wizardSearch])
 
   const salva = async () => {
     if (!editRda?.oggetto || !editRda?.tipo) { showToast('Compila oggetto e tipo'); return }
@@ -195,15 +211,46 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
     setVociRda((data as VoceComputo[]) || [])
     setLoadingVoci(false)
   }
-  const generaRDO = (r: RDA) => { setWizardRdo(r); setWizardTipo(r.tipo||'MAT'); setWizardNote('') }
-  const creaRDO = async () => {
-    if(!wizardRdo) return; setGenerandoRdo(true)
-    const codice='RDO-'+id.slice(0,8).toUpperCase()+'-'+Date.now().toString().slice(-4)
-    const aziendaId=await getAziendaId()
-    const {error}=await supabase.from('rdo').insert({commessa_id:id,azienda_id:aziendaId||null,rda_id:wizardRdo.id,codice,note:wizardNote,stato:'bozza',importo_offerta:0,fornitore:''})
-    if(error){showToast('Errore: '+error.message)}
-    else{await supabase.from('rda').update({stato:'inviata'}).eq('id',wizardRdo.id);showToast('✅ RDO creata — vai alla tab RDO');setWizardRdo(null);carica()}
-    setGenerandoRdo(false)
+  const apriWizardRdo = (r: RDA) => {
+    setWizardRda(r)
+    setWizardOggetto(r.oggetto || '')
+    setWizardFornitori([])
+    setWizardSearch('')
+    setWizardSearchResults([])
+    setWizardNote('')
+    setWizardScadenza('')
+  }
+
+  const creaRDOMulti = async () => {
+    if (!wizardRda || wizardFornitori.length === 0) return
+    setGenerandoRdo(true)
+    try {
+      const aziendaId = await getAziendaId()
+      const gruppoId = crypto.randomUUID()
+      const records = wizardFornitori.map(f => ({
+        commessa_id: id,
+        azienda_id: aziendaId || null,
+        rda_id: wizardRda.id,
+        rdo_gruppo_id: gruppoId,
+        fornitore_id: f.id,
+        fornitore: f.ragione_sociale || `${f.nome || ''} ${f.cognome || ''}`.trim(),
+        email_fornitore: f.pec || f.email || '',
+        token_offerta: crypto.randomUUID(),
+        stato_offerta: 'inviata',
+        stato: 'inviata',
+        oggetto: wizardOggetto || wizardRda.oggetto,
+        data_scadenza: wizardScadenza || null,
+        note: wizardNote,
+        importo_offerta: 0,
+        codice: `RDO-${gruppoId.slice(0, 8).toUpperCase()}-${f.id.slice(0, 4).toUpperCase()}`,
+      }))
+      const { error } = await supabase.from('rdo').insert(records)
+      if (error) { showToast('Errore: ' + error.message); return }
+      await supabase.from('rda').update({ stato: 'inviata' }).eq('id', wizardRda.id)
+      showToast(`✅ RDO inviata a ${wizardFornitori.length} fornitori`)
+      setWizardRda(null); setWizardFornitori([]); setWizardSearch('')
+      carica()
+    } finally { setGenerandoRdo(false) }
   }
   const elimina = async (rda: RDA) => {
     if (!window.confirm(`Eliminare la RDA ${rda.codice}?`)) return
@@ -309,9 +356,9 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
 </td>
                     <td style={{ ...(styleObj as any).td, fontSize:11 }} onClick={e => e.stopPropagation()}>
   {r.stato === 'approvata' ? (
-    <button onClick={() => generaRDO(r)} disabled={generandoRdo}
+    <button onClick={() => apriWizardRdo(r)} disabled={generandoRdo}
       style={{ padding:'4px 10px', borderRadius:6, background:'#3b82f6', color:'#fff', border:'none', cursor:'pointer', fontSize:10, fontWeight:700, whiteSpace:'nowrap' as const }}>
-      📋 Genera RDO
+      📤 Gara multi-fornitore
     </button>
   ) : r.stato === 'bozza' ? (
     <button onClick={async e => { e.stopPropagation(); await supabase.from('rda').update({stato:'approvata'}).eq('id',r.id); carica() }}
@@ -472,7 +519,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
                 <FlowThreadInline rdaId={detailRda.id} supabase={supabase} commessaId={id} />
               )}
             <div style={{ padding:'12px 16px', borderTop:'1px solid var(--border)', display:'flex', gap:8 }}>
-              {detailRda.stato === 'approvata' && <button onClick={() => generaRDO(detailRda)} disabled={generandoRdo} style={{ flex:1, padding:'10px', background:'#3b82f6', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontSize:13, fontWeight:700 }}>{generandoRdo ? 'Creazione...' : '📋 Genera RDO'}</button>}
+              {detailRda.stato === 'approvata' && <button onClick={() => apriWizardRdo(detailRda)} disabled={generandoRdo} style={{ flex:1, padding:'10px', background:'#3b82f6', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontSize:13, fontWeight:700 }}>{generandoRdo ? 'Invio...' : '📤 Gara multi-fornitore'}</button>}
               {detailRda.stato === 'bozza' && <button onClick={async () => { await supabase.from('rda').update({stato:'approvata'}).eq('id',detailRda.id); showToast('RDA approvata'); setDetailRda({...detailRda,stato:'approvata'}); carica() }} style={{ flex:1, padding:'10px', background:'#10b981', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontSize:13, fontWeight:700 }}>✅ Approva RDA</button>}
               {['inviata','chiusa'].includes(detailRda.stato) && <p style={{ flex:1, fontSize:12, color:'var(--t3)', textAlign:'center' as const, padding:'10px', margin:0 }}>{detailRda.stato === 'inviata' ? '🔵 RDO in corso' : '✅ Acquisizione completata'}</p>}
               <button onClick={() => setDetailRda(null)} style={{ padding:'10px 16px', border:'1px solid var(--border)', borderRadius:8, background:'none', cursor:'pointer', fontSize:12 }}>Chiudi</button>
@@ -497,27 +544,120 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
         </div>
       )}
 
-      {wizardRdo&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>!generandoRdo&&setWizardRdo(null)}>
-          <div style={{background:'var(--panel)',borderRadius:16,padding:24,width:460,maxWidth:'92vw',boxShadow:'0 20px 60px rgba(0,0,0,0.25)'}} onClick={e=>e.stopPropagation()}>
-            <h3 style={{margin:'0 0 4px',fontSize:15,fontWeight:700}}>Genera RDO da {wizardRdo.codice}</h3>
-            <p style={{margin:'0 0 12px',fontSize:12,color:'var(--t3)'}}>{wizardRdo.oggetto}</p>
-            {wizardRdo.voci_ids?.length?<div style={{marginBottom:12,padding:'6px 10px',background:'var(--bg)',borderRadius:6,fontSize:11,color:'var(--t2)'}}>📋 {wizardRdo.voci_ids.length} voci computo collegate</div>:null}
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:11,fontWeight:700,color:'var(--t3)',marginBottom:6}}>TIPO RDO</div>
-              <div style={{display:'flex',gap:6,flexWrap:'wrap' as const}}>
-                {['MAT','SUB','NOL','MAN','MIX'].map(t=>(
-                  <button key={t} onClick={()=>setWizardTipo(t)} style={{padding:'6px 12px',borderRadius:8,border:'2px solid',cursor:'pointer',fontSize:11,fontWeight:700,borderColor:wizardTipo===t?'var(--accent)':'var(--border)',background:wizardTipo===t?'var(--accent-light)':'none',color:wizardTipo===t?'var(--accent)':'var(--t2)'}}>
-                    {t==='MAT'?'Materiale':t==='SUB'?'Subappalto':t==='NOL'?'Nolo':t==='MAN'?'Manodopera':'Misto'}
-                  </button>
-                ))}
-              </div>
+      {wizardRda && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.65)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center' }}
+          onClick={() => !generandoRdo && setWizardRda(null)}>
+          <div style={{ background:'var(--panel)', borderRadius:16, padding:24, width:620, maxWidth:'96vw', maxHeight:'88vh', display:'flex', flexDirection:'column', boxShadow:'0 24px 64px rgba(0,0,0,.35)' }}
+            onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div style={{ marginBottom:16, flexShrink:0 }}>
+              <p style={{ fontSize:10, color:'var(--t3)', textTransform:'uppercase', letterSpacing:'.06em', margin:'0 0 3px' }}>Gara multi-fornitore</p>
+              <h3 style={{ fontSize:16, fontWeight:700, margin:'0 0 2px', color:'var(--t1)' }}>{wizardRda.codice}</h3>
+              <p style={{ fontSize:12, color:'var(--t3)', margin:0 }}>{wizardRda.oggetto}</p>
+              {(wizardRda.voci_ids?.length ?? 0) > 0 && (
+                <div style={{ marginTop:6, fontSize:11, color:'var(--accent)', background:'var(--accent-light)', display:'inline-block', padding:'2px 8px', borderRadius:4 }}>
+                  📋 {wizardRda.voci_ids?.length} voci computo collegate
+                </div>
+              )}
             </div>
-            <textarea value={wizardNote} onChange={e=>setWizardNote(e.target.value)} placeholder="Note / specifiche tecniche..." style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid var(--border)',fontSize:12,resize:'vertical' as const,minHeight:50,outline:'none',background:'var(--panel)',color:'var(--t1)',boxSizing:'border-box' as const,marginBottom:12}}/>
-            <div style={{padding:'8px 10px',background:'#eff6ff',borderRadius:6,fontSize:11,color:'#1e40af',marginBottom:14}}>💡 Puoi generare più RDO dalla stessa RDA per fornitori o tipi diversi</div>
-            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-              <button onClick={()=>setWizardRdo(null)} disabled={generandoRdo} style={{padding:'8px 16px',borderRadius:8,border:'1px solid var(--border)',background:'none',cursor:'pointer',fontSize:12}}>Annulla</button>
-              <button onClick={creaRDO} disabled={generandoRdo} style={{padding:'8px 20px',borderRadius:8,border:'none',background:'var(--accent)',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>{generandoRdo?'Creazione...':'📤 Crea RDO'}</button>
+
+            <div style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:12 }}>
+
+              {/* Oggetto */}
+              <div>
+                <label style={{ fontSize:11, fontWeight:600, color:'var(--t2)', marginBottom:4, display:'block' }}>Oggetto richiesta *</label>
+                <input value={wizardOggetto} onChange={e => setWizardOggetto(e.target.value)}
+                  style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid var(--border)', fontSize:12, outline:'none', background:'var(--panel)', color:'var(--t1)' }} />
+              </div>
+
+              {/* Scadenza */}
+              <div>
+                <label style={{ fontSize:11, fontWeight:600, color:'var(--t2)', marginBottom:4, display:'block' }}>Scadenza risposta</label>
+                <input type="date" value={wizardScadenza} onChange={e => setWizardScadenza(e.target.value)}
+                  style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid var(--border)', fontSize:12, outline:'none', background:'var(--panel)', color:'var(--t1)' }} />
+              </div>
+
+              {/* Selezione fornitori */}
+              <div>
+                <label style={{ fontSize:11, fontWeight:600, color:'var(--t2)', marginBottom:4, display:'block' }}>
+                  Fornitori invitati{wizardFornitori.length > 0 && <span style={{ color:'var(--accent)', marginLeft:4 }}>({wizardFornitori.length} selezionati)</span>}
+                </label>
+
+                {/* Pills selezionati */}
+                {wizardFornitori.length > 0 && (
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:8 }}>
+                    {wizardFornitori.map(f => {
+                      const lbl = f.ragione_sociale || `${f.nome || ''} ${f.cognome || ''}`.trim()
+                      return (
+                        <span key={f.id} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 8px', background:'var(--accent-light)', border:'1px solid var(--accent)', borderRadius:20, fontSize:11, color:'var(--accent)', fontWeight:600 }}>
+                          {lbl}
+                          <button onClick={() => setWizardFornitori(prev => prev.filter(x => x.id !== f.id))}
+                            style={{ background:'none', border:'none', cursor:'pointer', color:'var(--accent)', fontSize:13, lineHeight:1, padding:0 }}>✕</button>
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Ricerca */}
+                <div style={{ position:'relative' }}>
+                  <input value={wizardSearch} onChange={e => setWizardSearch(e.target.value)}
+                    placeholder="Cerca fornitore per nome o ragione sociale..."
+                    style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid var(--border)', fontSize:12, outline:'none', background:'var(--panel)', color:'var(--t1)' }} />
+                  {wizardSearchResults.length > 0 && (
+                    <div style={{ position:'absolute', zIndex:100, width:'100%', background:'var(--panel)', border:'1px solid var(--border)', borderRadius:8, boxShadow:'var(--shadow-md)', maxHeight:220, overflowY:'auto' }}>
+                      {wizardSearchResults.map(f => {
+                        const isSel = wizardFornitori.some(x => x.id === f.id)
+                        const lbl = f.ragione_sociale || `${f.nome || ''} ${f.cognome || ''}`.trim()
+                        return (
+                          <div key={f.id}
+                            onClick={() => {
+                              if (isSel) { setWizardFornitori(prev => prev.filter(x => x.id !== f.id)) }
+                              else { setWizardFornitori(prev => [...prev, f]) }
+                              setWizardSearch(''); setWizardSearchResults([])
+                            }}
+                            style={{ padding:'9px 12px', cursor:'pointer', fontSize:12, borderBottom:'1px solid var(--border)', background:isSel ? 'var(--accent-light)' : 'transparent', display:'flex', alignItems:'center', gap:8 }}>
+                            <span style={{ width:16, height:16, borderRadius:3, border:`2px solid ${isSel ? 'var(--accent)' : 'var(--border)'}`, background:isSel ? 'var(--accent)' : 'none', display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontSize:9, color:'#fff' }}>
+                              {isSel && '✓'}
+                            </span>
+                            <span>
+                              <span style={{ fontWeight:600 }}>{lbl}</span>
+                              {f.categoria_soa && <span style={{ fontSize:10, color:'var(--t3)', marginLeft:6 }}>SOA: {f.categoria_soa}</span>}
+                              {(f.pec || f.email) && <span style={{ fontSize:10, color:'var(--t3)', marginLeft:6 }}>{f.pec || f.email}</span>}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Note */}
+              <div>
+                <label style={{ fontSize:11, fontWeight:600, color:'var(--t2)', marginBottom:4, display:'block' }}>Note / Specifiche tecniche</label>
+                <textarea value={wizardNote} onChange={e => setWizardNote(e.target.value)}
+                  placeholder="Specificare caratteristiche tecniche, condizioni di fornitura..."
+                  style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid var(--border)', fontSize:12, resize:'vertical' as const, minHeight:70, outline:'none', background:'var(--panel)', color:'var(--t1)', boxSizing:'border-box' as const }} />
+              </div>
+
+              {wizardFornitori.length > 0 && (
+                <div style={{ padding:'8px 12px', background:'#eff6ff', borderRadius:8, fontSize:11, color:'#1e40af' }}>
+                  💡 Verranno create <strong>{wizardFornitori.length} RDO</strong> con lo stesso <code>rdo_gruppo_id</code> — visibili nel quadro comparativo offerte
+                </div>
+              )}
+            </div>
+
+            {/* Azioni */}
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:16, flexShrink:0, paddingTop:12, borderTop:'1px solid var(--border)' }}>
+              <button onClick={() => setWizardRda(null)} disabled={generandoRdo}
+                style={{ padding:'8px 16px', borderRadius:8, border:'1px solid var(--border)', background:'none', cursor:'pointer', fontSize:12 }}>Annulla</button>
+              <button onClick={creaRDOMulti}
+                disabled={generandoRdo || wizardFornitori.length === 0 || !wizardOggetto.trim()}
+                style={{ padding:'8px 20px', borderRadius:8, border:'none', background: wizardFornitori.length > 0 && wizardOggetto.trim() ? 'var(--accent)' : '#94a3b8', color:'#fff', cursor: wizardFornitori.length > 0 && wizardOggetto.trim() ? 'pointer' : 'not-allowed', fontSize:12, fontWeight:700 }}>
+                {generandoRdo ? 'Invio in corso...' : `📤 Invia a ${wizardFornitori.length || '?'} fornitori`}
+              </button>
             </div>
           </div>
         </div>
