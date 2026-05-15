@@ -26,6 +26,13 @@ const STATI: Record<string, { label: string; color: string }> = {
   ANNULLATO: { label: 'Annullato', color: 'bg-red-50 text-red-700' },
 }
 
+const STATI_CONSEGNA: Record<string, { label: string; color: string; next?: string }> = {
+  in_attesa:   { label: '⏳ In attesa',   color: 'bg-gray-50 text-gray-500',    next: 'confermato' },
+  confermato:  { label: '✓ Confermato',  color: 'bg-blue-50 text-blue-700',    next: 'in_consegna' },
+  in_consegna: { label: '🚚 In consegna', color: 'bg-amber-50 text-amber-700',  next: 'consegnato' },
+  consegnato:  { label: '✅ Consegnato',  color: 'bg-green-50 text-green-700',  next: undefined },
+}
+
 
 function VociRdaSection({ rdoId, supabase }: { rdoId?: string; supabase: any }) {
   const [voci,setVoci]=useState<any[]>([])
@@ -198,6 +205,11 @@ export default function ODAPage() {
     await load()
   }
 
+  async function cambiaConsegna(id: string, stato_consegna: string) {
+    await supabase.from('oda').update({ stato_consegna }).eq('id', id)
+    await load()
+  }
+
   const totImpegnato = oda.filter(o => o.stato !== 'ANNULLATO').reduce((s: number, o: any) => s + o.importo_netto, 0)
   const totRitenute = oda.filter(o => o.stato !== 'ANNULLATO').reduce((s: number, o: any) => s + (o.ritenuta_importo || 0), 0)
 
@@ -244,6 +256,9 @@ export default function ODAPage() {
                   <span className="flex-1 text-sm text-gray-800 truncate">{o.oggetto}</span>
                   <span className="text-xs text-gray-500 shrink-0">{o.fornitore?.ragione_sociale || '—'}</span>
                   <span className="text-sm font-medium text-gray-900 w-32 text-right shrink-0">€ {fmt(o.importo_netto)}</span>
+                  <span className={`shrink-0 text-xs px-2 py-0.5 rounded font-medium ${STATI_CONSEGNA[o.stato_consegna || 'in_attesa']?.color || ''}`}>
+                    {STATI_CONSEGNA[o.stato_consegna || 'in_attesa']?.label}
+                  </span>
                   <span className={`shrink-0 text-xs px-2 py-0.5 rounded font-medium ${STATI[o.stato]?.color || ''}`}>
                     {STATI[o.stato]?.label}
                   </span>
@@ -263,6 +278,15 @@ export default function ODAPage() {
                     <div className="flex gap-2 flex-wrap">
                       {o.contratto_sub_id && <span className="text-xs px-2.5 py-1.5 bg-purple-50 text-purple-700 rounded-lg border border-purple-100">✓ Contratto sub generato</span>}
                       {o.dam_id && <span className="text-xs px-2.5 py-1.5 bg-green-50 text-green-700 rounded-lg border border-green-100">✓ DAM generato</span>}
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-gray-500">Consegna →</span>
+                      {Object.entries(STATI_CONSEGNA).filter(([k]) => k !== (o.stato_consegna || 'in_attesa')).map(([k, v]) => (
+                        <button key={k} onClick={() => cambiaConsegna(o.id, k)}
+                          className={`text-xs px-2.5 py-1 rounded border font-medium ${v.color} border-current`}>
+                          {v.label}
+                        </button>
+                      ))}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs text-gray-500">Stato →</span>
