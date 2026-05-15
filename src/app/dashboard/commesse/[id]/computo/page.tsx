@@ -41,7 +41,7 @@ interface VoceDB {
 }
 interface RDADB { id: string; voci_ids?: string[]; stato?: string; tipo?: string; wbs_id?: string }
 
-// ─── CSS del v3 (identico al precedente, aggiunto stile WBS picker) ──────────
+// ─── CSS ────────────────────────────────────────────────────────────────────
 const V3_CSS = `
 .cmp-root{display:flex;height:100%;overflow:hidden;background:#f4f5f7;font-family:'Segoe UI',system-ui,sans-serif;font-size:11px;user-select:none}
 .cmp-sb{background:#fff;border-right:1px solid rgba(0,0,0,.12);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;transition:width .18s}
@@ -102,7 +102,7 @@ const V3_CSS = `
 .cmp-tscroll{flex:1;overflow:auto}
 .cmp-tscroll::-webkit-scrollbar{width:6px;height:6px}.cmp-tscroll::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}
 table.cmp-t{width:100%;border-collapse:collapse;table-layout:fixed}
-col.cc1{width:26px}col.cc2{width:34px}col.cc3{width:96px}col.cc4{width:auto}
+col.cc2{width:34px}col.cc3{width:96px}col.cc4{width:auto}
 col.cc5,col.cc6,col.cc7,col.cc8{width:52px}
 col.cc9{width:66px}col.cc10{width:68px}col.cc11{width:82px}
 col.cc12,col.cc13,col.cc14{width:36px}col.cc15{width:44px}
@@ -126,13 +126,11 @@ table.cmp-t td{padding:2px 3px;vertical-align:top;border-right:1px solid #e5e7eb
 .cmp-des-first{font-weight:700;font-size:10px}
 .cmp-des-rest{color:#4b5563;font-size:10px;line-height:1.4}
 .cmp-mono{font-family:monospace;font-size:10px}
-.cmp-ckb{width:13px;height:13px;cursor:pointer;accent-color:#2563eb;display:block;margin:0 auto}
 .cmp-wbadge{display:inline-block;font-size:8px;padding:1px 4px;border-radius:2px;margin-left:4px;font-weight:700;border:1px solid;cursor:pointer;transition:all .1s}
 .cmp-wbadge.set{background:#dbeafe;color:#1e40af;border-color:#93c5fd}
 .cmp-wbadge.unset{background:#fef3c7;color:#92400e;border-color:#fcd34d}
 .cmp-wbadge:hover{opacity:.75}
 .cmp-edt{display:block;text-align:right;cursor:default;font-size:10px;min-height:14px;color:#374151}
-/* WBS PICKER POPUP */
 .cmp-wbs-picker{position:fixed;z-index:200;background:#fff;border:1px solid rgba(0,0,0,.2);border-radius:10px;min-width:260px;max-height:340px;overflow-y:auto;box-shadow:0 8px 28px rgba(0,0,0,.18)}
 .cmp-wbs-picker-hdr{padding:6px 10px;background:#14532d;color:#fff;font-size:10px;font-weight:700;border-radius:9px 9px 0 0;display:flex;align-items:center;gap:6px}
 .cmp-wbs-picker-clr{margin-left:auto;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:10px;border-radius:3px;cursor:pointer;padding:1px 6px}
@@ -145,11 +143,12 @@ table.cmp-t td{padding:2px 3px;vertical-align:top;border-right:1px solid #e5e7eb
 .cmp-totbar-v{font-size:16px;font-weight:800;color:#4ade80;font-family:monospace}
 .cmp-toast{position:fixed;bottom:20px;right:20px;background:#14532d;color:#fff;padding:10px 16px;border-radius:8px;font-size:11px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.2);z-index:1000;opacity:0;transition:opacity .3s;pointer-events:none}
 .cmp-toast.show{opacity:1}
-.cmp-ctx{position:fixed;z-index:999;background:#fff;border:1px solid rgba(0,0,0,.2);border-radius:8px;min-width:200px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.15)}
+.cmp-ctx{position:fixed;z-index:999;background:#fff;border:1px solid rgba(0,0,0,.2);border-radius:8px;min-width:210px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.15)}
 .cmp-ctxh{padding:4px 12px;font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;background:#f9fafb;border-bottom:1px solid rgba(0,0,0,.08)}
 .cmp-ctxi{padding:7px 14px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:8px}
 .cmp-ctxi:hover{background:#f0fdf4}
 .cmp-ctxi.acc{color:#1d4ed8;font-weight:600}
+.cmp-ctxi.danger{color:#dc2626}
 .cmp-ctxsep{border-top:1px solid rgba(0,0,0,.08)}
 `
 
@@ -165,6 +164,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
   const [caricamento, setCaricamento] = useState(true)
   const [importando, setImportando] = useState(false)
   const [risultatoImport, setRisultatoImport] = useState<{ ok?: boolean; tariffe?: number; voci?: number; importo_totale?: number; error?: string } | null>(null)
+  const [computoId, setComputoId] = useState<string | null>(null)
 
   const [stab, setStab] = useState<'cat' | 'wbs'>('cat')
   const [sbHidden, setSbHidden] = useState(false)
@@ -178,11 +178,11 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
   const [ctx, setCtx] = useState<{ x: number; y: number; id: string } | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [toast, setToast] = useState('')
-  // WBS Picker
   const [wbsPicker, setWbsPicker] = useState<{ voceId: string; x: number; y: number } | null>(null)
-  // Bulk WBS assign modal
   const [bulkWbsPicker, setBulkWbsPicker] = useState(false)
-  const toastRef = useRef<NodeJS.Timeout | null>(null)
+
+  const toastRef  = useRef<NodeJS.Timeout | null>(null)
+  const lastSelRef = useRef<string | null>(null)
 
   const showToast = (msg: string) => {
     setToast(msg)
@@ -198,6 +198,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     try {
       const { data: computo } = await supabase.from('computo_metrico').select('id').eq('commessa_id', id).single()
       if (!computo) { setCaricamento(false); return }
+      setComputoId(computo.id)
 
       const { data: v } = await supabase
         .from('voci_computo')
@@ -256,15 +257,12 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
   const generaRDA = async () => {
     const ids = Array.from(multiSel)
     if (!ids.length) { showToast('Seleziona almeno una voce'); return }
-    // Blocca se ci sono voci senza WBS
     const senzaWBS = ids.filter(vid => !voci.find(v => v.id === vid)?.wbs_id)
     if (senzaWBS.length > 0) {
       showToast(`⚠ ${senzaWBS.length} voci senza nodo WBS — assegna WBS prima di generare RDA`)
-      // Evidenzia le voci senza WBS
       setMultiSel(new Set(senzaWBS))
       return
     }
-    // Raggruppa per WBS se le voci hanno wbs_id diversi
     const wbsGroups: Record<string, string[]> = {}
     ids.forEach(vid => {
       const v = voci.find(x => x.id === vid)
@@ -291,6 +289,40 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     showToast(`⚡ ${created} RDA create per ${ids.length} voci`)
   }
 
+  // ─── Duplica voce ────────────────────────────────────────────────────────
+
+  const duplicaVoce = async (voceId: string) => {
+    const voce = voci.find(v => v.id === voceId)
+    if (!voce || !computoId) return
+    await supabase.from('voci_computo').insert({
+      computo_id: computoId,
+      codice: voce.codice + '_C',
+      descrizione: voce.descrizione,
+      um: voce.um,
+      quantita: voce.quantita,
+      prezzo_unitario: voce.prezzo_unitario,
+      importo: voce.importo,
+      capitolo: voce.capitolo,
+      categoria: voce.categoria,
+      note: voce.note || null,
+      wbs_id: voce.wbs_id || null,
+      wbs_label: voce.wbs_label || null,
+    })
+    await caricaDati()
+    showToast('✓ Voce duplicata')
+  }
+
+  // ─── Elimina bulk ────────────────────────────────────────────────────────
+
+  const eliminaBulk = async () => {
+    const ids = Array.from(multiSel)
+    if (!ids.length) return
+    await supabase.from('voci_computo').delete().in('id', ids)
+    await caricaDati()
+    setMultiSel(new Set())
+    showToast(`🗑 ${ids.length} voci eliminate`)
+  }
+
   // ─── Categorie dinamiche ─────────────────────────────────────────────────
 
   const catTree = (() => {
@@ -308,7 +340,6 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     }))
   })()
 
-  // WBS tree: nodi con budget
   const wbsBudget = (code: string): number => {
     const children = WBS_CHILDREN(code)
     const direct = voci.filter(v => v.wbs_id === code).reduce((s, v) => s + v.importo, 0)
@@ -328,7 +359,6 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     return true
   })
 
-  // Voci senza WBS
   const voceNoWBS = voci.filter(v => !v.wbs_id).length
 
   // ─── Resizer ─────────────────────────────────────────────────────────────
@@ -343,7 +373,6 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
   }, [])
   const onResizerDown = (e: React.MouseEvent) => { rDrag.current = true; rStartX.current = e.clientX; rStartW.current = sbWidth; resizerRef.current?.classList.add('active'); e.preventDefault() }
 
-  // Chiudi context menu e wbs picker al click esterno
   useEffect(() => {
     const h = () => { setCtx(null) }
     document.addEventListener('click', h)
@@ -396,6 +425,35 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
   })()
 
   const voceIdx = (v: VoceDB) => voci.indexOf(v) + 1
+
+  // ─── Importo selezione corrente ───────────────────────────────────────────
+
+  const selImporto = voci.filter(v => multiSel.has(v.id)).reduce((s, v) => s + (v.importo || 0), 0)
+
+  // ─── Click handler Primus-style ───────────────────────────────────────────
+
+  const handleRowClick = (e: React.MouseEvent, voceId: string) => {
+    if (e.shiftKey && lastSelRef.current) {
+      const visIds = vociFiltrate.map(x => x.id)
+      const fromIdx = visIds.indexOf(lastSelRef.current)
+      const toIdx = visIds.indexOf(voceId)
+      if (fromIdx !== -1 && toIdx !== -1) {
+        const [s, end] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx]
+        const range = visIds.slice(s, end + 1)
+        setMultiSel(prev => new Set([...prev, ...range]))
+      }
+    } else if (e.ctrlKey || e.metaKey) {
+      setMultiSel(prev => {
+        const n = new Set(prev)
+        if (n.has(voceId)) n.delete(voceId); else n.add(voceId)
+        return n
+      })
+    } else {
+      setMultiSel(prev => prev.size === 1 && prev.has(voceId) ? new Set() : new Set([voceId]))
+    }
+    lastSelRef.current = voceId
+    setSel(voceId)
+  }
 
   // ─── WBS Picker popup ─────────────────────────────────────────────────────
 
@@ -543,7 +601,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
               ) : catFilter.sc ? (
                 <><span style={{ fontWeight: 700, color: '#14532d', fontSize: 11 }}>{catFilter.sc}</span>
                   <button style={{ fontSize: 9, padding: '1px 6px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }} onClick={() => setCatFilter({ sc: null, c: null })}>✕</button></>
-              ) : <span style={{ fontSize: 10, color: '#9ca3af' }}>Tutto il computo</span>}
+              ) : <span style={{ fontSize: 10, color: '#9ca3af' }}>Tutto il computo · click riga per selezionare · Ctrl+click multipla · Shift+click range</span>}
             </div>
             <label style={{ fontSize: 10, padding: '3px 8px', borderRadius: 4, cursor: 'pointer', background: '#1d4ed8', color: '#fff', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
               {importando ? '⏳ Import...' : '📥 Importa XPWE'}
@@ -565,10 +623,11 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
           {multiSel.size > 0 && (
             <div className="cmp-mbar">
               <span className="cmp-mbar-n">{multiSel.size}</span>
-              <span className="cmp-mbar-l"> voci selezionate</span>
-              <button className="cmp-mbtn cmp-mbtn-wbs" onClick={() => setBulkWbsPicker(true)}>📐 Assegna WBS</button>
-              <button className="cmp-mbtn cmp-mbtn-rda" onClick={generaRDA}>⚡ Genera RDA</button>
-              <button className="cmp-mbtn cmp-mbtn-clr" onClick={() => setMultiSel(new Set())}>✕ Deseleziona</button>
+              <span className="cmp-mbar-l"> voci sel. — {fi(selImporto, 0)} €</span>
+              <button className="cmp-mbtn cmp-mbtn-wbs" onClick={() => setBulkWbsPicker(true)}>📐 WBS</button>
+              <button className="cmp-mbtn cmp-mbtn-rda" onClick={generaRDA}>⚡ RDA</button>
+              <button onClick={eliminaBulk} style={{ fontSize: 10, padding: '3px 9px', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 700, background: '#dc2626', color: '#fff' }}>🗑 Elimina</button>
+              <button className="cmp-mbtn cmp-mbtn-clr" onClick={() => { setMultiSel(new Set()); lastSelRef.current = null }}>✕</button>
             </div>
           )}
 
@@ -604,18 +663,13 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
             <div className="cmp-tscroll" onClick={() => setCtx(null)}>
               <table className="cmp-t">
                 <colgroup>
-                  <col className="cc1" /><col className="cc2" /><col className="cc3" /><col className="cc4" />
+                  <col className="cc2" /><col className="cc3" /><col className="cc4" />
                   <col className="cc5" /><col className="cc6" /><col className="cc7" /><col className="cc8" />
                   <col className="cc9" /><col className="cc10" /><col className="cc11" />
                   <col className="cc12" /><col className="cc13" /><col className="cc14" /><col className="cc15" />
                 </colgroup>
                 <thead>
                   <tr>
-                    <th rowSpan={2}>
-                      <input type="checkbox" className="cmp-ckb"
-                        checked={vociFiltrate.length > 0 && vociFiltrate.every(v => multiSel.has(v.id))}
-                        onChange={e => { if (e.target.checked) setMultiSel(new Set(vociFiltrate.map(v => v.id))); else setMultiSel(new Set()) }} />
-                    </th>
                     <th rowSpan={2}>Nr</th>
                     <th rowSpan={2}>Tariffa</th>
                     <th rowSpan={2} className="thl">DESIGNAZIONE dei LAVORI / WBS</th>
@@ -634,28 +688,23 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                 </thead>
                 <tbody>
                   {tableRows.map((row, i) => {
-                    if (row.type === 'hsc') return <tr key={`hsc_${i}`} className="cmp-hsc"><td colSpan={15}>▸ {row.lb}</td></tr>
-                    if (row.type === 'hca') return <tr key={`hca_${i}`} className="cmp-hca"><td colSpan={15}>{row.lb}</td></tr>
+                    if (row.type === 'hsc') return <tr key={`hsc_${i}`} className="cmp-hsc"><td colSpan={14}>▸ {row.lb}</td></tr>
+                    if (row.type === 'hca') return <tr key={`hca_${i}`} className="cmp-hca"><td colSpan={14}>{row.lb}</td></tr>
 
                     if (row.type === 'vo') {
                       const v = row.v
                       const isSel = sel === v.id; const isMSel = multiSel.has(v.id)
                       const idx = voceIdx(v)
                       const hasWBS = !!v.wbs_id
-                     const first = v.descrizione || ''
+                      const first = v.descrizione || ''
                       return (
-                        <tr key={v.id} className={`cmp-rvo${isSel ? ' sel' : ''}${isMSel ? ' msel' : ''}`}
-                          onClick={() => setSel(v.id)}
+                        <tr key={v.id} className={`cmp-rvo${isMSel ? ' msel' : isSel ? ' sel' : ''}`}
+                          onClick={e => handleRowClick(e, v.id)}
                           onContextMenu={e => { e.preventDefault(); setCtx({ x: e.clientX, y: e.clientY, id: v.id }) }}>
-                          <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
-                            <input type="checkbox" className="cmp-ckb" checked={isMSel}
-                              onChange={e => { e.stopPropagation(); setMultiSel(prev => { const n = new Set(prev); if (n.has(v.id)) n.delete(v.id); else n.add(v.id); return n }) }} />
-                          </td>
                           <td style={{ textAlign: 'center', fontSize: 11, fontWeight: 700 }}>{idx}</td>
                           <td style={{ fontSize: 10, color: '#1d4ed8', fontFamily: 'monospace' }}>{v.codice}</td>
                           <td style={{ fontSize: 10, maxWidth: 0 }}>
                             <span className="cmp-des-first" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{first}</span>
-                            {/* WBS badge cliccabile */}
                             <span
                               className={`cmp-wbadge ${hasWBS ? 'set' : 'unset'}`}
                               title={hasWBS ? `WBS: ${v.wbs_id} ${v.wbs_label}` : 'Clicca per assegnare WBS'}
@@ -671,7 +720,6 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                           <td />
                           <td style={{ textAlign: 'right', fontSize: 10, fontFamily: 'monospace' }}>{fi(v.prezzo_unitario)}</td>
                           <td />
-                          {/* RDA */}
                           <td className="cmp-fi">
                             <span className={rdaByVoce(v.id) ? 'cmp-fi-ok' : 'cmp-fi-no'}>
                               {rdaByVoce(v.id) ? '✓' : '○'}
@@ -688,7 +736,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                       const v = row.v; const isSel = sel === v.id
                       return (
                         <tr key={`mi_${v.id}`} className={`cmp-rmi${isSel ? ' sel' : ''}`}>
-                          <td /><td />
+                          <td />
                           <td /><td style={{ paddingLeft: 28, color: '#6b7280', fontSize: 10, fontStyle: 'italic' }}>
                             {v.note?.split('>').pop()?.trim() || 'misura da XPWE'}
                           </td>
@@ -705,7 +753,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                       const v = row.v
                       return (
                         <tr key={`som_${v.id}`} className="cmp-rsom">
-                          <td colSpan={4} style={{ textAlign: 'right', paddingRight: 6, fontWeight: 700, fontSize: 10 }}>SOMMANO {v.um}</td>
+                          <td colSpan={3} style={{ textAlign: 'right', paddingRight: 6, fontWeight: 700, fontSize: 10 }}>SOMMANO {v.um}</td>
                           <td colSpan={4} />
                           <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 11, fontFamily: 'monospace' }}>{f3(v.quantita)}</td>
                           <td style={{ textAlign: 'right', fontSize: 11, fontFamily: 'monospace' }}>{fi(v.prezzo_unitario)}</td>
@@ -748,24 +796,61 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
         {/* CONTEXT MENU */}
         {ctx && (
           <div className="cmp-ctx" style={{ left: ctx.x, top: ctx.y }} onClick={e => e.stopPropagation()}>
-            <div className="cmp-ctxh">Voce EP</div>
+            <div className="cmp-ctxh">
+              {multiSel.size > 1 ? `${multiSel.size} voci selezionate` : 'Voce EP'}
+            </div>
+
             <div className="cmp-ctxi" style={{ color: '#7c3aed', fontWeight: 600 }} onClick={() => {
-              if (multiSel.size > 0) {
-                setBulkWbsPicker(true)
-              } else {
-                setWbsPicker({ voceId: ctx.id, x: ctx.x, y: Math.min(ctx.y, window.innerHeight - 360) })
-              }
+              if (multiSel.size > 1) { setBulkWbsPicker(true) }
+              else { setWbsPicker({ voceId: ctx.id, x: ctx.x, y: Math.min(ctx.y, window.innerHeight - 360) }) }
               setCtx(null)
             }}>📐 Assegna WBS</div>
+
             <div className="cmp-ctxi acc" onClick={() => {
-              setMultiSel(new Set([ctx.id])); setCtx(null)
+              if (multiSel.size <= 1) setMultiSel(new Set([ctx.id]))
+              setCtx(null)
               showToast('Voce selezionata — usa "Genera RDA"')
             }}>⚡ Genera RDA da voce</div>
+
             <div className="cmp-ctxsep" />
+
+            <div className="cmp-ctxi" onClick={() => {
+              const voce = voci.find(v => v.id === ctx.id)
+              if (voce) {
+                const capIds = voci.filter(v => v.capitolo === voce.capitolo).map(v => v.id)
+                setMultiSel(new Set(capIds))
+                showToast(`✓ ${capIds.length} voci del capitolo selezionate`)
+              }
+              setCtx(null)
+            }}>☑ Seleziona tutto capitolo</div>
+
             <div className="cmp-ctxi" onClick={() => {
               navigator.clipboard.writeText(voci.find(v => v.id === ctx.id)?.codice || '')
               setCtx(null); showToast('Codice copiato')
             }}>📋 Copia codice tariffa</div>
+
+            <div className="cmp-ctxsep" />
+
+            <div className="cmp-ctxi" onClick={() => { duplicaVoce(ctx.id); setCtx(null) }}>
+              ⧉ Duplica voce
+            </div>
+
+            <div className="cmp-ctxi" onClick={() => {
+              setCtx(null); showToast('📊 Storico prezzi — funzione in sviluppo')
+            }}>📊 Storico prezzi</div>
+
+            {multiSel.size > 1 && (
+              <>
+                <div className="cmp-ctxsep" />
+                <div className="cmp-ctxh">Azioni bulk ({multiSel.size} voci)</div>
+                <div className="cmp-ctxi acc" onClick={() => { generaRDA(); setCtx(null) }}>
+                  ⚡ Genera RDA ({multiSel.size})
+                </div>
+                <div className="cmp-ctxi danger" onClick={() => { eliminaBulk(); setCtx(null) }}>
+                  🗑 Elimina ({multiSel.size})
+                </div>
+              </>
+            )}
           </div>
         )}
 
