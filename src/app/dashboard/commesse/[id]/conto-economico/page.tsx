@@ -28,7 +28,8 @@ export default function ContoEconomicoPage() {
       .from('computo_metrico')
       .select('id')
       .eq('commessa_id', id)
-      .single()
+      .maybeSingle()
+    const hasComputo = !!computo
     let budgetComputo = 0
     if (computo) {
       const { data: voci } = await supabase
@@ -37,14 +38,16 @@ export default function ContoEconomicoPage() {
         .eq('computo_id', computo.id)
       budgetComputo = (voci || []).reduce((s: number, v: any) => s + (Number(v.importo) || 0), 0)
     }
+    // Fallback: se nessun computo importato, usa importo_contratto come riferimento budget
+    if (!hasComputo) budgetComputo = ricavoContratto
 
     // 3. SAL attivi (ricavi maturati)
     const { data: sal } = await supabase
       .from('sal_attivi')
-      .select('importo_netto_sal, stato')
+      .select('importo_certificato, stato')
       .eq('commessa_id', id)
-    const ricaviEmessi    = (sal || []).filter((s: any) => s.stato !== 'BOZZA').reduce((s: number, x: any) => s + (x.importo_netto_sal || 0), 0)
-    const ricaviIncassati = (sal || []).filter((s: any) => s.stato === 'PAGATO').reduce((s: number, x: any) => s + (x.importo_netto_sal || 0), 0)
+    const ricaviEmessi    = (sal || []).filter((s: any) => s.stato !== 'bozza').reduce((s: number, x: any) => s + (x.importo_certificato || 0), 0)
+    const ricaviIncassati = (sal || []).filter((s: any) => s.stato === 'pagato').reduce((s: number, x: any) => s + (x.importo_certificato || 0), 0)
 
     // 4. Costi da ODA impegnati
     const { data: odaList } = await supabase.from('oda').select('importo_netto, stato').eq('commessa_id', id)
@@ -70,7 +73,7 @@ export default function ContoEconomicoPage() {
     const { data: contSub } = await supabase.from('contratti_sub').select('importo_netto, stato').eq('commessa_id', id)
     const costiContrattiSub = (contSub || []).filter((c: any) => c.stato !== 'ANNULLATO').reduce((s: number, x: any) => s + (x.importo_netto || 0), 0)
 
-    setCe({ ricavoContratto, budgetComputo, ricaviEmessi, ricaviIncassati, costiOda, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub })
+    setCe({ ricavoContratto, budgetComputo, hasComputo, ricaviEmessi, ricaviIncassati, costiOda, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub })
     setLoading(false)
   }
 
@@ -82,7 +85,7 @@ export default function ContoEconomicoPage() {
     </div>
   )
 
-  const { ricavoContratto, budgetComputo, ricaviEmessi, ricaviIncassati, costiOda, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub } = ce
+  const { ricavoContratto, budgetComputo, hasComputo, ricaviEmessi, ricaviIncassati, costiOda, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub } = ce
   const totCostiImpegnati = costiOda + costiSpese + costiContrattiSub
   const margineAtteso  = ricavoContratto - totCostiImpegnati
   const margineAttuale = ricavoContratto - costiPagati
@@ -108,6 +111,13 @@ export default function ContoEconomicoPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      {!hasComputo && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, fontSize: 12, color: '#92400e' }}>
+          <AlertTriangle size={14} style={{ flexShrink: 0 }} />
+          <span>Nessun computo metrico importato — il budget di lista usa l'importo contratto come riferimento. Vai al tab <strong>Computo</strong> per importare il file XPWE.</span>
+        </div>
+      )}
 
       {/* Doppio margine: atteso vs attuale */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -138,7 +148,7 @@ export default function ContoEconomicoPage() {
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '16px 20px' }}>
         <h3 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 4px', color: '#374151', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Ricavi</h3>
         <Row label="Ricavo contrattuale ufficiale" value={ricavoContratto} bold />
-        <Row label="Budget computo di lista" value={budgetComputo} sub color={budgetComputo > ricavoContratto ? '#dc2626' : '#6b7280'} />
+        <Row label={hasComputo ? 'Budget computo di lista' : 'Budget computo di lista (≡ contratto, nessun XPWE)'} value={budgetComputo} sub color={!hasComputo ? '#d97706' : budgetComputo > ricavoContratto ? '#dc2626' : '#6b7280'} />
         <Row label="SAL attivi emessi (ricavo maturato)" value={ricaviEmessi} color="#059669" />
         <Row label="di cui incassati dal committente" value={ricaviIncassati} sub color="#059669" />
 
