@@ -70,7 +70,7 @@
 2. **Test flusso register→login** — test end-to-end registrazione → conferma email → primo accesso
 
 ## Email notifiche (Resend) — configurazione richiesta
-- `RESEND_API_KEY`: ottieni da resend.com → Api Keys
+- `RESEND_API_KEY`: ottieni da resend.com → Api Keys — **RESEND configurato** ✅
 - `CRON_SECRET`: stringa random per proteggere il cron endpoint
 - Dominio mittente: verifica `sq360.app` su Resend → Domains (altrimenti usa `onboarding@resend.dev` per test)
 - Cron DURC: ogni lunedì alle 8:00 → `/api/cron/durc` (Vercel Pro+)
