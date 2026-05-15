@@ -77,6 +77,27 @@
 - ✅ Trigger Sicurezza: bottone "📧 Invia alert DURC" nel banner scadenze — invia report consolidato DURC
 - ✅ Fix build Vercel: Supabase client e Resend client spostati dentro gli handler (non a livello modulo) — risolve "supabaseKey is required" durante build
 
+### Sessione 2026-05-15 — Archivio Commessa + Dashboard homepage (commit 6c4bfe6 → 706cf6b)
+
+#### Archivio Commessa (6c4bfe6)
+- ✅ `archivio/page.tsx`: 6 cartelle accordion (Contratto, Acquisti, Cantiere, Sicurezza Impresa, Subappaltatori, Economico)
+- ✅ Checklist automatica per ogni subappaltatore (contratto firmato, DURC, SOA, DVR/POS, UNILAV+formazione) — stato completa/incompleta/critica
+- ✅ Upload documenti per sub: record in `documenti_sicurezza` (soggetto_tipo='subappaltatore') + file opzionale in `documenti_commessa` (categoria='subappaltatore', note='sub:[nome]')
+- ✅ Bottone "📦 Esporta tutto": genera ZIP via jszip con cartelle 01→06, file reali da Storage + riepilogo.txt per moduli senza allegati
+- ✅ `layout.tsx`: tab "Archivio" aggiunto come ultimo tab
+- ✅ `jszip` installato
+- ✅ Fix TypeScript: cast `unknown` per join Supabase su `contratti_sub.fornitore` (restituisce array invece di oggetto)
+
+#### Dashboard homepage (706cf6b)
+- ✅ `dashboard/page.tsx` riscritto — rimossa mappa Leaflet/AI/rapportino, sostituito con KPI aggregati
+- ✅ KPI riga 1: commesse attive, portafoglio totale, ODA questo mese, fatture da pagare (con importo)
+- ✅ KPI riga 2 (alert): DURC ≤30gg, documenti scaduti, subappaltatori con checklist incompleta
+- ✅ Lista commesse attive: barra spesa vs budget (verde/arancio/rosso), margine % calcolato da ODA, link diretto
+- ✅ Scadenziario 30gg: doc sicurezza + fatture unificati e ordinati per data, giorni in evidenza
+- ✅ Attività recente: ultimi 5 ODA, DDT, documenti — click naviga alla commessa
+- ✅ 11 query Supabase in parallelo (Promise.all) — nessun waterfall
+- ✅ Non usa più view SQL `v_commesse_kpi` / `v_scadenze_prossime` — query dirette alle tabelle base
+
 ## Prossimi task prioritari
 1. **Test flusso register→login** — test end-to-end registrazione → conferma email → primo accesso
 2. **Verifica dominio Resend** — verificare `sq360.app` su Resend → Domains per mittente ufficiale
@@ -102,6 +123,8 @@
 12. ~~RLS Supabase completo su tutte le tabelle figlie~~ ✅
 13. ~~PDF professionali ODA + DAM (@react-pdf/renderer)~~ ✅
 14. ~~Invio email notifiche (ODA, DAM, DURC scadenze) con Resend + cron settimanale~~ ✅
+15. ~~Archivio Commessa — flusso documentale completo con checklist subappaltatori e export ZIP~~ ✅
+16. ~~Dashboard homepage — KPI aggregati, alert, scadenziario globale, attività recente~~ ✅
 
 ## Note implementazione
 - `getAziendaId()` in `src/lib/supabase.ts` — helper condiviso: `auth.uid() → utenti.azienda_id`
