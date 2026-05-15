@@ -19,12 +19,13 @@ const STATO_COLOR: Record<string, string> = {
 interface Fattura {
   id: string; codice: string; commessa_id: string
   numero_fattura: string; data_fattura: string; data_scadenza: string
-  fornitore_id?: string; fornitore_nome?: string; oda_id?: string
+  fornitore_id?: string; fornitore_nome?: string; oda_id?: string; ddt_id?: string
   imponibile: number; iva_pct: number; importo_iva: number; totale: number
   stato: string; note: string
 }
 interface Fornitore { id: string; ragione_sociale?: string; nome?: string; cognome?: string }
 interface ODA { id: string; numero: string; oggetto: string }
+interface DDTItem { id: string; numero_ddt: string; fornitore_nome?: string; data_ddt?: string }
 
 const s = {
   page: { minHeight: '100%', background: 'var(--bg)', padding: 16, display: 'flex', flexDirection: 'column' as const, gap: 12 },
@@ -44,6 +45,7 @@ export default function FatturePage({ params: p }: { params: Promise<{ id: strin
   const [form, setForm] = useState(false)
   const [editFattura, setEditFattura] = useState<Partial<Fattura> | null>(null)
   const [odaList, setOdaList] = useState<ODA[]>([])
+  const [ddtList, setDdtList] = useState<DDTItem[]>([])
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
@@ -54,12 +56,14 @@ export default function FatturePage({ params: p }: { params: Promise<{ id: strin
 
   const carica = useCallback(async () => {
     setLoading(true)
-    const [{ data: fp }, { data: oda }] = await Promise.all([
+    const [{ data: fp }, { data: oda }, { data: ddt }] = await Promise.all([
       supabase.from('fatture_passive').select('*').eq('commessa_id', id).order('data_fattura', { ascending: false }),
       supabase.from('oda').select('id,numero,oggetto').eq('commessa_id', id).neq('stato', 'ANNULLATO'),
+      supabase.from('ddt').select('id,numero_ddt,fornitore_nome,data_ddt').eq('commessa_id', id).order('data_ddt', { ascending: false }),
     ])
     setFatture((fp as Fattura[]) || [])
     setOdaList((oda as ODA[]) || [])
+    setDdtList((ddt as DDTItem[]) || [])
     setLoading(false)
   }, [id])
 
@@ -128,6 +132,7 @@ export default function FatturePage({ params: p }: { params: Promise<{ id: strin
         fornitore_id: editFattura.fornitore_id || null,
         fornitore_nome: editFattura.fornitore_nome || '',
         oda_id: editFattura.oda_id || null,
+        ddt_id: editFattura.ddt_id || null,
         imponibile, iva_pct: ivaPct, importo_iva: importoIva,
         totale: imponibile + importoIva,
         stato: editFattura.stato || 'ricevuta',
@@ -204,7 +209,7 @@ export default function FatturePage({ params: p }: { params: Promise<{ id: strin
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr>{['N° Fattura', 'Data', 'Scadenza', 'Fornitore', 'ODA', 'Imponibile', 'IVA%', 'Totale', 'Stato', ''].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
+                <tr>{['N° Fattura', 'Data', 'Scadenza', 'Fornitore', 'ODA', 'DDT', 'Imponibile', 'IVA%', 'Totale', 'Stato', ''].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
               </thead>
               <tbody>
                 {fatture.map(f => {
@@ -221,6 +226,7 @@ export default function FatturePage({ params: p }: { params: Promise<{ id: strin
                       </td>
                       <td style={{ ...s.td, fontSize: 11 }}>{f.fornitore_nome || '—'}</td>
                       <td style={{ ...s.td, fontSize: 11 }}>{oda ? oda.numero : '—'}</td>
+                      <td style={{ ...s.td, fontSize: 11 }}>{ddtList.find(d => d.id === f.ddt_id)?.numero_ddt || '—'}</td>
                       <td style={{ ...s.td, textAlign: 'right' as const, fontVariantNumeric: 'tabular-nums' as const }}>{fi(f.imponibile)}</td>
                       <td style={{ ...s.td, textAlign: 'center' as const, fontSize: 11 }}>{f.iva_pct}%</td>
                       <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: 700, fontVariantNumeric: 'tabular-nums' as const }}>{fi(f.totale)}</td>
@@ -286,12 +292,21 @@ export default function FatturePage({ params: p }: { params: Promise<{ id: strin
                 )}
               </div>
 
-              <div>
-                <label style={s.lbl}>ODA collegata</label>
-                <select style={s.inp} value={editFattura.oda_id || ''} onChange={e => setEditFattura({ ...editFattura, oda_id: e.target.value || undefined })}>
-                  <option value="">— Nessuna ODA —</option>
-                  {odaList.map(o => <option key={o.id} value={o.id}>{o.numero} — {o.oggetto}</option>)}
-                </select>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={s.lbl}>ODA collegata</label>
+                  <select style={s.inp} value={editFattura.oda_id || ''} onChange={e => setEditFattura({ ...editFattura, oda_id: e.target.value || undefined })}>
+                    <option value="">— Nessuna ODA —</option>
+                    {odaList.map(o => <option key={o.id} value={o.id}>{o.numero} — {o.oggetto}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={s.lbl}>DDT collegato</label>
+                  <select style={s.inp} value={editFattura.ddt_id || ''} onChange={e => setEditFattura({ ...editFattura, ddt_id: e.target.value || undefined })}>
+                    <option value="">— Nessun DDT —</option>
+                    {ddtList.map(d => <option key={d.id} value={d.id}>{d.numero_ddt}{d.data_ddt ? ` (${d.data_ddt})` : ''}{d.fornitore_nome ? ` — ${d.fornitore_nome}` : ''}</option>)}
+                  </select>
+                </div>
               </div>
 
               <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>Importi</p>
