@@ -1,75 +1,120 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 import {
   LayoutDashboard, Search, FolderOpen, Users,
-  Calendar, Settings, CreditCard, Building2
+  Calendar, Settings, CreditCard, Building2, LogOut
 } from 'lucide-react'
 
 const NAV = [
-  { href: '/dashboard',             icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/dashboard/gare',        icon: Search,          label: 'Analisi Gare' },
-  { href: '/dashboard/commesse',    icon: FolderOpen,      label: 'Commesse' },
-  { href: '/dashboard/fornitori',   icon: Users,           label: 'Contatti' },
-  { href: '/dashboard/scadenzario', icon: Calendar,        label: 'Scadenzario' },
-  { href: '/dashboard/amministrazione', icon: CreditCard,  label: 'Amministrazione' },
-  { href: '/dashboard/impostazioni',icon: Settings,        label: 'Impostazioni' },
+  { href: '/dashboard',                 icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/dashboard/gare',            icon: Search,          label: 'Analisi Gare' },
+  { href: '/dashboard/commesse',        icon: FolderOpen,      label: 'Commesse' },
+  { href: '/dashboard/fornitori',       icon: Users,           label: 'Contatti' },
+  { href: '/dashboard/scadenzario',     icon: Calendar,        label: 'Scadenzario' },
+  { href: '/dashboard/amministrazione', icon: CreditCard,      label: 'Amministrazione' },
+  { href: '/dashboard/impostazioni',    icon: Settings,        label: 'Impostazioni' },
 ]
 
 export function Sidebar() {
   const path = usePathname()
+  const router = useRouter()
+  const [email, setEmail] = useState('')
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setEmail(session?.user?.email || '')
+    })
+  }, [])
+
+  async function logout() {
+    await supabase.auth.signOut()
+    router.replace('/login')
+  }
 
   return (
-    <aside style={{
-      width: 220, flexShrink: 0, height: '100vh',
+    <nav style={{
+      height: 52, width: '100%', flexShrink: 0,
       background: 'var(--sidebar-bg)',
-      borderRight: '1px solid var(--sidebar-border)',
-      display: 'flex', flexDirection: 'column',
-      overflow: 'hidden'
+      borderBottom: '1px solid var(--sidebar-border)',
+      display: 'flex', alignItems: 'center',
+      overflow: 'hidden',
     }}>
+
       {/* Logo */}
-      <div style={{ padding: '20px 18px 16px', borderBottom: '1px solid var(--sidebar-border)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 10, background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Building2 size={18} color="white" />
-          </div>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--sidebar-text)', letterSpacing: '-0.02em' }}>SQ360</div>
-            <div style={{ fontSize: 9, color: 'var(--sidebar-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Gestionale Edile</div>
-          </div>
+      <div style={{
+        padding: '0 16px', height: '100%', flexShrink: 0,
+        display: 'flex', alignItems: 'center', gap: 8,
+        borderRight: '1px solid var(--sidebar-border)',
+      }}>
+        <div style={{
+          width: 30, height: 30, borderRadius: 8, background: '#3b82f6',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        }}>
+          <Building2 size={16} color="white" />
+        </div>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--sidebar-text)', letterSpacing: '-0.02em', lineHeight: 1.1 }}>SQ360</div>
+          <div style={{ fontSize: 8, color: 'var(--sidebar-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Gestionale Edile</div>
         </div>
       </div>
 
-      {/* Nav */}
-      <nav style={{ flex: 1, padding: '10px 10px', overflowY: 'auto' }}>
+      {/* Nav links orizzontali */}
+      <div style={{
+        display: 'flex', alignItems: 'center',
+        flex: 1, height: '100%',
+        overflowX: 'auto', scrollbarWidth: 'none',
+      }}>
         {NAV.map(({ href, icon: Icon, label }) => {
           const active = path === href || (href !== '/dashboard' && path.startsWith(href))
           return (
-            <Link key={href} href={href} style={{ textDecoration: 'none' }}>
+            <Link key={href} href={href} style={{ textDecoration: 'none', height: '100%', flexShrink: 0 }}>
               <div style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '9px 10px', borderRadius: 9, marginBottom: 2,
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '0 16px', height: '100%',
+                borderBottom: active ? '2px solid #3b82f6' : '2px solid transparent',
+                borderTop: '2px solid transparent',
                 background: active ? 'var(--sidebar-active-bg)' : 'transparent',
                 color: active ? 'var(--sidebar-text)' : 'var(--sidebar-muted)',
-                cursor: 'pointer', transition: 'all 0.15s',
                 fontSize: 13, fontWeight: active ? 600 : 400,
-                borderLeft: active ? '2px solid #3b82f6' : '2px solid transparent',
+                cursor: 'pointer', transition: 'all 0.15s',
+                boxSizing: 'border-box',
               }}>
-                <Icon size={16} />
+                <Icon size={14} />
                 {label}
-                {active && <div style={{ marginLeft: 'auto', width: 5, height: 5, borderRadius: '50%', background: '#3b82f6' }} />}
               </div>
             </Link>
           )
         })}
-      </nav>
-
-      {/* Footer */}
-      <div style={{ padding: '12px 18px', borderTop: '1px solid var(--sidebar-border)', fontSize: 10, color: 'var(--sidebar-muted)', textAlign: 'center' }}>
-        SQ360 v3.0 · 2026
       </div>
-    </aside>
+
+      {/* Email + Esci */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '0 14px', height: '100%', flexShrink: 0,
+        borderLeft: '1px solid var(--sidebar-border)',
+      }}>
+        {email && (
+          <span style={{
+            fontSize: 11, color: 'var(--sidebar-muted)',
+            maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {email}
+          </span>
+        )}
+        <button onClick={logout} style={{
+          display: 'flex', alignItems: 'center', gap: 5,
+          background: 'none', border: '1px solid var(--sidebar-border)',
+          borderRadius: 6, padding: '5px 10px',
+          fontSize: 11, color: 'var(--sidebar-muted)', cursor: 'pointer',
+        }}>
+          <LogOut size={11} /> Esci
+        </button>
+      </div>
+    </nav>
   )
 }
 

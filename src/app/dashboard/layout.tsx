@@ -4,41 +4,30 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Sidebar } from '@/components/layout/Sidebar'
-import { LogOut } from 'lucide-react'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const [checking, setChecking] = useState(true)
-  const [user, setUser] = useState<{ email?: string } | null>(null)
 
   useEffect(() => {
-    // Controlla sessione al caricamento
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) {
         router.replace('/login')
       } else {
-        setUser(session.user)
         setChecking(false)
       }
     })
 
-    // Ascolta cambiamenti di sessione
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT' || !session) {
         router.replace('/login')
       } else {
-        setUser(session.user)
         setChecking(false)
       }
     })
 
     return () => subscription.unsubscribe()
   }, [router])
-
-  async function logout() {
-    await supabase.auth.signOut()
-    router.replace('/login')
-  }
 
   if (checking) {
     return (
@@ -58,26 +47,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="layout">
+    <div className="layout" style={{ flexDirection: 'column', height: '100vh' }}>
       <Sidebar />
-      <main className="main">
-        {/* Barra utente in alto */}
-        <div style={{
-          position: 'sticky', top: 0, zIndex: 5,
-          background: 'var(--panel)', borderBottom: '1px solid var(--border)',
-          padding: '0 20px', height: 40,
-          display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12
-        }}>
-          <span style={{ fontSize: 12, color: 'var(--t3)' }}>{user?.email}</span>
-          <button onClick={logout} style={{
-            display: 'flex', alignItems: 'center', gap: 5,
-            background: 'none', border: '1px solid var(--border)',
-            borderRadius: 7, padding: '4px 10px',
-            fontSize: 11, color: 'var(--t3)', cursor: 'pointer'
-          }}>
-            <LogOut size={12} /> Esci
-          </button>
-        </div>
+      <main className="main" style={{ flex: 1, overflowY: 'auto', height: 0 }}>
         {children}
       </main>
     </div>
