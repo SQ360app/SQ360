@@ -150,6 +150,9 @@ table.cmp-t td{padding:2px 3px;vertical-align:top;border-right:1px solid #e5e7eb
 .cmp-ctxi.acc{color:#1d4ed8;font-weight:600}
 .cmp-ctxi.danger{color:#dc2626}
 .cmp-ctxsep{border-top:1px solid rgba(0,0,0,.08)}
+td.cmp-td-edit{cursor:cell}
+td.cmp-td-edit:hover{outline:1px dashed #9ca3af;outline-offset:-2px}
+.cmp-inp-cell{width:100%;border:1px solid #3b82f6;border-radius:2px;padding:1px 4px;font-size:10px;font-family:monospace;background:#eff6ff;outline:none;box-shadow:0 0 0 2px rgba(59,130,246,.2);color:#1e40af;text-align:right}
 `
 
 const fi = (n: number, d = 2) => n?.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? ''
@@ -181,8 +184,11 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
   const [wbsPicker, setWbsPicker] = useState<{ voceId: string; x: number; y: number } | null>(null)
   const [bulkWbsPicker, setBulkWbsPicker] = useState(false)
 
-  const toastRef  = useRef<NodeJS.Timeout | null>(null)
+  const toastRef   = useRef<NodeJS.Timeout | null>(null)
   const lastSelRef = useRef<string | null>(null)
+  const editingRef = useRef<HTMLInputElement>(null)
+  const [editingCell, setEditingCell] = useState<{ voceId: string; field: 'quantita' | 'prezzo_unitario' } | null>(null)
+  const [editingVal,  setEditingVal]  = useState('')
 
   const showToast = (msg: string) => {
     setToast(msg)
@@ -455,6 +461,28 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     setSel(voceId)
   }
 
+  // ─── Editing inline ──────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (editingCell) { editingRef.current?.focus(); editingRef.current?.select() }
+  }, [editingCell])
+
+  const saveEdit = async () => {
+    if (!editingCell) return
+    const { voceId, field } = editingCell
+    const val = parseFloat(editingVal) || 0
+    const voce = voci.find(v => v.id === voceId)
+    if (!voce) { setEditingCell(null); return }
+    const newQ = field === 'quantita' ? val : voce.quantita
+    const newP = field === 'prezzo_unitario' ? val : voce.prezzo_unitario
+    const newImporto = parseFloat((newQ * newP).toFixed(2))
+    await supabase.from('voci_computo').update({ [field]: val, importo: newImporto }).eq('id', voceId)
+    setVoci(prev => prev.map(v => v.id === voceId ? { ...v, [field]: val, importo: newImporto } : v))
+    setTotale(prev => parseFloat((prev - voce.importo + newImporto).toFixed(2)))
+    setEditingCell(null)
+    showToast(`✓ ${field === 'quantita' ? 'Quantità' : 'Prezzo'} aggiornato`)
+  }
+
   // ─── WBS Picker popup ─────────────────────────────────────────────────────
 
   const WbsPicker = ({ voceId, x, y, currentWbs }: { voceId: string; x: number; y: number; currentWbs?: string }) => (
@@ -717,8 +745,30 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                             </span>
                           </td>
                           <td /><td /><td /><td />
-                          <td />
-                          <td style={{ textAlign: 'right', fontSize: 10, fontFamily: 'monospace' }}>{fi(v.prezzo_unitario)}</td>
+                          <td className="cmp-td-edit"
+                            onDoubleClick={e => { e.stopPropagation(); setEditingCell({ voceId: v.id, field: 'quantita' }); setEditingVal(String(v.quantita)) }}>
+                            {editingCell?.voceId === v.id && editingCell.field === 'quantita' ? (
+                              <input ref={editingRef} type="number" className="cmp-inp-cell" value={editingVal}
+                                onChange={e => setEditingVal(e.target.value)}
+                                onBlur={saveEdit}
+                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveEdit() } if (e.key === 'Escape') setEditingCell(null) }}
+                                onClick={e => e.stopPropagation()} />
+                            ) : (
+                              <span style={{ fontSize: 10, fontFamily: 'monospace', display: 'block', textAlign: 'right', color: '#374151' }}>{f3(v.quantita)}</span>
+                            )}
+                          </td>
+                          <td className="cmp-td-edit"
+                            onDoubleClick={e => { e.stopPropagation(); setEditingCell({ voceId: v.id, field: 'prezzo_unitario' }); setEditingVal(String(v.prezzo_unitario)) }}>
+                            {editingCell?.voceId === v.id && editingCell.field === 'prezzo_unitario' ? (
+                              <input ref={editingRef} type="number" className="cmp-inp-cell" value={editingVal}
+                                onChange={e => setEditingVal(e.target.value)}
+                                onBlur={saveEdit}
+                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveEdit() } if (e.key === 'Escape') setEditingCell(null) }}
+                                onClick={e => e.stopPropagation()} />
+                            ) : (
+                              <span style={{ fontSize: 10, fontFamily: 'monospace', display: 'block', textAlign: 'right' }}>{fi(v.prezzo_unitario)}</span>
+                            )}
+                          </td>
                           <td />
                           <td className="cmp-fi">
                             <span className={rdaByVoce(v.id) ? 'cmp-fi-ok' : 'cmp-fi-no'}>
