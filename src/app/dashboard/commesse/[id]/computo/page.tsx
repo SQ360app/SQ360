@@ -123,7 +123,7 @@ table.cmp-t td{padding:2px 3px;vertical-align:top;border-right:1px solid #e5e7eb
 .cmp-fi-ok{color:#16a34a}.cmp-fi-bozza{color:#f59e0b}.cmp-fi-no{color:#d1d5db}.cmp-fi-rdo{color:#2563eb}.cmp-fi-oda{color:#7c3aed}
 .cmp-sal{font-size:9px;font-weight:700;text-align:center}
 .cmp-sal-0{color:#d1d5db}.cmp-sal-low{color:#f59e0b}.cmp-sal-hi{color:#16a34a}.cmp-sal-done{color:#7c3aed}
-.cmp-des-first{font-weight:700;font-size:10px}
+.cmp-des-first{font-weight:400;font-size:10px}
 .cmp-des-rest{color:#4b5563;font-size:10px;line-height:1.4}
 .cmp-mono{font-family:monospace;font-size:10px}
 .cmp-wbadge{display:inline-block;font-size:8px;padding:1px 4px;border-radius:2px;margin-left:4px;font-weight:700;border:1px solid;cursor:pointer;transition:all .1s}
@@ -508,7 +508,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: V3_CSS }} />
-      <div className="cmp-root" style={{ height: 'calc(100vh - 180px)' }}>
+      <div className="cmp-root" style={{ height: 'calc(100vh - 145px)' }}>
 
         {/* SIDEBAR */}
         {!sbHidden && (

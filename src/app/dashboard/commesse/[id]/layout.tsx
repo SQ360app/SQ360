@@ -73,8 +73,8 @@ export default function CommessaLayout({ children }: { children: React.ReactNode
     <div style={{ minHeight: 0, background: '#f9fafb' }}>
 
       {/* Header */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', padding: '10px 20px', position: 'sticky', top: 0, zIndex: 40 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+      <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', padding: '5px 20px', position: 'sticky', top: 0, zIndex: 40 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
           <button onClick={() => router.push('/dashboard/commesse')}
             style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
             <ArrowLeft size={14} /> Commesse
@@ -85,20 +85,20 @@ export default function CommessaLayout({ children }: { children: React.ReactNode
               <span style={{ fontFamily: 'monospace', fontSize: 11, background: '#f3f4f6', padding: '2px 8px', borderRadius: 4, color: '#6b7280' }}>
                 {commessa.codice}
               </span>
-              <span style={{ fontSize: 14, fontWeight: 600, color: '#111827', flex: 1 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#111827', flex: 1 }}>
                 {commessa.nome}
               </span>
-              <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 12, fontWeight: 500,
+              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, fontWeight: 500,
                 background: statoColor + '20', color: statoColor }}>
                 {commessa.stato?.replace('_', ' ')}
               </span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#059669' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#059669' }}>
                 EUR {fmt(commessa.importo_contratto || 0)}
               </span>
               {/* BOTTONE DELETE */}
               <button onClick={() => setShowDeleteConfirm(true)}
                 title="Elimina commessa"
-                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', border: '1px solid #fca5a5', borderRadius: 8, background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: 12 }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', border: '1px solid #fca5a5', borderRadius: 6, background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: 11 }}>
                 <Trash2 size={13} /> Elimina
               </button>
             </>
