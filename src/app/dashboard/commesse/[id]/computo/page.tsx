@@ -108,7 +108,7 @@ col.cc9{width:66px}col.cc10{width:68px}col.cc11{width:82px}
 col.cc12,col.cc13,col.cc14{width:36px}col.cc15{width:44px}
 table.cmp-t th{padding:3px;font-size:10px;font-weight:700;background:#4ade80;color:#14532d;border-right:1px solid #16a34a;text-align:center;white-space:nowrap;position:sticky;top:0;z-index:10}
 table.cmp-t th.thl{text-align:left;padding-left:6px}
-table.cmp-t thead th{line-height:1.2}
+table.cmp-t th.th2{top:23px}
 table.cmp-t td{padding:2px 3px;vertical-align:top;border-right:1px solid #e5e7eb;border-bottom:1px solid #f3f4f6}
 .cmp-hsc td{background:#1e5631;padding:4px 10px;font-weight:700;font-size:11px;color:#fff;letter-spacing:.4px;border-bottom:2px solid #4ade80}
 .cmp-hca td{background:#166534;padding:3px 10px 3px 20px;font-weight:600;font-size:11px;color:#d1fae5}
@@ -730,20 +730,20 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                 </colgroup>
                 <thead>
                   <tr>
-                    <th>Nr</th>
-                    <th>Tariffa</th>
-                    <th className="thl">Designazione lavori / WBS</th>
-                    <th>p.u.</th>
-                    <th>lung.</th>
-                    <th>larg.</th>
-                    <th>h</th>
-                    <th>Quantità</th>
-                    <th>Prezzo unit.</th>
-                    <th>Importo</th>
-                    <th style={{ background: '#1e3a5f', color: '#93c5fd' }}>RDA</th>
-                    <th style={{ background: '#1e3a5f', color: '#60a5fa' }}>RDO</th>
-                    <th style={{ background: '#1e3a5f', color: '#a78bfa' }}>ODA</th>
-                    <th style={{ background: '#1e3a5f', color: '#34d399' }}>SAL%</th>
+                    <th rowSpan={2}>Nr</th>
+                    <th rowSpan={2}>Tariffa</th>
+                    <th rowSpan={2} className="thl">DESIGNAZIONE dei LAVORI / WBS</th>
+                    <th colSpan={4}>DIMENSIONI</th>
+                    <th rowSpan={2}>Quantità</th>
+                    <th colSpan={2}>IMPORTI</th>
+                    <th colSpan={4} style={{ background: '#1e3a5f', color: '#93c5fd' }}>FLUSSO</th>
+                  </tr>
+                  <tr>
+                    {['par.ug.', 'lung.', 'larg.', 'H/peso'].map(t => <th key={t} className="th2">{t}</th>)}
+                    {['unit.[1]', 'TOTALE'].map(t => <th key={t} className="th2">{t}</th>)}
+                    {[['RDA', '#93c5fd'], ['RDO', '#60a5fa'], ['ODA', '#a78bfa'], ['SAL%', '#34d399']].map(([t, c]) => (
+                      <th key={t} className="th2" style={{ background: '#1e3a5f', color: c }}>{t}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
