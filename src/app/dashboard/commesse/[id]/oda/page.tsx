@@ -12,10 +12,12 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env
 const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 const TIPI_ODA = [
-  { value: 'SUBAPPALTO', label: 'Subappalto', color: 'bg-purple-50 text-purple-700', ritenuta: 5 },
-  { value: 'SUBAFFIDAMENTO', label: 'Subaffidamento', color: 'bg-blue-50 text-blue-700', ritenuta: 0 },
-  { value: 'MATERIALE', label: 'Acquisto diretto', color: 'bg-green-50 text-green-700', ritenuta: 0 },
-  { value: 'SERVIZIO', label: 'Servizio/Prof.', color: 'bg-orange-50 text-orange-700', ritenuta: 0 },
+  { value: 'materiali',   label: 'Acquisto Materiali',  color: '#3b82f6', bg: '#dbeafe', ritenuta: 0 },
+  { value: 'nolo_freddo', label: 'Nolo a Freddo',       color: '#8b5cf6', bg: '#ede9fe', ritenuta: 0 },
+  { value: 'nolo_caldo',  label: 'Nolo a Caldo',        color: '#7c3aed', bg: '#ddd6fe', ritenuta: 0 },
+  { value: 'subappalto',  label: 'Subappalto',          color: '#f59e0b', bg: '#fef3c7', ritenuta: 5 },
+  { value: 'manodopera',  label: 'Manodopera Esterna',  color: '#10b981', bg: '#d1fae5', ritenuta: 0 },
+  { value: 'servizio',    label: 'Servizio/Consulenza', color: '#6b7280', bg: '#f3f4f6', ritenuta: 0 },
 ]
 
 const STATI: Record<string, { label: string; color: string }> = {
@@ -78,7 +80,7 @@ export default function ODAPage() {
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
-  const [tipo, setTipo] = useState('MATERIALE')
+  const [tipo, setTipo] = useState('materiali')
   const [oggetto, setOggetto] = useState('')
   const [fornitoreId, setFornitoreId] = useState('')
   const [rdoId, setRdoId] = useState('')
@@ -130,14 +132,14 @@ export default function ODAPage() {
     const numero = `ODA-${new Date().getFullYear()}-${String((count || 0) + 1).padStart(3, '0')}`
     const { data: odaData, error } = await supabase.from('oda').insert({
       commessa_id: commessaId, azienda_id: aziendaId || null,
-      numero, tipo, oggetto: oggetto.trim(),
+      numero, tipo, tipo_oda: tipo, oggetto: oggetto.trim(),
       fornitore_id: fornitoreId, importo_netto: importoNum, iva_pct: parseFloat(ivaPct),
       ritenuta_pct: parseFloat(ritenuta), condizioni_pagamento: condPag || null,
       data_consegna_prevista: dataConsegna || null, note: note || null, stato: 'EMESSO',
       rdo_id: rdoId || null,
     }).select().single()
     if (error) { setErr(error.message); setSaving(false); return }
-    if (tipo === 'SUBAPPALTO' && odaData) {
+    if (tipo === 'subappalto' && odaData) {
       const { data: cs } = await supabase.from('contratti_sub').insert({
         commessa_id: commessaId, azienda_id: aziendaId || null,
         fornitore_id: fornitoreId, importo_netto: importoNum,
@@ -145,7 +147,7 @@ export default function ODAPage() {
       }).select().single()
       if (cs) await supabase.from('oda').update({ contratto_sub_id: cs.id }).eq('id', odaData.id)
     }
-    if (tipo === 'MATERIALE' && odaData) {
+    if (tipo === 'materiali' && odaData) {
       // Passo 2: evita doppio DAM se ne esiste già uno per questo rdo_id
       let damId: string | null = null
       if (rdoId) {
@@ -250,9 +252,11 @@ export default function ODAPage() {
                     ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
                     : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
                   <span className="text-xs font-mono text-gray-400 w-28 shrink-0">{o.numero}</span>
-                  <span className={`shrink-0 text-xs px-2 py-0.5 rounded font-medium ${TIPI_ODA.find(t => t.value === o.tipo)?.color || ''}`}>
-                    {TIPI_ODA.find(t => t.value === o.tipo)?.label}
-                  </span>
+                  {(() => { const td = TIPI_ODA.find(x => x.value === (o.tipo_oda || o.tipo)); return (
+                    <span style={{ flexShrink: 0, fontSize: 11, padding: '2px 8px', borderRadius: 4, fontWeight: 500, color: td?.color || '#374151', background: td?.bg || '#f3f4f6' }}>
+                      {td?.label || o.tipo_oda || o.tipo}
+                    </span>
+                  ) })()}
                   <span className="flex-1 text-sm text-gray-800 truncate">{o.oggetto}</span>
                   <span className="text-xs text-gray-500 shrink-0">{o.fornitore?.ragione_sociale || '—'}</span>
                   <span className="text-sm font-medium text-gray-900 w-32 text-right shrink-0">€ {fmt(o.importo_netto)}</span>
@@ -316,16 +320,16 @@ export default function ODAPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 space-y-4">
             <h2 className="text-base font-semibold">Nuovo ODA</h2>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {TIPI_ODA.map(t => (
                 <button key={t.value} onClick={() => setTipo(t.value)}
-                  className={`p-2 rounded-lg border text-xs text-center transition-all ${tipo === t.value ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-100 text-gray-500'}`}>
+                  style={{ padding: '8px 4px', borderRadius: 8, border: tipo === t.value ? `2px solid ${t.color}` : '1px solid #e5e7eb', background: tipo === t.value ? t.bg : '#fff', color: tipo === t.value ? t.color : '#6b7280', fontSize: 11, cursor: 'pointer', fontWeight: tipo === t.value ? 600 : 400, textAlign: 'center' }}>
                   {t.label}
                 </button>
               ))}
             </div>
-            {tipo === 'SUBAPPALTO' && <p className="text-xs p-2 bg-purple-50 text-purple-700 rounded-lg">→ Genera contratto sub automatico (D.Lgs. 36/2023)</p>}
-            {tipo === 'MATERIALE' && <p className="text-xs p-2 bg-green-50 text-green-700 rounded-lg">→ Genera DAM per Direzione Lavori automatico</p>}
+            {tipo === 'subappalto' && <p className="text-xs p-2 bg-yellow-50 text-yellow-700 rounded-lg">→ Genera contratto sub automatico (D.Lgs. 36/2023)</p>}
+            {tipo === 'materiali' && <p className="text-xs p-2 bg-blue-50 text-blue-700 rounded-lg">→ Genera DAM per Direzione Lavori automatico</p>}
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Oggetto *</label>
               <input value={oggetto} onChange={e => setOggetto(e.target.value)}

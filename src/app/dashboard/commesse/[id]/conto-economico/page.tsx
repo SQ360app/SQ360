@@ -7,6 +7,15 @@ import { TrendingUp, TrendingDown, Minus, AlertTriangle, Loader2, RefreshCw } fr
 const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const pct = (n: number, t: number) => t > 0 ? ((n / t) * 100).toFixed(1) + '%' : '0.0%'
 
+const TIPI_ODA_CE = [
+  { value: 'materiali',   label: 'Acquisto Materiali',  color: '#3b82f6' },
+  { value: 'nolo_freddo', label: 'Nolo a Freddo',       color: '#8b5cf6' },
+  { value: 'nolo_caldo',  label: 'Nolo a Caldo',        color: '#7c3aed' },
+  { value: 'subappalto',  label: 'Subappalto',          color: '#f59e0b' },
+  { value: 'manodopera',  label: 'Manodopera Esterna',  color: '#10b981' },
+  { value: 'servizio',    label: 'Servizio/Consulenza', color: '#6b7280' },
+]
+
 export default function ContoEconomicoPage() {
   const { id } = useParams() as { id: string }
   const [ce, setCe] = useState<any>(null)
@@ -50,8 +59,14 @@ export default function ContoEconomicoPage() {
     const ricaviIncassati = (sal || []).filter((s: any) => s.stato === 'pagato').reduce((s: number, x: any) => s + (x.importo_certificato || 0), 0)
 
     // 4. Costi da ODA impegnati
-    const { data: odaList } = await supabase.from('oda').select('importo_netto, stato').eq('commessa_id', id)
-    const costiOda = (odaList || []).filter((o: any) => o.stato !== 'ANNULLATO').reduce((s: number, x: any) => s + (x.importo_netto || 0), 0)
+    const { data: odaList } = await supabase.from('oda').select('importo_netto, stato, tipo_oda').eq('commessa_id', id)
+    const odaAttivi = (odaList || []).filter((o: any) => o.stato !== 'ANNULLATO')
+    const costiOda = odaAttivi.reduce((s: number, x: any) => s + (x.importo_netto || 0), 0)
+    const odaPerTipo: Record<string, number> = {}
+    for (const o of odaAttivi) {
+      const k = o.tipo_oda || 'altro'
+      odaPerTipo[k] = (odaPerTipo[k] || 0) + (o.importo_netto || 0)
+    }
 
     // 5. Costi da fatture passive effettivamente pagate (consuntivo reale)
     const { data: fatture } = await supabase
@@ -73,7 +88,7 @@ export default function ContoEconomicoPage() {
     const { data: contSub } = await supabase.from('contratti_sub').select('importo_netto, stato').eq('commessa_id', id)
     const costiContrattiSub = (contSub || []).filter((c: any) => c.stato !== 'ANNULLATO').reduce((s: number, x: any) => s + (x.importo_netto || 0), 0)
 
-    setCe({ ricavoContratto, budgetComputo, hasComputo, ricaviEmessi, ricaviIncassati, costiOda, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub })
+    setCe({ ricavoContratto, budgetComputo, hasComputo, ricaviEmessi, ricaviIncassati, costiOda, odaPerTipo, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub })
     setLoading(false)
   }
 
@@ -85,7 +100,7 @@ export default function ContoEconomicoPage() {
     </div>
   )
 
-  const { ricavoContratto, budgetComputo, hasComputo, ricaviEmessi, ricaviIncassati, costiOda, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub } = ce
+  const { ricavoContratto, budgetComputo, hasComputo, ricaviEmessi, ricaviIncassati, costiOda, odaPerTipo, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub } = ce
   const totCostiImpegnati = costiOda + costiSpese + costiContrattiSub
   const margineAtteso  = ricavoContratto - totCostiImpegnati
   const margineAttuale = ricavoContratto - costiPagati
@@ -176,6 +191,39 @@ export default function ContoEconomicoPage() {
         <Row label="Margine atteso (contratto − ODA)" value={margineAtteso} bold color={margineColor} />
         <Row label="Margine attuale (contratto − fatture pagate)" value={margineAttuale} bold color={margineAttualeColor} />
       </div>
+
+      {/* Breakdown ODA per categoria */}
+      {costiOda > 0 && (
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '16px 20px' }}>
+          <h3 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 12px', color: '#374151', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Costi ODA per categoria</h3>
+          {TIPI_ODA_CE.map(t => {
+            const val = odaPerTipo[t.value] || 0
+            if (val === 0) return null
+            return (
+              <div key={t.value} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f3f4f6' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: t.color, flexShrink: 0 }} />
+                  <span style={{ fontSize: 13, color: '#374151' }}>{t.label}</span>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: '#374151' }}>€ {fmt(val)}</span>
+                  <span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 8 }}>{((val / costiOda) * 100).toFixed(1)}%</span>
+                </div>
+              </div>
+            )
+          })}
+          {odaPerTipo['altro'] > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f3f4f6' }}>
+              <span style={{ fontSize: 13, color: '#374151' }}>Altro / non categorizzato</span>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>€ {fmt(odaPerTipo['altro'])}</span>
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0 0', fontWeight: 700 }}>
+            <span style={{ fontSize: 13, color: '#374151' }}>Totale ODA impegnati</span>
+            <span style={{ fontSize: 13, color: '#dc2626' }}>€ {fmt(costiOda)}</span>
+          </div>
+        </div>
+      )}
 
       {/* Avanzamento commessa */}
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '16px 20px' }}>
