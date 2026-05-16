@@ -108,12 +108,7 @@ col.cc9{width:66px}col.cc10{width:68px}col.cc11{width:82px}
 col.cc12,col.cc13,col.cc14{width:36px}col.cc15{width:44px}
 table.cmp-t th{padding:3px;font-size:10px;font-weight:700;background:#4ade80;color:#14532d;border-right:1px solid #16a34a;text-align:center;white-space:nowrap;position:sticky;top:0;z-index:10}
 table.cmp-t th.thl{text-align:left;padding-left:6px}
-table.cmp-t th.th2{top:23px}
-table.cmp-t thead tr:first-child th{border-bottom:none}
-table.cmp-t thead tr:empty{display:none}
-table.cmp-t thead tr:first-child{height:22px}
-table.cmp-t thead tr:last-child{height:20px}
-table.cmp-t thead th{line-height:1;padding-top:3px;padding-bottom:3px}
+table.cmp-t thead th{line-height:1.2}
 table.cmp-t td{padding:2px 3px;vertical-align:top;border-right:1px solid #e5e7eb;border-bottom:1px solid #f3f4f6}
 .cmp-hsc td{background:#1e5631;padding:4px 10px;font-weight:700;font-size:11px;color:#fff;letter-spacing:.4px;border-bottom:2px solid #4ade80}
 .cmp-hca td{background:#166534;padding:3px 10px 3px 20px;font-weight:600;font-size:11px;color:#d1fae5}
@@ -202,9 +197,10 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     })
   }
 
-  const toastRef   = useRef<NodeJS.Timeout | null>(null)
-  const lastSelRef = useRef<string | null>(null)
-  const editingRef = useRef<HTMLInputElement>(null)
+  const toastRef    = useRef<NodeJS.Timeout | null>(null)
+  const lastSelRef  = useRef<string | null>(null)
+  const editingRef  = useRef<HTMLInputElement>(null)
+  const dblClickRef = useRef<{ id: string; field: string; t: number } | null>(null)
   const [editingCell, setEditingCell] = useState<{ voceId: string; field: 'quantita' | 'prezzo_unitario' } | null>(null)
   const [editingVal,  setEditingVal]  = useState('')
 
@@ -457,6 +453,8 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
   // ─── Click handler Primus-style ───────────────────────────────────────────
 
   const handleRowClick = (e: React.MouseEvent, voceId: string) => {
+    setEditingCell(null)
+    setEditingVal('')
     if (editingCell) { saveEdit() }
     if (e.shiftKey && lastSelRef.current) {
       const visIds = vociFiltrate.map(x => x.id)
@@ -732,20 +730,20 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                 </colgroup>
                 <thead>
                   <tr>
-                    <th rowSpan={2}>Nr</th>
-                    <th rowSpan={2}>Tariffa</th>
-                    <th rowSpan={2} className="thl">DESIGNAZIONE dei LAVORI / WBS</th>
-                    <th colSpan={4} style={{ borderBottom: '1px solid #16a34a' }}>DIMENSIONI</th>
-                    <th rowSpan={2}>Quantità</th>
-                    <th colSpan={2} style={{ borderBottom: '1px solid #16a34a' }}>IMPORTI</th>
-                    <th colSpan={4} style={{ background: '#1e3a5f', color: '#93c5fd', borderBottom: '1px solid #2563eb' }}>FLUSSO</th>
-                  </tr>
-                  <tr>
-                    {['par.ug.', 'lung.', 'larg.', 'H/peso'].map(t => <th key={t} className="th2">{t}</th>)}
-                    {['unit.[1]', 'TOTALE'].map(t => <th key={t} className="th2">{t}</th>)}
-                    {[['RDA', '#93c5fd'], ['RDO', '#60a5fa'], ['ODA', '#a78bfa'], ['SAL%', '#34d399']].map(([t, c]) => (
-                      <th key={t} className="th2" style={{ background: '#1e3a5f', color: c, borderBottom: '1px solid #2563eb' }}>{t}</th>
-                    ))}
+                    <th>Nr</th>
+                    <th>Tariffa</th>
+                    <th className="thl">Designazione lavori / WBS</th>
+                    <th>p.u.</th>
+                    <th>lung.</th>
+                    <th>larg.</th>
+                    <th>h</th>
+                    <th>Quantità</th>
+                    <th>Prezzo unit.</th>
+                    <th>Importo</th>
+                    <th style={{ background: '#1e3a5f', color: '#93c5fd' }}>RDA</th>
+                    <th style={{ background: '#1e3a5f', color: '#60a5fa' }}>RDO</th>
+                    <th style={{ background: '#1e3a5f', color: '#a78bfa' }}>ODA</th>
+                    <th style={{ background: '#1e3a5f', color: '#34d399' }}>SAL%</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -780,7 +778,18 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                           </td>
                           <td /><td /><td /><td />
                           <td className="cmp-td-edit"
-                            onClick={e => { if (e.detail === 2) { e.stopPropagation(); setEditingCell({ voceId: v.id, field: 'quantita' }); setEditingVal(String(v.quantita)) } }}>
+                            onClick={e => {
+                              e.stopPropagation()
+                              const now = Date.now()
+                              const prev = dblClickRef.current
+                              if (prev && prev.id === v.id && prev.field === 'quantita' && now - prev.t < 400) {
+                                dblClickRef.current = null
+                                setEditingCell({ voceId: v.id, field: 'quantita' })
+                                setEditingVal(String(v.quantita))
+                              } else {
+                                dblClickRef.current = { id: v.id, field: 'quantita', t: now }
+                              }
+                            }}>
                             {editingCell?.voceId === v.id && editingCell.field === 'quantita' ? (
                               <input ref={editingRef} type="number" className="cmp-inp-cell" value={editingVal}
                                 onChange={e => setEditingVal(e.target.value)}
@@ -792,7 +801,18 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                             )}
                           </td>
                           <td className="cmp-td-edit"
-                            onClick={e => { if (e.detail === 2) { e.stopPropagation(); setEditingCell({ voceId: v.id, field: 'prezzo_unitario' }); setEditingVal(String(v.prezzo_unitario)) } }}>
+                            onClick={e => {
+                              e.stopPropagation()
+                              const now = Date.now()
+                              const prev = dblClickRef.current
+                              if (prev && prev.id === v.id && prev.field === 'prezzo_unitario' && now - prev.t < 400) {
+                                dblClickRef.current = null
+                                setEditingCell({ voceId: v.id, field: 'prezzo_unitario' })
+                                setEditingVal(String(v.prezzo_unitario))
+                              } else {
+                                dblClickRef.current = { id: v.id, field: 'prezzo_unitario', t: now }
+                              }
+                            }}>
                             {editingCell?.voceId === v.id && editingCell.field === 'prezzo_unitario' ? (
                               <input ref={editingRef} type="number" className="cmp-inp-cell" value={editingVal}
                                 onChange={e => setEditingVal(e.target.value)}
