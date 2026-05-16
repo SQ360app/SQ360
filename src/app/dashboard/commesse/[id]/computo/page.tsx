@@ -731,16 +731,16 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                     <th rowSpan={2}>Nr</th>
                     <th rowSpan={2}>Tariffa</th>
                     <th rowSpan={2} className="thl">DESIGNAZIONE dei LAVORI / WBS</th>
-                    <th colSpan={4} style={{ borderBottom: '1px solid #16a34a' }}>DIMENSIONI</th>
+                    <th colSpan={4} style={{ borderBottom: '1px solid #16a34a', paddingBottom: 0, verticalAlign: 'bottom' }}>DIMENSIONI</th>
                     <th rowSpan={2}>Quantità</th>
-                    <th colSpan={2} style={{ borderBottom: '1px solid #16a34a' }}>IMPORTI</th>
-                    <th colSpan={4} style={{ background: '#1e3a5f', color: '#93c5fd', borderBottom: '1px solid #2563eb' }}>FLUSSO</th>
+                    <th colSpan={2} style={{ borderBottom: '1px solid #16a34a', paddingBottom: 0, verticalAlign: 'bottom' }}>IMPORTI</th>
+                    <th colSpan={4} style={{ background: '#1e3a5f', color: '#93c5fd', borderBottom: '1px solid #2563eb', paddingBottom: 0, verticalAlign: 'bottom' }}>FLUSSO</th>
                   </tr>
                   <tr>
-                    {['par.ug.', 'lung.', 'larg.', 'H/peso'].map(t => <th key={t} className="th2">{t}</th>)}
-                    {['unit.[1]', 'TOTALE'].map(t => <th key={t} className="th2">{t}</th>)}
+                    {['par.ug.', 'lung.', 'larg.', 'H/peso'].map(t => <th key={t} className="th2" style={{ paddingTop: 2 }}>{t}</th>)}
+                    {['unit.[1]', 'TOTALE'].map(t => <th key={t} className="th2" style={{ paddingTop: 2 }}>{t}</th>)}
                     {[['RDA', '#93c5fd'], ['RDO', '#60a5fa'], ['ODA', '#a78bfa'], ['SAL%', '#34d399']].map(([t, c]) => (
-                      <th key={t} className="th2" style={{ background: '#1e3a5f', color: c, borderBottom: '1px solid #2563eb' }}>{t}</th>
+                      <th key={t} className="th2" style={{ background: '#1e3a5f', color: c, borderBottom: '1px solid #2563eb', paddingTop: 2 }}>{t}</th>
                     ))}
                   </tr>
                 </thead>
@@ -776,7 +776,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                           </td>
                           <td /><td /><td /><td />
                           <td className="cmp-td-edit"
-                            onDoubleClick={e => { e.stopPropagation(); setEditingCell({ voceId: v.id, field: 'quantita' }); setEditingVal(String(v.quantita)) }}>
+                            onClick={e => { if (e.detail === 2) { e.stopPropagation(); setEditingCell({ voceId: v.id, field: 'quantita' }); setEditingVal(String(v.quantita)) } }}>
                             {editingCell?.voceId === v.id && editingCell.field === 'quantita' ? (
                               <input ref={editingRef} type="number" className="cmp-inp-cell" value={editingVal}
                                 onChange={e => setEditingVal(e.target.value)}
@@ -788,7 +788,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                             )}
                           </td>
                           <td className="cmp-td-edit"
-                            onDoubleClick={e => { e.stopPropagation(); setEditingCell({ voceId: v.id, field: 'prezzo_unitario' }); setEditingVal(String(v.prezzo_unitario)) }}>
+                            onClick={e => { if (e.detail === 2) { e.stopPropagation(); setEditingCell({ voceId: v.id, field: 'prezzo_unitario' }); setEditingVal(String(v.prezzo_unitario)) } }}>
                             {editingCell?.voceId === v.id && editingCell.field === 'prezzo_unitario' ? (
                               <input ref={editingRef} type="number" className="cmp-inp-cell" value={editingVal}
                                 onChange={e => setEditingVal(e.target.value)}
