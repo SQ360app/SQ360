@@ -68,6 +68,14 @@ export default function ContoEconomicoPage() {
       odaPerTipo[k] = (odaPerTipo[k] || 0) + (o.importo_netto || 0)
     }
 
+    // 5b. Piano costi voce per tipo
+    const { data: pianoList } = await supabase.from('piano_costi_voce').select('tipo, importo_previsto').eq('commessa_id', id)
+    const pianoPerTipo: Record<string, number> = {}
+    for (const p of pianoList || []) {
+      pianoPerTipo[p.tipo] = (pianoPerTipo[p.tipo] || 0) + (p.importo_previsto || 0)
+    }
+    const totalePiano = Object.values(pianoPerTipo).reduce((s, v) => s + v, 0)
+
     // 5. Costi da fatture passive effettivamente pagate (consuntivo reale)
     const { data: fatture } = await supabase
       .from('fatture_passive')
@@ -88,7 +96,7 @@ export default function ContoEconomicoPage() {
     const { data: contSub } = await supabase.from('contratti_sub').select('importo_netto, stato').eq('commessa_id', id)
     const costiContrattiSub = (contSub || []).filter((c: any) => c.stato !== 'ANNULLATO').reduce((s: number, x: any) => s + (x.importo_netto || 0), 0)
 
-    setCe({ ricavoContratto, budgetComputo, hasComputo, ricaviEmessi, ricaviIncassati, costiOda, odaPerTipo, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub })
+    setCe({ ricavoContratto, budgetComputo, hasComputo, ricaviEmessi, ricaviIncassati, costiOda, odaPerTipo, pianoPerTipo, totalePiano, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub })
     setLoading(false)
   }
 
@@ -100,7 +108,7 @@ export default function ContoEconomicoPage() {
     </div>
   )
 
-  const { ricavoContratto, budgetComputo, hasComputo, ricaviEmessi, ricaviIncassati, costiOda, odaPerTipo, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub } = ce
+  const { ricavoContratto, budgetComputo, hasComputo, ricaviEmessi, ricaviIncassati, costiOda, odaPerTipo, pianoPerTipo, totalePiano, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub } = ce
   const totCostiImpegnati = costiOda + costiSpese + costiContrattiSub
   const margineAtteso  = ricavoContratto - totCostiImpegnati
   const margineAttuale = ricavoContratto - costiPagati
@@ -221,6 +229,48 @@ export default function ContoEconomicoPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0 0', fontWeight: 700 }}>
             <span style={{ fontSize: 13, color: '#374151' }}>Totale ODA impegnati</span>
             <span style={{ fontSize: 13, color: '#dc2626' }}>€ {fmt(costiOda)}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Piano costi previsto vs ODA emessi */}
+      {(totalePiano > 0 || costiOda > 0) && (
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '16px 20px' }}>
+          <h3 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 12px', color: '#374151', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Piano costi previsto vs ODA emessi</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px', gap: 0, fontSize: 10, marginBottom: 4 }}>
+            <span style={{ color: '#6b7280', fontWeight: 700, padding: '3px 0' }}>Categoria</span>
+            <span style={{ color: '#6b7280', fontWeight: 700, textAlign: 'right', padding: '3px 0' }}>Pianificato</span>
+            <span style={{ color: '#6b7280', fontWeight: 700, textAlign: 'right', padding: '3px 0' }}>ODA emessi</span>
+            <span style={{ color: '#6b7280', fontWeight: 700, textAlign: 'right', padding: '3px 0' }}>Delta</span>
+          </div>
+          {TIPI_ODA_CE.map(t => {
+            const piano = pianoPerTipo[t.value] || 0
+            const oda = odaPerTipo[t.value] || 0
+            if (piano === 0 && oda === 0) return null
+            const delta = piano - oda
+            return (
+              <div key={t.value} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px', gap: 0, padding: '6px 0', borderBottom: '1px solid #f3f4f6', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 9, height: 9, borderRadius: 3, background: t.color, flexShrink: 0, display: 'inline-block' }} />
+                  <span style={{ fontSize: 12, color: '#374151' }}>{t.label}</span>
+                </div>
+                <span style={{ fontSize: 12, fontFamily: 'monospace', textAlign: 'right', color: '#374151' }}>{piano > 0 ? '€ ' + fmt(piano) : '—'}</span>
+                <span style={{ fontSize: 12, fontFamily: 'monospace', textAlign: 'right', color: '#374151' }}>{oda > 0 ? '€ ' + fmt(oda) : '—'}</span>
+                <span style={{ fontSize: 11, fontFamily: 'monospace', textAlign: 'right', fontWeight: 600,
+                  color: Math.abs(delta) < 1 ? '#059669' : delta > 0 ? '#d97706' : '#dc2626' }}>
+                  {Math.abs(delta) < 1 ? '✅' : delta > 0 ? '- € ' + fmt(delta) : '+ € ' + fmt(-delta)}
+                </span>
+              </div>
+            )
+          })}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px', gap: 0, padding: '8px 0 0', fontWeight: 700 }}>
+            <span style={{ fontSize: 12 }}>Totale</span>
+            <span style={{ fontSize: 12, fontFamily: 'monospace', textAlign: 'right', color: '#374151' }}>€ {fmt(totalePiano)}</span>
+            <span style={{ fontSize: 12, fontFamily: 'monospace', textAlign: 'right', color: '#dc2626' }}>€ {fmt(costiOda)}</span>
+            <span style={{ fontSize: 11, fontFamily: 'monospace', textAlign: 'right', fontWeight: 700,
+              color: Math.abs(totalePiano - costiOda) < 1 ? '#059669' : totalePiano > costiOda ? '#d97706' : '#dc2626' }}>
+              {Math.abs(totalePiano - costiOda) < 1 ? '✅' : totalePiano > costiOda ? '- € ' + fmt(totalePiano - costiOda) : '+ € ' + fmt(costiOda - totalePiano)}
+            </span>
           </div>
         </div>
       )}
