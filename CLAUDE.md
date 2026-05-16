@@ -110,6 +110,30 @@
 - ✅ 11 query Supabase in parallelo (Promise.all) — nessun waterfall
 - ✅ Non usa più view SQL `v_commesse_kpi` / `v_scadenze_prossime` — query dirette alle tabelle base
 
+### Sprint 2 — RDO avanzato (commit 85e4a86 → c5f719a)
+
+#### RDO wizard multi-fornitore da RDA (85e4a86)
+- ✅ Wizard RDO: da una RDA selezionata, genera N richieste d'offerta a N fornitori in un unico flusso
+- ✅ `rdo_gruppo_id` condiviso tra tutte le RDO dello stesso gruppo gara
+
+#### Pagina pubblica /offerta/[token] (6077dcc)
+- ✅ `offerta/[token]/page.tsx`: pagina senza login per il fornitore — mostra dettaglio RDO e consente invio risposta
+- ✅ Token univoco per accesso sicuro senza autenticazione
+
+#### Comparativa automatica per gruppo gara (2d50554)
+- ✅ Sezione "Comparativa gare" in `rdo/page.tsx`: raggruppa RDO per `rdo_gruppo_id`
+- ✅ Intestazione: oggetto RDO, data scadenza, contatore offerte ricevute/inviate
+- ✅ Tabella comparativa: colonna per fornitore — righe Importo offerta / Trasporto / **TOTALE** / Pagamento gg / Anticipo % / Disponibilità
+- ✅ Sfondo verde + badge "▼ BEST" sulla cella TOTALE più bassa
+- ✅ Pulsante "⭐ Aggiudica" per ogni fornitore → imposta `aggiudicata` + `annullata` sugli altri + redirect a DAM con rdo_id pre-compilato
+
+#### Upload PDF preventivo + AI Gemini estrazione (c5f719a)
+- ✅ Bottone "📎 Preventivo" per ogni RDO con stato `inviata`
+- ✅ Modal upload PDF con drag-area → chiama `/api/rdo-extract-offerta`
+- ✅ `/api/rdo-extract-offerta/route.ts`: Gemini 2.0 Flash Vision — estrae ragione_sociale, data, voci (um/qtà/PU/importo), importo_totale, condizioni_pagamento, note
+- ✅ Tabella mapping voce RDA ↔ voce estratta con % somiglianza (verde >70%, arancio >40%)
+- ✅ "✓ Conferma importazione" → salva `offerta_voci` (JSON), `importo_offerta`, `stato=risposta_ricevuta`, `data_risposta` sulla RDO
+
 ## Prossimi task prioritari
 1. **Test flusso register→login** — test end-to-end registrazione → conferma email → primo accesso
 2. **Verifica dominio Resend** — verificare `sq360.app` su Resend → Domains per mittente ufficiale
@@ -138,6 +162,9 @@
 15. ~~Archivio Commessa — flusso documentale completo con checklist subappaltatori e export ZIP~~ ✅
 16. ~~Dashboard homepage — KPI aggregati, alert, scadenziario globale, attività recente~~ ✅
 17. ~~FLUX layout commessa — tre pannelli adattivi, command palette ⌘K, mobile responsive~~ ✅
+18. ~~RDO wizard multi-fornitore da RDA + pagina pubblica /offerta/[token]~~ ✅
+19. ~~Comparativa automatica RDO per gruppo gara con tabella e aggiudicazione~~ ✅
+20. ~~Upload PDF preventivo + AI Gemini estrazione voci offerta~~ ✅
 
 ## Note implementazione
 - `getAziendaId()` in `src/lib/supabase.ts` — helper condiviso: `auth.uid() → utenti.azienda_id`
