@@ -138,9 +138,7 @@ table.cmp-t td{padding:2px 3px;vertical-align:top;border-right:1px solid #e5e7eb
 .cmp-wbs-pi:hover{background:#f0fdf4}
 .cmp-wbs-pi.active{background:#dcfce7;font-weight:700}
 .cmp-wbs-pi .wbs-code{font-family:monospace;font-size:9px;color:#6b7280;width:48px;flex-shrink:0}
-.cmp-totbar{padding:8px 14px;background:#1e3a5f;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-top:2px solid #3b82f6}
-.cmp-totbar-l{font-size:11px;font-weight:700;color:#bfdbfe}
-.cmp-totbar-v{font-size:16px;font-weight:800;color:#4ade80;font-family:monospace}
+
 .cmp-toast{position:fixed;bottom:20px;right:20px;background:#14532d;color:#fff;padding:10px 16px;border-radius:8px;font-size:11px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.2);z-index:1000;opacity:0;transition:opacity .3s;pointer-events:none}
 .cmp-toast.show{opacity:1}
 .cmp-ctx{position:fixed;z-index:999;background:#fff;border:1px solid rgba(0,0,0,.2);border-radius:8px;min-width:210px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.15)}
@@ -183,6 +181,21 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
   const [toast, setToast] = useState('')
   const [wbsPicker, setWbsPicker] = useState<{ voceId: string; x: number; y: number } | null>(null)
   const [bulkWbsPicker, setBulkWbsPicker] = useState(false)
+
+  const [fontSize, setFontSize] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('computo-font-size')
+      return saved ? parseInt(saved) : 11
+    }
+    return 11
+  })
+  const changeFontSize = (delta: number) => {
+    setFontSize(prev => {
+      const next = Math.min(13, Math.max(9, prev + delta))
+      localStorage.setItem('computo-font-size', String(next))
+      return next
+    })
+  }
 
   const toastRef   = useRef<NodeJS.Timeout | null>(null)
   const lastSelRef = useRef<string | null>(null)
@@ -536,6 +549,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: V3_CSS }} />
+      <style>{`table.cmp-t tbody td { font-size: ${fontSize}px !important; }`}</style>
       <div className="cmp-root" style={{ height: 'calc(100vh - 145px)' }}>
 
         {/* SIDEBAR */}
@@ -609,7 +623,18 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
             </div>
             <div className="cmp-sfoot">
               <div className="cmp-sft"><span>Totale computo</span><span>{fi(totale)} €</span></div>
-              <div className="cmp-sfs">IVA esclusa · prezzi contrattuali</div>
+              {(wbsSel || catFilter.sc) ? (
+                <>
+                  <div style={{ height: 1, background: 'rgba(255,255,255,0.18)', margin: '5px 0' }} />
+                  <div className="cmp-sft" style={{ fontSize: 11 }}>
+                    <span>{vociFiltrate.length} voci filtrate</span>
+                    <span style={{ color: '#4ade80', fontWeight: 800 }}>{fi(vociFiltrate.reduce((s, v) => s + v.importo, 0))} €</span>
+                  </div>
+                  <div className="cmp-sfs">{wbsSel ? `WBS: ${wbsSel}` : catFilter.c || catFilter.sc}</div>
+                </>
+              ) : (
+                <div className="cmp-sfs">IVA esclusa · prezzi contrattuali</div>
+              )}
             </div>
           </div>
         )}
@@ -631,6 +656,9 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                   <button style={{ fontSize: 9, padding: '1px 6px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }} onClick={() => setCatFilter({ sc: null, c: null })}>✕</button></>
               ) : <span style={{ fontSize: 10, color: '#9ca3af' }}>Tutto il computo · click riga per selezionare · Ctrl+click multipla · Shift+click range</span>}
             </div>
+            <button className="cmp-tbtn" style={{ fontSize: 11, padding: '3px 8px', opacity: fontSize <= 9 ? 0.4 : 1 }} onClick={() => changeFontSize(-1)} disabled={fontSize <= 9} title="Riduci testo">A-</button>
+            <span style={{ fontSize: 10, color: '#6b7280', minWidth: 26, textAlign: 'center' }}>{fontSize}px</span>
+            <button className="cmp-tbtn" style={{ fontSize: 12, padding: '3px 8px', opacity: fontSize >= 13 ? 0.4 : 1 }} onClick={() => changeFontSize(1)} disabled={fontSize >= 13} title="Aumenta testo">A+</button>
             <label style={{ fontSize: 10, padding: '3px 8px', borderRadius: 4, cursor: 'pointer', background: '#1d4ed8', color: '#fff', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
               {importando ? '⏳ Import...' : '📥 Importa XPWE'}
               <input type="file" accept=".xpwe,.pwe,.xml" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) importaFile(f) }} />
@@ -819,16 +847,6 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
             </div>
           )}
 
-          {/* TOTALE BAR */}
-          {voci.length > 0 && (
-            <div className="cmp-totbar">
-              <div>
-                <div className="cmp-totbar-l">TOTALE COMPUTO{wbsSel ? ` · ${wbsSel}` : catFilter.sc ? ` · ${catFilter.sc}` : ' DI LISTA'}</div>
-                <div style={{ fontSize: 9, color: '#64748b', marginTop: 2 }}>{vociFiltrate.length} voci · IVA esclusa</div>
-              </div>
-              <div className="cmp-totbar-v">€ {fi(vociFiltrate.reduce((s, v) => s + v.importo, 0))}</div>
-            </div>
-          )}
         </div>
 
         {/* WBS PICKER POPUP */}
