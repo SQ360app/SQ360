@@ -70,6 +70,10 @@ interface RdaModalRow {
   wbs_id: string; tipo: string; label: string; color: string
   importoStimato: number; voceIds: string[]; selected: boolean
 }
+interface AnalisiExtraVoce {
+  id: string; commessa_id: string; voce_computo_id: string; azienda_id?: string
+  tipo: string; descrizione?: string; importo_unitario: number
+}
 
 // ─── CSS ────────────────────────────────────────────────────────────────────
 const V3_CSS = `
@@ -242,6 +246,9 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
   const [pianoForm, setPianoForm] = useState<{ voceId: string; tipo: string; descrizione: string; importo: string } | null>(null)
   const [analisi, setAnalisi] = useState<AnalisiPrezzo[]>([])
   const [analisiEdit, setAnalisiEdit] = useState<Record<string, string>>({})
+  const [analisiExtra, setAnalisiExtra] = useState<AnalisiExtraVoce[]>([])
+  const [analisiExtraEdit, setAnalisiExtraEdit] = useState<Record<string, string>>({})
+  const [baseExpanded, setBaseExpanded] = useState<Record<string, boolean>>({})
   const [copiaSource, setCopiaSource] = useState('')
   const [rdaModal, setRdaModal] = useState<{ rows: RdaModalRow[]; senzaAnalisi: string[]; generaFallback: boolean } | null>(null)
 
@@ -283,18 +290,20 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
       if (!computo) { setCaricamento(false); return }
       setComputoId(computo.id)
 
-      const [{ data: v }, { data: rda }, { data: pianiData }, { data: analisiData }] = await Promise.all([
+      const [{ data: v }, { data: rda }, { data: pianiData }, { data: analisiData }, { data: extraData }] = await Promise.all([
         supabase.from('voci_computo')
           .select('id,codice,descrizione,um,quantita,prezzo_unitario,importo,capitolo,categoria,note,wbs_id,wbs_label')
           .eq('computo_id', computo.id).order('capitolo').order('codice'),
         supabase.from('rda').select('id,wbs_id,stato,tipo').eq('commessa_id', id),
         supabase.from('piano_costi_voce').select('*').eq('commessa_id', id),
         supabase.from('analisi_prezzi_tariffa').select('*').eq('commessa_id', id),
+        supabase.from('analisi_extra_voce').select('*').eq('commessa_id', id),
       ])
       if (v) { setVoci(v); setTotale(v.reduce((s, x) => s + (x.importo || 0), 0)) }
       if (rda) setRdaList(rda as RDADB[])
       if (pianiData) setPiani(pianiData as PianoCostoVoce[])
       if (analisiData) setAnalisi(analisiData as AnalisiPrezzo[])
+      if (extraData) setAnalisiExtra(extraData as AnalisiExtraVoce[])
     } finally { setCaricamento(false) }
   }, [id])
 
@@ -383,6 +392,29 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     showToast(`✓ Analisi copiata da ${codiceSource}`)
   }
 
+  // ─── Analisi extra per voce ──────────────────────────────────────────────
+
+  const aggiungiExtra = async (voceId: string, tipo: string) => {
+    const aziendaId = await getAziendaId()
+    const { data } = await supabase.from('analisi_extra_voce').insert({
+      voce_computo_id: voceId, commessa_id: id, azienda_id: aziendaId || null,
+      tipo, importo_unitario: 0,
+    }).select().single()
+    if (data) setAnalisiExtra(prev => [...prev, data as AnalisiExtraVoce])
+  }
+
+  const eliminaExtra = async (extraId: string) => {
+    await supabase.from('analisi_extra_voce').delete().eq('id', extraId)
+    setAnalisiExtra(prev => prev.filter(e => e.id !== extraId))
+  }
+
+  const aggiornaExtra = async (e: AnalisiExtraVoce, rawVal: string) => {
+    const val = parseFloat(rawVal) || 0
+    await supabase.from('analisi_extra_voce').update({ importo_unitario: val }).eq('id', e.id)
+    setAnalisiExtra(prev => prev.map(x => x.id === e.id ? { ...x, importo_unitario: val } : x))
+    setAnalisiExtraEdit(prev => { const n = { ...prev }; delete n['ex_' + e.id]; return n })
+  }
+
   // ─── Genera RDA da selezione (intelligente) ──────────────────────────────
 
   const generaRDA = async () => {
@@ -414,6 +446,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
         for (const vid of voceIds) {
           const v = voci.find(x => x.id === vid); if (!v) continue
           imp += analisi.filter(a => a.codice_tariffa === v.codice && a.tipo === ta.value).reduce((s, a) => s + v.quantita * (a.importo_unitario || 0), 0)
+          imp += analisiExtra.filter(e => e.voce_computo_id === vid && e.tipo === ta.value).reduce((s, e) => s + v.quantita * (e.importo_unitario || 0), 0)
         }
         if (imp > 0.01) rows.push({ wbs_id: wbsId, tipo: ta.value, label: ta.label, color: ta.color, importoStimato: Math.round(imp * 100) / 100, voceIds, selected: true })
       }
@@ -984,14 +1017,18 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                             })()}
                             {(() => {
                               const av = analisi.filter(a => a.codice_tariffa === v.codice)
-                              if (av.length === 0) return (
+                              const ex = analisiExtra.filter(e => e.voce_computo_id === v.id)
+                              if (av.length === 0 && ex.length === 0) return (
                                 <button className="cmp-analisi-add-btn" onClick={e => { e.stopPropagation(); setSel(v.id) }}>+ Analisi</button>
                               )
-                              const tot = av.reduce((s, a) => s + (a.importo_unitario || 0), 0)
+                              const totBase = av.reduce((s, a) => s + (a.importo_unitario || 0), 0)
+                              const totExtra = ex.reduce((s, e) => s + (e.importo_unitario || 0), 0)
+                              const tot = totBase + totExtra
                               const ok = Math.abs(tot - v.prezzo_unitario) < 0.01
                               return (
                                 <span style={{ display: 'inline-flex', gap: 1, alignItems: 'center', marginLeft: 4, verticalAlign: 'middle' }}>
                                   {av.map(a => { const tc = TIPI_ANALISI.find(t => t.value === a.tipo); return <span key={a.id} className="cmp-analisi-dot" style={{ background: tc?.color || '#9ca3af' }} title={tc?.label} /> })}
+                                  {ex.length > 0 && <span style={{ fontSize: 8, color: '#d97706', fontWeight: 700, marginLeft: 1 }}>+{ex.length}</span>}
                                   <span style={{ fontSize: 8, fontFamily: 'monospace', color: '#374151', marginLeft: 2 }}>{fi(tot)}</span>
                                   <span style={{ fontSize: 8 }}>{ok ? '✅' : '⚠️'}</span>
                                 </span>
@@ -1094,18 +1131,24 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                           </tr>
                           {isSel && (() => {
                             const av = analisi.filter(a => a.codice_tariffa === v.codice)
-                            const totAn = av.reduce((s, a) => s + (a.importo_unitario || 0), 0)
-                            const deltaAn = v.prezzo_unitario - totAn
+                            const ex = analisiExtra.filter(e => e.voce_computo_id === v.id)
+                            const totBase = av.reduce((s, a) => s + (a.importo_unitario || 0), 0)
+                            const totExtra = ex.reduce((s, e) => s + (e.importo_unitario || 0), 0)
+                            const totTot = totBase + totExtra
+                            const deltaTot = v.prezzo_unitario - totTot
                             const codiciConAnalisi = [...new Set(analisi.filter(a => a.codice_tariffa !== v.codice).map(a => a.codice_tariffa))]
-                            const tipiPresenti = new Set(av.map(a => a.tipo))
+                            const baseExp = baseExpanded[v.codice] || false
+                            const tipiInBase = new Set(av.map(a => a.tipo))
                             return (
                               <tr>
                                 <td colSpan={14} style={{ padding: 0 }}>
                                   <div className="cmp-analisi-panel" onClick={e => e.stopPropagation()}>
+
+                                    {/* Header */}
                                     <div className="cmp-analisi-hdr">
                                       <span>ANALISI PREZZI — {v.codice}</span>
                                       <span style={{ fontWeight: 400, fontSize: 10, color: '#92400e', marginLeft: 4 }}>P.U. € {fi(v.prezzo_unitario)}/{v.um}</span>
-                                      <span style={{ fontSize: 9, color: '#78350f', marginLeft: 4, fontWeight: 400 }}>· si applica a tutte le voci con codice {v.codice}</span>
+                                      <span style={{ fontSize: 9, color: '#78350f', marginLeft: 4, fontWeight: 400 }}>· condivisa tra tutte le voci con codice {v.codice}</span>
                                       {codiciConAnalisi.length > 0 && (
                                         <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
                                           <span style={{ fontSize: 9, color: '#78350f' }}>📋 Copia da:</span>
@@ -1123,78 +1166,189 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                                         </span>
                                       )}
                                     </div>
-                                    <table className="cmp-analisi-t">
-                                      <thead>
-                                        <tr>
-                                          <th style={{ width: 130 }}>Componente</th>
-                                          <th style={{ width: 90, textAlign: 'right' }}>€/um</th>
-                                          <th style={{ width: 60, textAlign: 'right' }}>%</th>
-                                          <th style={{ width: 36 }} />
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {av.map(a => {
-                                          const tc = TIPI_ANALISI.find(t => t.value === a.tipo)
-                                          const keyIu = a.id + '_iu'; const keyPct = a.id + '_pct'
-                                          const iu = analisiEdit[keyIu] ?? String(a.importo_unitario)
-                                          const pctV = analisiEdit[keyPct] ?? String(a.percentuale)
-                                          return (
-                                            <tr key={a.id}>
-                                              <td>
-                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 600, color: tc?.color }}>
-                                                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: tc?.color || '#9ca3af', flexShrink: 0 }} />
-                                                  {tc?.label || a.tipo}
-                                                </span>
-                                              </td>
-                                              <td style={{ textAlign: 'right' }}>
-                                                <input className="cmp-analisi-inp" value={iu}
-                                                  onChange={e => setAnalisiEdit(prev => ({ ...prev, [keyIu]: e.target.value }))}
-                                                  onBlur={() => aggiornaAnalisi(a, 'importo_unitario', iu, v.prezzo_unitario)}
-                                                  onClick={e => e.stopPropagation()} />
-                                              </td>
-                                              <td style={{ textAlign: 'right' }}>
-                                                <input className="cmp-analisi-inp" value={pctV}
-                                                  onChange={e => setAnalisiEdit(prev => ({ ...prev, [keyPct]: e.target.value }))}
-                                                  onBlur={() => aggiornaAnalisi(a, 'percentuale', pctV, v.prezzo_unitario)}
-                                                  onClick={e => e.stopPropagation()} />
-                                              </td>
-                                              <td style={{ textAlign: 'center' }}>
-                                                <button onClick={() => eliminaAnalisi(a.id)} style={{ fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: 0 }}>🗑</button>
-                                              </td>
+
+                                    {/* SEZIONE BASE */}
+                                    <div style={{ borderBottom: '1px solid #fde68a' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 14px', background: '#fffde7' }}>
+                                        <span style={{ fontSize: 9, fontWeight: 700, color: '#78350f', textTransform: 'uppercase' as const, letterSpacing: '.04em' }}>BASE — da tariffa {v.codice}</span>
+                                        {totBase > 0 && <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#92400e', fontWeight: 700 }}>€ {fi(totBase)}</span>}
+                                        <button onClick={() => setBaseExpanded(prev => ({ ...prev, [v.codice]: !baseExp }))}
+                                          style={{ fontSize: 9, padding: '1px 7px', background: baseExp ? '#fde68a' : '#fffbeb', border: '1px solid #fcd34d', borderRadius: 3, cursor: 'pointer', marginLeft: 'auto', color: '#78350f', fontWeight: 600 }}>
+                                          {baseExp ? '▼ Nascondi' : '✏️ Modifica base'}
+                                        </button>
+                                      </div>
+
+                                      {/* Base collassata: pill read-only */}
+                                      {!baseExp && av.length > 0 && (
+                                        <div style={{ display: 'flex', gap: 8, padding: '5px 14px', flexWrap: 'wrap' as const }}>
+                                          {av.map(a => {
+                                            const tc = TIPI_ANALISI.find(t => t.value === a.tipo)
+                                            return (
+                                              <span key={a.id} style={{ fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 4, color: '#374151' }}>
+                                                <span style={{ width: 7, height: 7, borderRadius: '50%', background: tc?.color || '#9ca3af', flexShrink: 0 }} />
+                                                <span style={{ color: tc?.color, fontWeight: 600 }}>{tc?.label}</span>
+                                                <span style={{ fontFamily: 'monospace' }}>€ {fi(a.importo_unitario)}</span>
+                                              </span>
+                                            )
+                                          })}
+                                        </div>
+                                      )}
+                                      {!baseExp && av.length === 0 && (
+                                        <div style={{ padding: '5px 14px', fontSize: 10, color: '#9ca3af', fontStyle: 'italic' }}>Nessuna analisi base — clicca "Modifica base"</div>
+                                      )}
+
+                                      {/* Base espansa: editabile */}
+                                      {baseExp && (
+                                        <>
+                                          <table className="cmp-analisi-t">
+                                            <thead>
+                                              <tr>
+                                                <th style={{ width: 130 }}>Componente</th>
+                                                <th style={{ width: 90, textAlign: 'right' }}>€/um</th>
+                                                <th style={{ width: 60, textAlign: 'right' }}>%</th>
+                                                <th style={{ width: 36 }} />
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {av.map(a => {
+                                                const tc = TIPI_ANALISI.find(t => t.value === a.tipo)
+                                                const keyIu = a.id + '_iu'; const keyPct = a.id + '_pct'
+                                                const iu = analisiEdit[keyIu] ?? String(a.importo_unitario)
+                                                const pctV = analisiEdit[keyPct] ?? String(a.percentuale)
+                                                return (
+                                                  <tr key={a.id}>
+                                                    <td>
+                                                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 600, color: tc?.color }}>
+                                                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: tc?.color || '#9ca3af', flexShrink: 0 }} />
+                                                        {tc?.label || a.tipo}
+                                                      </span>
+                                                    </td>
+                                                    <td style={{ textAlign: 'right' }}>
+                                                      <input className="cmp-analisi-inp" value={iu}
+                                                        onChange={e => setAnalisiEdit(prev => ({ ...prev, [keyIu]: e.target.value }))}
+                                                        onBlur={() => aggiornaAnalisi(a, 'importo_unitario', iu, v.prezzo_unitario)}
+                                                        onClick={e => e.stopPropagation()} />
+                                                    </td>
+                                                    <td style={{ textAlign: 'right' }}>
+                                                      <input className="cmp-analisi-inp" value={pctV}
+                                                        onChange={e => setAnalisiEdit(prev => ({ ...prev, [keyPct]: e.target.value }))}
+                                                        onBlur={() => aggiornaAnalisi(a, 'percentuale', pctV, v.prezzo_unitario)}
+                                                        onClick={e => e.stopPropagation()} />
+                                                    </td>
+                                                    <td style={{ textAlign: 'center' }}>
+                                                      <button onClick={() => eliminaAnalisi(a.id)} style={{ fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: 0 }}>🗑</button>
+                                                    </td>
+                                                  </tr>
+                                                )
+                                              })}
+                                            </tbody>
+                                          </table>
+                                          <div style={{ padding: '5px 14px', display: 'flex', gap: 5, flexWrap: 'wrap' as const, borderTop: av.length > 0 ? '1px solid #fde68a' : 'none' }}>
+                                            {TIPI_ANALISI.filter(t => !tipiInBase.has(t.value)).map(t => (
+                                              <button key={t.value} onClick={() => aggiungiAnalisi(v.codice, t.value)}
+                                                style={{ fontSize: 9, padding: '2px 7px', background: t.color + '18', color: t.color, border: '1px solid ' + t.color + '40', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
+                                                + {t.label}
+                                              </button>
+                                            ))}
+                                            {tipiInBase.size === TIPI_ANALISI.length && <span style={{ fontSize: 9, color: '#6b7280', fontStyle: 'italic' }}>Tutti i componenti presenti</span>}
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
+
+                                    {/* SEZIONE EXTRA */}
+                                    <div style={{ borderBottom: '1px solid #fde68a' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 14px', background: '#f0fdf4' }}>
+                                        <span style={{ fontSize: 9, fontWeight: 700, color: '#065f46', textTransform: 'uppercase' as const, letterSpacing: '.04em' }}>EXTRA — specifico per questa voce</span>
+                                        {totExtra > 0 && <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#059669', fontWeight: 700 }}>€ {fi(totExtra)}</span>}
+                                      </div>
+                                      {ex.length > 0 && (
+                                        <table className="cmp-analisi-t">
+                                          <thead>
+                                            <tr>
+                                              <th style={{ width: 130 }}>Tipo</th>
+                                              <th>Descrizione</th>
+                                              <th style={{ width: 90, textAlign: 'right' }}>€/um</th>
+                                              <th style={{ width: 36 }} />
                                             </tr>
-                                          )
-                                        })}
-                                      </tbody>
+                                          </thead>
+                                          <tbody>
+                                            {ex.map(e => {
+                                              const tc = TIPI_ANALISI.find(t => t.value === e.tipo)
+                                              const keyIu = 'ex_' + e.id
+                                              const iu = analisiExtraEdit[keyIu] ?? String(e.importo_unitario)
+                                              return (
+                                                <tr key={e.id} style={{ background: '#f0fdf4' }}>
+                                                  <td>
+                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 600, color: tc?.color }}>
+                                                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: tc?.color || '#9ca3af', flexShrink: 0 }} />
+                                                      {tc?.label || e.tipo}
+                                                    </span>
+                                                  </td>
+                                                  <td style={{ fontSize: 10, fontStyle: e.descrizione ? 'normal' : 'italic', color: e.descrizione ? '#374151' : '#9ca3af' }}>
+                                                    {e.descrizione || 'nessuna descrizione'}
+                                                  </td>
+                                                  <td style={{ textAlign: 'right' }}>
+                                                    <input className="cmp-analisi-inp" style={{ background: '#f0fdf4' }} value={iu}
+                                                      onChange={ev => setAnalisiExtraEdit(prev => ({ ...prev, [keyIu]: ev.target.value }))}
+                                                      onBlur={() => aggiornaExtra(e, iu)}
+                                                      onClick={ev => ev.stopPropagation()} />
+                                                  </td>
+                                                  <td style={{ textAlign: 'center' }}>
+                                                    <button onClick={() => eliminaExtra(e.id)} style={{ fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: 0 }}>🗑</button>
+                                                  </td>
+                                                </tr>
+                                              )
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      )}
+                                      {ex.length === 0 && <div style={{ padding: '5px 14px', fontSize: 10, color: '#9ca3af', fontStyle: 'italic' }}>Nessuna maggiorazione extra per questa voce</div>}
+                                      <div style={{ padding: '5px 14px', display: 'flex', gap: 5, flexWrap: 'wrap' as const, borderTop: ex.length > 0 ? '1px solid #6ee7b7' : 'none' }}>
+                                        {TIPI_ANALISI.map(t => (
+                                          <button key={t.value} onClick={() => aggiungiExtra(v.id, t.value)}
+                                            style={{ fontSize: 9, padding: '2px 7px', background: '#f0fdf4', color: t.color, border: '1px solid #6ee7b7', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
+                                            + {t.label}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    {/* TOTALE FINALE */}
+                                    <table className="cmp-analisi-t">
                                       <tfoot>
                                         <tr>
-                                          <td style={{ fontWeight: 700, fontSize: 10 }}>TOTALE</td>
-                                          <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, fontSize: 10 }}>{fi(totAn)}</td>
-                                          <td style={{ textAlign: 'right', fontSize: 9, color: '#6b7280' }}>{v.prezzo_unitario > 0 ? ((totAn / v.prezzo_unitario) * 100).toFixed(1) + '%' : '—'}</td>
+                                          <td style={{ fontSize: 10, color: '#6b7280' }}>Subtotale base</td>
+                                          <td colSpan={2} style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 10, color: '#374151' }}>€ {fi(totBase)}</td>
+                                          <td />
+                                        </tr>
+                                        {totExtra > 0 && (
+                                          <tr>
+                                            <td style={{ fontSize: 10, color: '#059669' }}>+ Extra voce</td>
+                                            <td colSpan={2} style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 10, color: '#059669', fontWeight: 600 }}>€ {fi(totExtra)}</td>
+                                            <td />
+                                          </tr>
+                                        )}
+                                        <tr style={{ borderTop: '2px solid #fde68a' }}>
+                                          <td style={{ fontWeight: 700, fontSize: 11 }}>TOTALE</td>
+                                          <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, fontSize: 11 }}>€ {fi(totTot)}</td>
+                                          <td style={{ textAlign: 'right', fontSize: 9, color: '#6b7280' }}>{v.prezzo_unitario > 0 ? ((totTot / v.prezzo_unitario) * 100).toFixed(1) + '%' : '—'}</td>
                                           <td />
                                         </tr>
                                         <tr>
                                           <td style={{ fontSize: 10, color: '#6b7280' }}>P.U. computo</td>
-                                          <td style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 10, color: '#6b7280' }}>{fi(v.prezzo_unitario)}</td>
+                                          <td style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 10, color: '#6b7280' }}>€ {fi(v.prezzo_unitario)}</td>
                                           <td colSpan={2}>
-                                            {Math.abs(deltaAn) < 0.01
+                                            {Math.abs(deltaTot) < 0.01
                                               ? <span style={{ fontSize: 9, color: '#059669', fontWeight: 700 }}>✅ Bilancia</span>
-                                              : deltaAn > 0
-                                              ? <span style={{ fontSize: 9, color: '#d97706', fontWeight: 700 }}>⚠ manca {fi(deltaAn)}</span>
-                                              : <span style={{ fontSize: 9, color: '#dc2626', fontWeight: 700 }}>⛔ supera {fi(-deltaAn)}</span>}
+                                              : deltaTot > 0
+                                              ? <span style={{ fontSize: 9, color: '#d97706', fontWeight: 700 }}>⚠ Scarto € {fi(deltaTot)}</span>
+                                              : <span style={{ fontSize: 9, color: '#dc2626', fontWeight: 700 }}>⛔ Supera di € {fi(-deltaTot)}</span>}
                                           </td>
                                         </tr>
                                       </tfoot>
                                     </table>
-                                    {/* Aggiungi componente */}
-                                    <div style={{ padding: '5px 14px', display: 'flex', gap: 6, flexWrap: 'wrap', borderTop: av.length > 0 ? '1px solid #fde68a' : 'none' }}>
-                                      {TIPI_ANALISI.filter(t => !tipiPresenti.has(t.value)).map(t => (
-                                        <button key={t.value} onClick={() => aggiungiAnalisi(v.codice, t.value)}
-                                          style={{ fontSize: 9, padding: '2px 8px', background: t.color + '18', color: t.color, border: '1px solid ' + t.color + '40', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
-                                          + {t.label}
-                                        </button>
-                                      ))}
-                                      {tipiPresenti.size === TIPI_ANALISI.length && <span style={{ fontSize: 9, color: '#6b7280', fontStyle: 'italic' }}>Tutti i componenti presenti</span>}
-                                    </div>
+
                                   </div>
                                 </td>
                               </tr>
