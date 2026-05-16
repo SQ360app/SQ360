@@ -53,6 +53,23 @@ const TIPO_ODA_COLORS: Record<string, { color: string; label: string }> = {
   manodopera:  { color: '#10b981', label: 'Manodopera' },
   servizio:    { color: '#6b7280', label: 'Servizio' },
 }
+const TIPI_ANALISI = [
+  { value: 'materiali',          label: 'Materiali',       color: '#3b82f6', rda: true  },
+  { value: 'nolo_esterno',       label: 'Nolo esterno',    color: '#8b5cf6', rda: true  },
+  { value: 'subappalto',         label: 'Subappalto',      color: '#f59e0b', rda: true  },
+  { value: 'manodopera_esterna', label: 'Manod. esterna',  color: '#10b981', rda: true  },
+  { value: 'manodopera_interna', label: 'Manod. impresa',  color: '#6b7280', rda: false },
+  { value: 'mezzi_interni',      label: 'Mezzi impresa',   color: '#64748b', rda: false },
+  { value: 'utile_impresa',      label: 'Utile impresa',   color: '#34d399', rda: false },
+]
+interface AnalisiPrezzo {
+  id: string; commessa_id: string; codice_tariffa: string
+  tipo: string; descrizione?: string; importo_unitario: number; percentuale: number
+}
+interface RdaModalRow {
+  wbs_id: string; tipo: string; label: string; color: string
+  importoStimato: number; voceIds: string[]; selected: boolean
+}
 
 // ─── CSS ────────────────────────────────────────────────────────────────────
 const V3_CSS = `
@@ -164,6 +181,23 @@ table.cmp-t td{padding:2px 3px;vertical-align:top;border-right:1px solid #e5e7eb
 .cmp-piano-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:1px;vertical-align:middle;flex-shrink:0}
 .cmp-piano-add{font-size:9px;color:#6b7280;cursor:pointer;padding:1px 5px;border-radius:2px;border:1px dashed #d1d5db;background:transparent;margin-left:4px;vertical-align:middle}
 .cmp-piano-add:hover{color:#0369a1;border-color:#0369a1;background:#f0f9ff}
+.cmp-analisi-panel{background:#fefce8;border-top:2px solid #fde68a}
+.cmp-analisi-hdr{display:flex;align-items:center;gap:8px;padding:5px 14px;background:#fef3c7;border-bottom:1px solid #fde68a;font-size:11px;font-weight:700;color:#92400e}
+.cmp-analisi-t{width:100%;border-collapse:collapse;font-size:10px}
+.cmp-analisi-t th{padding:3px 8px;background:#fffbeb;color:#78350f;font-weight:700;font-size:9px;text-transform:uppercase;border-bottom:1px solid #fde68a;text-align:left;letter-spacing:.04em}
+.cmp-analisi-t td{padding:4px 8px;border-bottom:1px solid #fef3c7;vertical-align:middle}
+.cmp-analisi-t tfoot td{padding:5px 8px;background:#fffbeb;border-top:1px solid #fde68a}
+.cmp-analisi-inp{border:1px solid #fcd34d;border-radius:2px;padding:2px 5px;font-size:10px;font-family:monospace;background:#fffde7;outline:none;text-align:right;width:80px}
+.cmp-analisi-inp:focus{border-color:#f59e0b;box-shadow:0 0 0 2px rgba(245,158,11,.2)}
+.cmp-analisi-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:1px;vertical-align:middle;flex-shrink:0}
+.cmp-analisi-add-btn{font-size:9px;color:#78350f;cursor:pointer;padding:1px 5px;border-radius:2px;border:1px dashed #fcd34d;background:transparent;margin-left:4px;vertical-align:middle}
+.cmp-analisi-add-btn:hover{color:#92400e;border-color:#f59e0b;background:#fef3c7}
+.cmp-rda-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;display:flex;align-items:center;justify-content:center;padding:16px}
+.cmp-rda-modal{background:#fff;border-radius:14px;width:100%;max-width:620px;max-height:90vh;overflow-y:auto;display:flex;flex-direction:column}
+.cmp-rda-modal-hdr{padding:14px 18px;background:#1e3a5f;color:#fff;font-size:13px;font-weight:700;border-radius:14px 14px 0 0;flex-shrink:0}
+.cmp-rda-modal-t{width:100%;border-collapse:collapse;font-size:11px}
+.cmp-rda-modal-t th{padding:6px 12px;background:#f1f5f9;color:#475569;font-weight:700;font-size:10px;text-transform:uppercase;border-bottom:1px solid #e2e8f0;text-align:left}
+.cmp-rda-modal-t td{padding:8px 12px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
 .cmp-ctx{position:fixed;z-index:999;background:#fff;border:1px solid rgba(0,0,0,.2);border-radius:8px;min-width:210px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.15)}
 .cmp-ctxh{padding:4px 12px;font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;background:#f9fafb;border-bottom:1px solid rgba(0,0,0,.08)}
 .cmp-ctxi{padding:7px 14px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:8px}
@@ -206,6 +240,10 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
   const [bulkWbsPicker, setBulkWbsPicker] = useState(false)
   const [piani, setPiani] = useState<PianoCostoVoce[]>([])
   const [pianoForm, setPianoForm] = useState<{ voceId: string; tipo: string; descrizione: string; importo: string } | null>(null)
+  const [analisi, setAnalisi] = useState<AnalisiPrezzo[]>([])
+  const [analisiEdit, setAnalisiEdit] = useState<Record<string, string>>({})
+  const [copiaSource, setCopiaSource] = useState('')
+  const [rdaModal, setRdaModal] = useState<{ rows: RdaModalRow[]; senzaAnalisi: string[]; generaFallback: boolean } | null>(null)
 
   const [fontSize, setFontSize] = useState<number>(() => {
     if (typeof window !== 'undefined') {
@@ -245,16 +283,18 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
       if (!computo) { setCaricamento(false); return }
       setComputoId(computo.id)
 
-      const [{ data: v }, { data: rda }, { data: pianiData }] = await Promise.all([
+      const [{ data: v }, { data: rda }, { data: pianiData }, { data: analisiData }] = await Promise.all([
         supabase.from('voci_computo')
           .select('id,codice,descrizione,um,quantita,prezzo_unitario,importo,capitolo,categoria,note,wbs_id,wbs_label')
           .eq('computo_id', computo.id).order('capitolo').order('codice'),
         supabase.from('rda').select('id,wbs_id,stato,tipo').eq('commessa_id', id),
         supabase.from('piano_costi_voce').select('*').eq('commessa_id', id),
+        supabase.from('analisi_prezzi_tariffa').select('*').eq('commessa_id', id),
       ])
       if (v) { setVoci(v); setTotale(v.reduce((s, x) => s + (x.importo || 0), 0)) }
       if (rda) setRdaList(rda as RDADB[])
       if (pianiData) setPiani(pianiData as PianoCostoVoce[])
+      if (analisiData) setAnalisi(analisiData as AnalisiPrezzo[])
     } finally { setCaricamento(false) }
   }, [id])
 
@@ -297,7 +337,53 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     finally { setImportando(false) }
   }
 
-  // ─── Genera RDA da selezione ────────────────────────────────────────────
+  // ─── Analisi prezzi tariffa ──────────────────────────────────────────────
+
+  const aggiungiAnalisi = async (codice: string, tipo: string) => {
+    const aziendaId = await getAziendaId()
+    const { data } = await supabase.from('analisi_prezzi_tariffa').insert({
+      commessa_id: id, azienda_id: aziendaId || null,
+      codice_tariffa: codice, tipo, importo_unitario: 0, percentuale: 0,
+    }).select().single()
+    if (data) setAnalisi(prev => [...prev, data as AnalisiPrezzo])
+  }
+
+  const eliminaAnalisi = async (analisiId: string) => {
+    await supabase.from('analisi_prezzi_tariffa').delete().eq('id', analisiId)
+    setAnalisi(prev => prev.filter(a => a.id !== analisiId))
+  }
+
+  const aggiornaAnalisi = async (a: AnalisiPrezzo, field: 'importo_unitario' | 'percentuale', rawVal: string, pu: number) => {
+    const val = parseFloat(rawVal) || 0
+    let newImporto = a.importo_unitario
+    let newPct = a.percentuale
+    if (field === 'importo_unitario') {
+      newImporto = val
+      newPct = pu > 0 ? Math.round((val / pu) * 10000) / 100 : 0
+    } else {
+      newPct = val
+      newImporto = Math.round(pu * val / 100 * 100) / 100
+    }
+    await supabase.from('analisi_prezzi_tariffa').update({ importo_unitario: newImporto, percentuale: newPct }).eq('id', a.id)
+    setAnalisi(prev => prev.map(x => x.id === a.id ? { ...x, importo_unitario: newImporto, percentuale: newPct } : x))
+    setAnalisiEdit(prev => { const n = { ...prev }; delete n[a.id + '_iu']; delete n[a.id + '_pct']; return n })
+  }
+
+  const copiaAnalisi = async (codiceSource: string, codiceDest: string) => {
+    const fonti = analisi.filter(a => a.codice_tariffa === codiceSource)
+    if (!fonti.length) return
+    const aziendaId = await getAziendaId()
+    await supabase.from('analisi_prezzi_tariffa').delete().eq('commessa_id', id).eq('codice_tariffa', codiceDest)
+    await supabase.from('analisi_prezzi_tariffa').insert(
+      fonti.map(f => ({ commessa_id: id, azienda_id: aziendaId || null, codice_tariffa: codiceDest, tipo: f.tipo, descrizione: f.descrizione, importo_unitario: f.importo_unitario, percentuale: f.percentuale }))
+    )
+    const { data } = await supabase.from('analisi_prezzi_tariffa').select('*').eq('commessa_id', id)
+    if (data) setAnalisi(data as AnalisiPrezzo[])
+    setCopiaSource('')
+    showToast(`✓ Analisi copiata da ${codiceSource}`)
+  }
+
+  // ─── Genera RDA da selezione (intelligente) ──────────────────────────────
 
   const generaRDA = async () => {
     const ids = Array.from(multiSel)
@@ -305,8 +391,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     const senzaWBS = ids.filter(vid => !voci.find(v => v.id === vid)?.wbs_id)
     if (senzaWBS.length > 0) {
       showToast(`⚠ ${senzaWBS.length} voci senza nodo WBS — assegna WBS prima di generare RDA`)
-      setMultiSel(new Set(senzaWBS))
-      return
+      setMultiSel(new Set(senzaWBS)); return
     }
     const wbsGroups: Record<string, string[]> = {}
     ids.forEach(vid => {
@@ -315,6 +400,29 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
       if (!wbsGroups[key]) wbsGroups[key] = []
       wbsGroups[key].push(vid)
     })
+    // Controlla se esistono analisi per i codici selezionati
+    const conAnalisi = ids.filter(vid => { const v = voci.find(x => x.id === vid); return v && analisi.some(a => a.codice_tariffa === v.codice) })
+    if (conAnalisi.length === 0) {
+      // Nessuna analisi — comportamento classico
+      await generaRDAClassica(wbsGroups); return
+    }
+    // Calcola righe modal RDA intelligente
+    const rows: RdaModalRow[] = []
+    for (const [wbsId, voceIds] of Object.entries(wbsGroups)) {
+      for (const ta of TIPI_ANALISI.filter(t => t.rda)) {
+        let imp = 0
+        for (const vid of voceIds) {
+          const v = voci.find(x => x.id === vid); if (!v) continue
+          imp += analisi.filter(a => a.codice_tariffa === v.codice && a.tipo === ta.value).reduce((s, a) => s + v.quantita * (a.importo_unitario || 0), 0)
+        }
+        if (imp > 0.01) rows.push({ wbs_id: wbsId, tipo: ta.value, label: ta.label, color: ta.color, importoStimato: Math.round(imp * 100) / 100, voceIds, selected: true })
+      }
+    }
+    const senzaAnalisiIds = ids.filter(vid => { const v = voci.find(x => x.id === vid); return !v || !analisi.some(a => a.codice_tariffa === v.codice) })
+    setRdaModal({ rows, senzaAnalisi: senzaAnalisiIds, generaFallback: senzaAnalisiIds.length > 0 })
+  }
+
+  const generaRDAClassica = async (wbsGroups: Record<string, string[]>) => {
     const aziendaId = await getAziendaId()
     let created = 0
     for (const [wbsId, voceIds] of Object.entries(wbsGroups)) {
@@ -329,9 +437,36 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
       })
       created++
     }
-    await caricaDati()
-    setMultiSel(new Set())
-    showToast(`⚡ ${created} RDA create per ${ids.length} voci`)
+    await caricaDati(); setMultiSel(new Set())
+    showToast(`⚡ ${created} RDA create per ${Array.from(multiSel).length} voci`)
+  }
+
+  const generaRDADaModal = async () => {
+    if (!rdaModal) return
+    const aziendaId = await getAziendaId()
+    let created = 0
+    for (const row of rdaModal.rows.filter(r => r.selected)) {
+      const tipoRda = row.tipo === 'materiali' ? 'MAT' : row.tipo === 'subappalto' ? 'SUB' : ['manodopera_esterna', 'manodopera_interna'].includes(row.tipo) ? 'MAN' : 'SRV'
+      const codice = 'RDA-' + Date.now().toString(36).toUpperCase() + '-' + created
+      await supabase.from('rda').insert({
+        commessa_id: id, azienda_id: aziendaId || null, codice, stato: 'bozza',
+        tipo: tipoRda, oggetto: `${row.label} — WBS ${row.wbs_id}`,
+        voci_ids: row.voceIds,
+        wbs_id: row.wbs_id !== 'nessun_wbs' ? row.wbs_id : null,
+        wbs_label: row.wbs_id !== 'nessun_wbs' ? WBS_MAP[row.wbs_id] : null,
+      })
+      created++
+    }
+    if (rdaModal.generaFallback && rdaModal.senzaAnalisi.length > 0) {
+      const fallbackGroups: Record<string, string[]> = {}
+      rdaModal.senzaAnalisi.forEach(vid => { const v = voci.find(x => x.id === vid); const key = v?.wbs_id || 'nessun_wbs'; if (!fallbackGroups[key]) fallbackGroups[key] = []; fallbackGroups[key].push(vid) })
+      for (const [wbsId, voceIds] of Object.entries(fallbackGroups)) {
+        await supabase.from('rda').insert({ commessa_id: id, azienda_id: aziendaId || null, codice: 'RDA-' + Date.now().toString(36).toUpperCase() + '-FB' + created, stato: 'bozza', tipo: 'MAT', oggetto: `RDA da computo (${voceIds.length} voci)`, voci_ids: voceIds, wbs_id: wbsId !== 'nessun_wbs' ? wbsId : null, wbs_label: wbsId !== 'nessun_wbs' ? WBS_MAP[wbsId] : null })
+        created++
+      }
+    }
+    setRdaModal(null); setMultiSel(new Set()); await caricaDati()
+    showToast(`⚡ ${created} RDA create`)
   }
 
   // ─── Piano costi voce ────────────────────────────────────────────────────
@@ -847,6 +982,21 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                                 </span>
                               )
                             })()}
+                            {(() => {
+                              const av = analisi.filter(a => a.codice_tariffa === v.codice)
+                              if (av.length === 0) return (
+                                <button className="cmp-analisi-add-btn" onClick={e => { e.stopPropagation(); setSel(v.id) }}>+ Analisi</button>
+                              )
+                              const tot = av.reduce((s, a) => s + (a.importo_unitario || 0), 0)
+                              const ok = Math.abs(tot - v.prezzo_unitario) < 0.01
+                              return (
+                                <span style={{ display: 'inline-flex', gap: 1, alignItems: 'center', marginLeft: 4, verticalAlign: 'middle' }}>
+                                  {av.map(a => { const tc = TIPI_ANALISI.find(t => t.value === a.tipo); return <span key={a.id} className="cmp-analisi-dot" style={{ background: tc?.color || '#9ca3af' }} title={tc?.label} /> })}
+                                  <span style={{ fontSize: 8, fontFamily: 'monospace', color: '#374151', marginLeft: 2 }}>{fi(tot)}</span>
+                                  <span style={{ fontSize: 8 }}>{ok ? '✅' : '⚠️'}</span>
+                                </span>
+                              )
+                            })()}
                           </td>
                           <td /><td /><td /><td />
                           <td className="cmp-td-edit"
@@ -942,6 +1092,114 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                             <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 11, fontFamily: 'monospace' }}>{fi(v.importo)}</td>
                             <td /><td /><td /><td />
                           </tr>
+                          {isSel && (() => {
+                            const av = analisi.filter(a => a.codice_tariffa === v.codice)
+                            const totAn = av.reduce((s, a) => s + (a.importo_unitario || 0), 0)
+                            const deltaAn = v.prezzo_unitario - totAn
+                            const codiciConAnalisi = [...new Set(analisi.filter(a => a.codice_tariffa !== v.codice).map(a => a.codice_tariffa))]
+                            const tipiPresenti = new Set(av.map(a => a.tipo))
+                            return (
+                              <tr>
+                                <td colSpan={14} style={{ padding: 0 }}>
+                                  <div className="cmp-analisi-panel" onClick={e => e.stopPropagation()}>
+                                    <div className="cmp-analisi-hdr">
+                                      <span>ANALISI PREZZI — {v.codice}</span>
+                                      <span style={{ fontWeight: 400, fontSize: 10, color: '#92400e', marginLeft: 4 }}>P.U. € {fi(v.prezzo_unitario)}/{v.um}</span>
+                                      <span style={{ fontSize: 9, color: '#78350f', marginLeft: 4, fontWeight: 400 }}>· si applica a tutte le voci con codice {v.codice}</span>
+                                      {codiciConAnalisi.length > 0 && (
+                                        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                                          <span style={{ fontSize: 9, color: '#78350f' }}>📋 Copia da:</span>
+                                          <select value={copiaSource} onChange={e => setCopiaSource(e.target.value)}
+                                            style={{ fontSize: 9, border: '1px solid #fcd34d', borderRadius: 3, padding: '1px 4px', background: '#fffbeb' }}>
+                                            <option value="">scegli tariffa...</option>
+                                            {codiciConAnalisi.map(c => <option key={c} value={c}>{c}</option>)}
+                                          </select>
+                                          {copiaSource && (
+                                            <button onClick={() => copiaAnalisi(copiaSource, v.codice)}
+                                              style={{ fontSize: 9, padding: '1px 7px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 700 }}>
+                                              Copia
+                                            </button>
+                                          )}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <table className="cmp-analisi-t">
+                                      <thead>
+                                        <tr>
+                                          <th style={{ width: 130 }}>Componente</th>
+                                          <th style={{ width: 90, textAlign: 'right' }}>€/um</th>
+                                          <th style={{ width: 60, textAlign: 'right' }}>%</th>
+                                          <th style={{ width: 36 }} />
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {av.map(a => {
+                                          const tc = TIPI_ANALISI.find(t => t.value === a.tipo)
+                                          const keyIu = a.id + '_iu'; const keyPct = a.id + '_pct'
+                                          const iu = analisiEdit[keyIu] ?? String(a.importo_unitario)
+                                          const pctV = analisiEdit[keyPct] ?? String(a.percentuale)
+                                          return (
+                                            <tr key={a.id}>
+                                              <td>
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 600, color: tc?.color }}>
+                                                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: tc?.color || '#9ca3af', flexShrink: 0 }} />
+                                                  {tc?.label || a.tipo}
+                                                </span>
+                                              </td>
+                                              <td style={{ textAlign: 'right' }}>
+                                                <input className="cmp-analisi-inp" value={iu}
+                                                  onChange={e => setAnalisiEdit(prev => ({ ...prev, [keyIu]: e.target.value }))}
+                                                  onBlur={() => aggiornaAnalisi(a, 'importo_unitario', iu, v.prezzo_unitario)}
+                                                  onClick={e => e.stopPropagation()} />
+                                              </td>
+                                              <td style={{ textAlign: 'right' }}>
+                                                <input className="cmp-analisi-inp" value={pctV}
+                                                  onChange={e => setAnalisiEdit(prev => ({ ...prev, [keyPct]: e.target.value }))}
+                                                  onBlur={() => aggiornaAnalisi(a, 'percentuale', pctV, v.prezzo_unitario)}
+                                                  onClick={e => e.stopPropagation()} />
+                                              </td>
+                                              <td style={{ textAlign: 'center' }}>
+                                                <button onClick={() => eliminaAnalisi(a.id)} style={{ fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: 0 }}>🗑</button>
+                                              </td>
+                                            </tr>
+                                          )
+                                        })}
+                                      </tbody>
+                                      <tfoot>
+                                        <tr>
+                                          <td style={{ fontWeight: 700, fontSize: 10 }}>TOTALE</td>
+                                          <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, fontSize: 10 }}>{fi(totAn)}</td>
+                                          <td style={{ textAlign: 'right', fontSize: 9, color: '#6b7280' }}>{v.prezzo_unitario > 0 ? ((totAn / v.prezzo_unitario) * 100).toFixed(1) + '%' : '—'}</td>
+                                          <td />
+                                        </tr>
+                                        <tr>
+                                          <td style={{ fontSize: 10, color: '#6b7280' }}>P.U. computo</td>
+                                          <td style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 10, color: '#6b7280' }}>{fi(v.prezzo_unitario)}</td>
+                                          <td colSpan={2}>
+                                            {Math.abs(deltaAn) < 0.01
+                                              ? <span style={{ fontSize: 9, color: '#059669', fontWeight: 700 }}>✅ Bilancia</span>
+                                              : deltaAn > 0
+                                              ? <span style={{ fontSize: 9, color: '#d97706', fontWeight: 700 }}>⚠ manca {fi(deltaAn)}</span>
+                                              : <span style={{ fontSize: 9, color: '#dc2626', fontWeight: 700 }}>⛔ supera {fi(-deltaAn)}</span>}
+                                          </td>
+                                        </tr>
+                                      </tfoot>
+                                    </table>
+                                    {/* Aggiungi componente */}
+                                    <div style={{ padding: '5px 14px', display: 'flex', gap: 6, flexWrap: 'wrap', borderTop: av.length > 0 ? '1px solid #fde68a' : 'none' }}>
+                                      {TIPI_ANALISI.filter(t => !tipiPresenti.has(t.value)).map(t => (
+                                        <button key={t.value} onClick={() => aggiungiAnalisi(v.codice, t.value)}
+                                          style={{ fontSize: 9, padding: '2px 8px', background: t.color + '18', color: t.color, border: '1px solid ' + t.color + '40', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
+                                          + {t.label}
+                                        </button>
+                                      ))}
+                                      {tipiPresenti.size === TIPI_ANALISI.length && <span style={{ fontSize: 9, color: '#6b7280', fontStyle: 'italic' }}>Tutti i componenti presenti</span>}
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })()}
                           {isSel && (
                             <tr>
                               <td colSpan={14} style={{ padding: 0, borderBottom: '2px solid #4ade80' }}>
@@ -1071,6 +1329,70 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
           )}
 
         </div>
+
+        {/* RDA INTELLIGENTE MODAL */}
+        {rdaModal && (
+          <div className="cmp-rda-modal-overlay" onClick={() => setRdaModal(null)}>
+            <div className="cmp-rda-modal" onClick={e => e.stopPropagation()}>
+              <div className="cmp-rda-modal-hdr">
+                ⚡ Riepilogo RDA da generare
+                <span style={{ fontWeight: 400, fontSize: 11, marginLeft: 8, color: '#93c5fd' }}>da analisi prezzi</span>
+              </div>
+              <div style={{ padding: 16, flex: 1, overflowY: 'auto' }}>
+                {rdaModal.senzaAnalisi.length > 0 && (
+                  <div style={{ padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, fontSize: 11, color: '#92400e', marginBottom: 12 }}>
+                    ⚠ {rdaModal.senzaAnalisi.length} voci senza analisi prezzi — verranno raggruppate per WBS senza spacchettamento
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={rdaModal.generaFallback} onChange={e => setRdaModal(prev => prev ? { ...prev, generaFallback: e.target.checked } : null)} />
+                      <span>Genera comunque RDA senza spacchettamento</span>
+                    </label>
+                  </div>
+                )}
+                <table className="cmp-rda-modal-t" style={{ width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: 36 }}></th>
+                      <th>WBS</th>
+                      <th>Tipo</th>
+                      <th style={{ textAlign: 'right' }}>Importo stimato</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rdaModal.rows.map((r, i) => (
+                      <tr key={i} style={{ background: r.selected ? 'transparent' : '#f9fafb' }}>
+                        <td style={{ textAlign: 'center' }}>
+                          <input type="checkbox" checked={r.selected}
+                            onChange={e => setRdaModal(prev => prev ? { ...prev, rows: prev.rows.map((x, j) => j === i ? { ...x, selected: e.target.checked } : x) } : null)} />
+                        </td>
+                        <td>
+                          <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#7c3aed', fontWeight: 600 }}>{r.wbs_id}</span>
+                          <span style={{ fontSize: 10, color: '#6b7280', marginLeft: 6 }}>{WBS_MAP[r.wbs_id]}</span>
+                        </td>
+                        <td>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: r.color }}>
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: r.color, flexShrink: 0 }} />
+                            {r.label}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, fontSize: 12 }}>€ {fi(r.importoStimato)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ padding: '12px 16px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: 8, flexShrink: 0 }}>
+                <button onClick={() => setRdaModal(null)}
+                  style={{ flex: 1, padding: '8px', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', cursor: 'pointer', color: '#6b7280' }}>
+                  Annulla
+                </button>
+                <button onClick={generaRDADaModal}
+                  style={{ flex: 2, padding: '8px', fontSize: 13, background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>
+                  ⚡ Genera RDA selezionate ({rdaModal.rows.filter(r => r.selected).length})
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* WBS PICKER POPUP */}
         {wbsPicker && (
