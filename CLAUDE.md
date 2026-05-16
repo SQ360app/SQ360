@@ -169,22 +169,30 @@
 - ✅ Query ODA estesa con `tipo_oda`; calcolo `odaPerTipo` aggregato per categoria
 - ✅ Card "Costi ODA per categoria": solo categorie con importo > 0, pallino colorato, % su totale ODA
 
-#### Piano costi per voce nel computo (6de8475 → 14ddb73)
-- ✅ Tabella `piano_costi_voce` creata su Supabase — campi: `voce_computo_id`, `commessa_id`, `azienda_id`, `tipo`, `descrizione`, `importo_previsto`, `stato`, `rda_id`, `oda_id`
-- ✅ `computo/page.tsx`: interfaccia `PianoCostoVoce` + mappa `TIPO_ODA_COLORS` (6 tipi con hex)
-- ✅ `caricaDati` aggiornato: 3 query in `Promise.all` (voci, rda, piano_costi_voce)
-- ✅ Dot indicatori nella cella DESIGNAZIONE: pallini colorati per tipo se la voce ha piani, altrimenti link "+ Piano costi"
-- ✅ Pannello piano costi sotto riga SOMMANO quando voce selezionata: tabella componenti tipo/descrizione/importo/stato, bottone "📝 Genera RDA" o link "→ RDA/ODA", bottone 🗑
-- ✅ Controllo budget: delta verde (=), arancio (manca copertura), rosso (supera budget)
-- ✅ Form inline "+ Aggiungi componente": select tipo, input descrizione, input importo €, salva in `piano_costi_voce`
-- ✅ Handler `generaRdaDaPiano`: INSERT in `rda` + UPDATE `piano_costi_voce.rda_id`, toast "vai al modulo RDA"
+#### Analisi prezzi per codice tariffa nel computo (4c6a212 → 9acfc35)
+- ✅ `TIPI_ANALISI` (7 tipi: materiali, nolo_esterno, subappalto, manodopera_esterna/interna, mezzi_interni, utile_impresa) con flag `rda: true/false`
+- ✅ Tabella `analisi_prezzi_tariffa`: analisi BASE condivisa per `codice_tariffa` — si propaga automaticamente a tutte le voci con lo stesso codice
+- ✅ Tabella `analisi_extra_voce`: maggiorazioni EXTRA specifiche per singola `voce_computo_id`
+- ✅ Pannello ANALISI PREZZI sotto riga SOMMANO quando voce selezionata:
+  - **SEZIONE BASE**: collassata (pill read-only) o espansa (input €/um e % editabili su blur, con ricalcolo automatico); bottoni aggiungi tipo mancante
+  - **SEZIONE EXTRA**: righe per-voce con tipo/descrizione/€/um; bottoni "+ [tipo]" per tutte le 7 categorie
+  - Totale finale: subtotale base + extra + confronto P.U. (✅ Bilancia / ⚠ Scarto / ⛔ Supera)
+- ✅ Banner propagazione automatica: "ℹ️ La base si applica automaticamente a N altre voci con codice [X]"
+- ✅ Tooltip su input BASE: "Aggiorna tutte le voci con codice [X]" quando N > 0
+- ✅ Copia analisi da altra tariffa: select + bottone sovrascrive la BASE del codice corrente
+- ✅ Dot indicatori nella cella DESIGNAZIONE: pallini per tipo BASE + "+N" arancione per extra + totale €/um + ✅/⚠️
+- ✅ Link "→ Analisi" se nessuna analisi presente
+- ✅ `caricaDati`: 4 query in `Promise.all` (voci, rda, analisi_prezzi_tariffa, analisi_extra_voce)
+- ✅ Generazione RDA intelligente: importo per tipo = SUM(qtà × base) + SUM(qtà × extra); modal con checkbox per scegliere quali RDA generare
+- ✅ CE "Costi previsti per WBS": barra stacked colorata per tipo da analisi × quantità voci
 
-#### CE confronto piano previsto vs ODA (14ddb73)
-- ✅ Query `piano_costi_voce` aggregata per tipo in `conto-economico/page.tsx`
-- ✅ Sezione "Piano costi previsto vs ODA emessi": griglia Pianificato / ODA emessi / Delta per categoria, totale con confronto
+#### Piano costi rimosso (9acfc35)
+- ✅ Modulo `piano_costi_voce` e tutti i riferimenti rimossi da `computo/page.tsx`
+- ✅ Funzionalità unificata in Analisi Prezzi BASE + EXTRA — approccio più preciso e condiviso per codice tariffa
+- ⚠️ Tabella `piano_costi_voce` rimane in Supabase (dati storici) ma non è più usata dal frontend
 
 ## Prossimi task prioritari
-1. **Sprint 5** — Import analisi costi da XPWE Primus / Copia analisi tra tariffe / Marginalità target per commessa
+1. **Sprint 6** — da definire
 2. **Test flusso register→login** — test end-to-end registrazione → conferma email → primo accesso
 3. **Verifica dominio Resend** — verificare `sq360.app` su Resend → Domains per mittente ufficiale
 
