@@ -156,8 +156,35 @@
 - ✅ "Autorizza" bloccato se DURC non valido; DURC controllato su `professionisti_fornitori.durc_scadenza`
 - ✅ Fix: `from('fornitori')` → `from('professionisti_fornitori')`, rimosso `useParams`, ora usa `use(p)` pattern
 
+### Sprint 4 — Spacchettamento costi ODA + Piano costi voce (commit 7e7b78d → 14ddb73)
+
+#### Tipi ODA aggiornati (7e7b78d)
+- ✅ `TIPI_ODA` in `oda/page.tsx` aggiornato a 6 categorie: `materiali`, `nolo_freddo`, `nolo_caldo`, `subappalto`, `manodopera`, `servizio`
+- ✅ Campo `tipo_oda` aggiunto all'INSERT (colonna separata per retrocompatibilità con `tipo`)
+- ✅ Badge lista ODA con stile inline (hex color/bg), bottoni modal griglia 3 colonne con colore dinamico
+- ✅ Condizioni handleSave aggiornate: `'SUBAPPALTO'`→`'subappalto'`, `'MATERIALE'`→`'materiali'`
+
+#### CE breakdown per tipo ODA (7e7b78d)
+- ✅ `TIPI_ODA_CE` definito in `conto-economico/page.tsx` (6 categorie con colori)
+- ✅ Query ODA estesa con `tipo_oda`; calcolo `odaPerTipo` aggregato per categoria
+- ✅ Card "Costi ODA per categoria": solo categorie con importo > 0, pallino colorato, % su totale ODA
+
+#### Piano costi per voce nel computo (6de8475 → 14ddb73)
+- ✅ Tabella `piano_costi_voce` creata su Supabase — campi: `voce_computo_id`, `commessa_id`, `azienda_id`, `tipo`, `descrizione`, `importo_previsto`, `stato`, `rda_id`, `oda_id`
+- ✅ `computo/page.tsx`: interfaccia `PianoCostoVoce` + mappa `TIPO_ODA_COLORS` (6 tipi con hex)
+- ✅ `caricaDati` aggiornato: 3 query in `Promise.all` (voci, rda, piano_costi_voce)
+- ✅ Dot indicatori nella cella DESIGNAZIONE: pallini colorati per tipo se la voce ha piani, altrimenti link "+ Piano costi"
+- ✅ Pannello piano costi sotto riga SOMMANO quando voce selezionata: tabella componenti tipo/descrizione/importo/stato, bottone "📝 Genera RDA" o link "→ RDA/ODA", bottone 🗑
+- ✅ Controllo budget: delta verde (=), arancio (manca copertura), rosso (supera budget)
+- ✅ Form inline "+ Aggiungi componente": select tipo, input descrizione, input importo €, salva in `piano_costi_voce`
+- ✅ Handler `generaRdaDaPiano`: INSERT in `rda` + UPDATE `piano_costi_voce.rda_id`, toast "vai al modulo RDA"
+
+#### CE confronto piano previsto vs ODA (14ddb73)
+- ✅ Query `piano_costi_voce` aggregata per tipo in `conto-economico/page.tsx`
+- ✅ Sezione "Piano costi previsto vs ODA emessi": griglia Pianificato / ODA emessi / Delta per categoria, totale con confronto
+
 ## Prossimi task prioritari
-1. **Sprint 4** — da definire
+1. **Sprint 5** — Import analisi costi da XPWE Primus / Copia analisi tra tariffe / Marginalità target per commessa
 2. **Test flusso register→login** — test end-to-end registrazione → conferma email → primo accesso
 3. **Verifica dominio Resend** — verificare `sq360.app` su Resend → Domains per mittente ufficiale
 
@@ -190,6 +217,9 @@
 20. ~~Upload PDF preventivo + AI Gemini estrazione voci offerta~~ ✅
 21. ~~SAL Attivi: griglia voci manuale + import XPWE DL + quadro economico~~ ✅
 22. ~~SAL Passivi: card sub, slider avanzamento, DURC check, autorizzazione pagamento~~ ✅
+23. ~~6 tipi ODA (materiali/nolo_freddo/nolo_caldo/subappalto/manodopera/servizio) + tipo_oda in INSERT~~ ✅
+24. ~~Piano costi voce nel computo: dot indicatori, pannello componenti, genera RDA diretta~~ ✅
+25. ~~CE breakdown costi per tipo ODA + confronto piano previsto vs ODA emessi~~ ✅
 
 ## Note implementazione
 - `getAziendaId()` in `src/lib/supabase.ts` — helper condiviso: `auth.uid() → utenti.azienda_id`
