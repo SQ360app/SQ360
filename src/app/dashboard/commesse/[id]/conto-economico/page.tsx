@@ -40,12 +40,14 @@ export default function ContoEconomicoPage() {
       .maybeSingle()
     const hasComputo = !!computo
     let budgetComputo = 0
+    let vociComputo: any[] = []
     if (computo) {
       const { data: voci } = await supabase
         .from('voci_computo')
-        .select('importo')
+        .select('importo, codice, wbs_id, quantita')
         .eq('computo_id', computo.id)
-      budgetComputo = (voci || []).reduce((s: number, v: any) => s + (Number(v.importo) || 0), 0)
+      vociComputo = voci || []
+      budgetComputo = vociComputo.reduce((s: number, v: any) => s + (Number(v.importo) || 0), 0)
     }
     // Fallback: se nessun computo importato, usa importo_contratto come riferimento budget
     if (!hasComputo) budgetComputo = ricavoContratto
@@ -76,6 +78,20 @@ export default function ContoEconomicoPage() {
     }
     const totalePiano = Object.values(pianoPerTipo).reduce((s, v) => s + v, 0)
 
+    // 5c. Analisi prezzi × quantità per WBS (client-side join)
+    const { data: analisiList } = await supabase.from('analisi_prezzi_tariffa').select('codice_tariffa, tipo, importo_unitario').eq('commessa_id', id)
+    const wbsAnalisiMap: Record<string, Record<string, number>> = {}
+    if (analisiList && vociComputo.length > 0) {
+      for (const voce of vociComputo) {
+        if (!voce.wbs_id) continue
+        const vAnalisi = (analisiList as any[]).filter((a: any) => a.codice_tariffa === voce.codice)
+        for (const a of vAnalisi) {
+          if (!wbsAnalisiMap[voce.wbs_id]) wbsAnalisiMap[voce.wbs_id] = {}
+          wbsAnalisiMap[voce.wbs_id][a.tipo] = (wbsAnalisiMap[voce.wbs_id][a.tipo] || 0) + voce.quantita * (a.importo_unitario || 0)
+        }
+      }
+    }
+
     // 5. Costi da fatture passive effettivamente pagate (consuntivo reale)
     const { data: fatture } = await supabase
       .from('fatture_passive')
@@ -96,7 +112,7 @@ export default function ContoEconomicoPage() {
     const { data: contSub } = await supabase.from('contratti_sub').select('importo_netto, stato').eq('commessa_id', id)
     const costiContrattiSub = (contSub || []).filter((c: any) => c.stato !== 'ANNULLATO').reduce((s: number, x: any) => s + (x.importo_netto || 0), 0)
 
-    setCe({ ricavoContratto, budgetComputo, hasComputo, ricaviEmessi, ricaviIncassati, costiOda, odaPerTipo, pianoPerTipo, totalePiano, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub })
+    setCe({ ricavoContratto, budgetComputo, hasComputo, ricaviEmessi, ricaviIncassati, costiOda, odaPerTipo, pianoPerTipo, totalePiano, wbsAnalisiMap, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub })
     setLoading(false)
   }
 
@@ -108,7 +124,7 @@ export default function ContoEconomicoPage() {
     </div>
   )
 
-  const { ricavoContratto, budgetComputo, hasComputo, ricaviEmessi, ricaviIncassati, costiOda, odaPerTipo, pianoPerTipo, totalePiano, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub } = ce
+  const { ricavoContratto, budgetComputo, hasComputo, ricaviEmessi, ricaviIncassati, costiOda, odaPerTipo, pianoPerTipo, totalePiano, wbsAnalisiMap, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub } = ce
   const totCostiImpegnati = costiOda + costiSpese + costiContrattiSub
   const margineAtteso  = ricavoContratto - totCostiImpegnati
   const margineAttuale = ricavoContratto - costiPagati
@@ -274,6 +290,53 @@ export default function ContoEconomicoPage() {
           </div>
         </div>
       )}
+
+      {/* Costi previsti per WBS da analisi prezzi */}
+      {wbsAnalisiMap && Object.keys(wbsAnalisiMap).length > 0 && (() => {
+        const TIPI_ANALISI_CE = [
+          { value: 'materiali',          label: 'Materiali',       color: '#3b82f6' },
+          { value: 'nolo_esterno',       label: 'Nolo esterno',    color: '#8b5cf6' },
+          { value: 'subappalto',         label: 'Subappalto',      color: '#f59e0b' },
+          { value: 'manodopera_esterna', label: 'Manod. esterna',  color: '#10b981' },
+          { value: 'manodopera_interna', label: 'Manod. impresa',  color: '#6b7280' },
+          { value: 'mezzi_interni',      label: 'Mezzi impresa',   color: '#64748b' },
+          { value: 'utile_impresa',      label: 'Utile impresa',   color: '#34d399' },
+        ]
+        const wbsEntries = Object.entries(wbsAnalisiMap).sort(([a], [b]) => a.localeCompare(b))
+        return (
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '16px 20px' }}>
+            <h3 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 14px', color: '#374151', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Costi previsti per WBS (da analisi prezzi)</h3>
+            {wbsEntries.map(([wbsId, tipiMap]) => {
+              const totWbs = Object.values(tipiMap).reduce((s, v) => s + v, 0)
+              const tipiPresenti = TIPI_ANALISI_CE.filter(t => (tipiMap[t.value] || 0) > 0.01)
+              return (
+                <div key={wbsId} style={{ marginBottom: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#7c3aed', fontFamily: 'monospace' }}>{wbsId}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>€ {fmt(totWbs)}</span>
+                  </div>
+                  {/* Barra stacked */}
+                  <div style={{ height: 10, background: '#f3f4f6', borderRadius: 5, overflow: 'hidden', display: 'flex' }}>
+                    {tipiPresenti.map(t => {
+                      const val = tipiMap[t.value] || 0
+                      const w = totWbs > 0 ? (val / totWbs) * 100 : 0
+                      return <div key={t.value} style={{ height: '100%', width: w + '%', background: t.color, transition: 'width 0.6s ease', minWidth: val > 0 ? 2 : 0 }} title={`${t.label}: € ${fmt(val)}`} />
+                    })}
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
+                    {tipiPresenti.map(t => (
+                      <span key={t.value} style={{ fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 3, color: '#6b7280' }}>
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: t.color, flexShrink: 0, display: 'inline-block' }} />
+                        {t.label} <span style={{ fontWeight: 600, color: '#374151' }}>€ {fmt(tipiMap[t.value])}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )
+      })()}
 
       {/* Avanzamento commessa */}
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '16px 20px' }}>
