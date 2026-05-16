@@ -40,19 +40,6 @@ interface VoceDB {
   wbs_id?: string; wbs_label?: string
 }
 interface RDADB { id: string; voci_ids?: string[]; stato?: string; tipo?: string; wbs_id?: string }
-interface PianoCostoVoce {
-  id: string; voce_computo_id: string; commessa_id: string; azienda_id?: string
-  tipo: string; descrizione: string; importo_previsto: number; stato: string
-  rda_id?: string; oda_id?: string
-}
-const TIPO_ODA_COLORS: Record<string, { color: string; label: string }> = {
-  materiali:   { color: '#3b82f6', label: 'Materiali' },
-  nolo_freddo: { color: '#8b5cf6', label: 'Nolo Freddo' },
-  nolo_caldo:  { color: '#7c3aed', label: 'Nolo Caldo' },
-  subappalto:  { color: '#f59e0b', label: 'Subappalto' },
-  manodopera:  { color: '#10b981', label: 'Manodopera' },
-  servizio:    { color: '#6b7280', label: 'Servizio' },
-}
 const TIPI_ANALISI = [
   { value: 'materiali',          label: 'Materiali',       color: '#3b82f6', rda: true  },
   { value: 'nolo_esterno',       label: 'Nolo esterno',    color: '#8b5cf6', rda: true  },
@@ -175,16 +162,6 @@ table.cmp-t td{padding:2px 3px;vertical-align:top;border-right:1px solid #e5e7eb
 
 .cmp-toast{position:fixed;bottom:20px;right:20px;background:#14532d;color:#fff;padding:10px 16px;border-radius:8px;font-size:11px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.2);z-index:1000;opacity:0;transition:opacity .3s;pointer-events:none}
 .cmp-toast.show{opacity:1}
-.cmp-piano-panel{background:#f0f9ff;border-top:2px solid #bae6fd}
-.cmp-piano-hdr{display:flex;align-items:center;gap:8px;padding:5px 14px;background:#e0f2fe;border-bottom:1px solid #bae6fd;font-size:11px;font-weight:700;color:#0369a1}
-.cmp-piano-t{width:100%;border-collapse:collapse;font-size:10px}
-.cmp-piano-t th{padding:3px 8px;background:#f1f5f9;color:#475569;font-weight:700;font-size:9px;text-transform:uppercase;border-bottom:1px solid #e2e8f0;text-align:left;letter-spacing:.04em}
-.cmp-piano-t td{padding:4px 8px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
-.cmp-piano-t tfoot td{padding:5px 8px;background:#f8fafc;border-top:1px solid #e2e8f0}
-.cmp-piano-form{display:flex;align-items:center;gap:6px;padding:6px 14px;border-top:1px solid #bae6fd;background:#fff;flex-wrap:wrap}
-.cmp-piano-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:1px;vertical-align:middle;flex-shrink:0}
-.cmp-piano-add{font-size:9px;color:#6b7280;cursor:pointer;padding:1px 5px;border-radius:2px;border:1px dashed #d1d5db;background:transparent;margin-left:4px;vertical-align:middle}
-.cmp-piano-add:hover{color:#0369a1;border-color:#0369a1;background:#f0f9ff}
 .cmp-analisi-panel{background:#fefce8;border-top:2px solid #fde68a}
 .cmp-analisi-hdr{display:flex;align-items:center;gap:8px;padding:5px 14px;background:#fef3c7;border-bottom:1px solid #fde68a;font-size:11px;font-weight:700;color:#92400e}
 .cmp-analisi-t{width:100%;border-collapse:collapse;font-size:10px}
@@ -242,8 +219,6 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
   const [toast, setToast] = useState('')
   const [wbsPicker, setWbsPicker] = useState<{ voceId: string; x: number; y: number } | null>(null)
   const [bulkWbsPicker, setBulkWbsPicker] = useState(false)
-  const [piani, setPiani] = useState<PianoCostoVoce[]>([])
-  const [pianoForm, setPianoForm] = useState<{ voceId: string; tipo: string; descrizione: string; importo: string } | null>(null)
   const [analisi, setAnalisi] = useState<AnalisiPrezzo[]>([])
   const [analisiEdit, setAnalisiEdit] = useState<Record<string, string>>({})
   const [analisiExtra, setAnalisiExtra] = useState<AnalisiExtraVoce[]>([])
@@ -290,18 +265,16 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
       if (!computo) { setCaricamento(false); return }
       setComputoId(computo.id)
 
-      const [{ data: v }, { data: rda }, { data: pianiData }, { data: analisiData }, { data: extraData }] = await Promise.all([
+      const [{ data: v }, { data: rda }, { data: analisiData }, { data: extraData }] = await Promise.all([
         supabase.from('voci_computo')
           .select('id,codice,descrizione,um,quantita,prezzo_unitario,importo,capitolo,categoria,note,wbs_id,wbs_label')
           .eq('computo_id', computo.id).order('capitolo').order('codice'),
         supabase.from('rda').select('id,wbs_id,stato,tipo').eq('commessa_id', id),
-        supabase.from('piano_costi_voce').select('*').eq('commessa_id', id),
         supabase.from('analisi_prezzi_tariffa').select('*').eq('commessa_id', id),
         supabase.from('analisi_extra_voce').select('*').eq('commessa_id', id),
       ])
       if (v) { setVoci(v); setTotale(v.reduce((s, x) => s + (x.importo || 0), 0)) }
       if (rda) setRdaList(rda as RDADB[])
-      if (pianiData) setPiani(pianiData as PianoCostoVoce[])
       if (analisiData) setAnalisi(analisiData as AnalisiPrezzo[])
       if (extraData) setAnalisiExtra(extraData as AnalisiExtraVoce[])
     } finally { setCaricamento(false) }
@@ -500,42 +473,6 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     }
     setRdaModal(null); setMultiSel(new Set()); await caricaDati()
     showToast(`⚡ ${created} RDA create`)
-  }
-
-  // ─── Piano costi voce ────────────────────────────────────────────────────
-
-  const aggiungiComponente = async () => {
-    if (!pianoForm || !pianoForm.descrizione.trim() || !pianoForm.importo) return
-    const aziendaId = await getAziendaId()
-    const { data } = await supabase.from('piano_costi_voce').insert({
-      voce_computo_id: pianoForm.voceId, commessa_id: id, azienda_id: aziendaId || null,
-      tipo: pianoForm.tipo, descrizione: pianoForm.descrizione.trim(),
-      importo_previsto: parseFloat(pianoForm.importo) || 0, stato: 'pianificato',
-    }).select().single()
-    if (data) setPiani(prev => [...prev, data as PianoCostoVoce])
-    setPianoForm(null)
-    showToast('✓ Componente aggiunto')
-  }
-
-  const eliminaComponente = async (pianoId: string) => {
-    await supabase.from('piano_costi_voce').delete().eq('id', pianoId)
-    setPiani(prev => prev.filter(p => p.id !== pianoId))
-    showToast('✓ Componente eliminato')
-  }
-
-  const generaRdaDaPiano = async (piano: PianoCostoVoce) => {
-    const aziendaId = await getAziendaId()
-    const codice = 'RDA-PC-' + Date.now().toString(36).toUpperCase()
-    const tipoRda = piano.tipo === 'materiali' ? 'MAT' : piano.tipo === 'manodopera' ? 'MAN' : piano.tipo === 'subappalto' ? 'SUB' : 'SRV'
-    const { data: rda } = await supabase.from('rda').insert({
-      commessa_id: id, azienda_id: aziendaId || null, codice, stato: 'bozza',
-      tipo: tipoRda, oggetto: piano.descrizione, qta_stimata: 1, um: 'nr',
-    }).select().single()
-    if (rda) {
-      await supabase.from('piano_costi_voce').update({ rda_id: rda.id }).eq('id', piano.id)
-      setPiani(prev => prev.map(p => p.id === piano.id ? { ...p, rda_id: rda.id } : p))
-      showToast('✓ RDA generata — vai al modulo RDA')
-    }
   }
 
   // ─── Duplica voce ────────────────────────────────────────────────────────
@@ -1005,21 +942,10 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                               {hasWBS ? `📐 ${v.wbs_id}` : '+ WBS'}
                             </span>
                             {(() => {
-                              const pv = piani.filter(p => p.voce_computo_id === v.id)
-                              if (pv.length === 0) return (
-                                <button className="cmp-piano-add" onClick={e => { e.stopPropagation(); setSel(v.id); setPianoForm({ voceId: v.id, tipo: 'materiali', descrizione: '', importo: '' }) }}>+ Piano costi</button>
-                              )
-                              return (
-                                <span style={{ display: 'inline-flex', gap: 2, alignItems: 'center', marginLeft: 5, verticalAlign: 'middle' }}>
-                                  {pv.map(p => <span key={p.id} className="cmp-piano-dot" style={{ background: TIPO_ODA_COLORS[p.tipo]?.color || '#9ca3af' }} title={TIPO_ODA_COLORS[p.tipo]?.label} />)}
-                                </span>
-                              )
-                            })()}
-                            {(() => {
                               const av = analisi.filter(a => a.codice_tariffa === v.codice)
                               const ex = analisiExtra.filter(e => e.voce_computo_id === v.id)
                               if (av.length === 0 && ex.length === 0) return (
-                                <button className="cmp-analisi-add-btn" onClick={e => { e.stopPropagation(); setSel(v.id) }}>+ Analisi</button>
+                                <button className="cmp-analisi-add-btn" onClick={e => { e.stopPropagation(); setSel(v.id) }}>→ Analisi</button>
                               )
                               const totBase = av.reduce((s, a) => s + (a.importo_unitario || 0), 0)
                               const totExtra = ex.reduce((s, e) => s + (e.importo_unitario || 0), 0)
@@ -1115,10 +1041,6 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                     if (row.type === 'som') {
                       const v = row.v
                       const isSel = sel === v.id
-                      const pianiVoce = piani.filter(p => p.voce_computo_id === v.id)
-                      const totalePiano = pianiVoce.reduce((s, p) => s + (p.importo_previsto || 0), 0)
-                      const delta = v.importo - totalePiano
-                      const showForm = pianoForm?.voceId === v.id
                       return (
                         <React.Fragment key={`som_${v.id}`}>
                           <tr className="cmp-rsom">
@@ -1139,6 +1061,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                             const codiciConAnalisi = [...new Set(analisi.filter(a => a.codice_tariffa !== v.codice).map(a => a.codice_tariffa))]
                             const baseExp = baseExpanded[v.codice] || false
                             const tipiInBase = new Set(av.map(a => a.tipo))
+                            const altreVoci = voci.filter(x => x.codice === v.codice && x.id !== v.id).length
                             return (
                               <tr>
                                 <td colSpan={14} style={{ padding: 0 }}>
@@ -1166,6 +1089,14 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                                         </span>
                                       )}
                                     </div>
+
+                                    {/* Banner propagazione automatica */}
+                                    {altreVoci > 0 && (
+                                      <div style={{ padding: '5px 14px', background: '#eff6ff', borderBottom: '1px solid #bfdbfe', fontSize: 10, color: '#1e40af', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <span>ℹ️</span>
+                                        <span>La base di questa tariffa si applica automaticamente a <strong>{altreVoci}</strong> {altreVoci === 1 ? 'altra voce' : 'altre voci'} con codice <strong>{v.codice}</strong> in questa commessa</span>
+                                      </div>
+                                    )}
 
                                     {/* SEZIONE BASE */}
                                     <div style={{ borderBottom: '1px solid #fde68a' }}>
@@ -1225,12 +1156,14 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                                                     </td>
                                                     <td style={{ textAlign: 'right' }}>
                                                       <input className="cmp-analisi-inp" value={iu}
+                                                        title={altreVoci > 0 ? `Aggiorna tutte le voci con codice ${v.codice}` : undefined}
                                                         onChange={e => setAnalisiEdit(prev => ({ ...prev, [keyIu]: e.target.value }))}
                                                         onBlur={() => aggiornaAnalisi(a, 'importo_unitario', iu, v.prezzo_unitario)}
                                                         onClick={e => e.stopPropagation()} />
                                                     </td>
                                                     <td style={{ textAlign: 'right' }}>
                                                       <input className="cmp-analisi-inp" value={pctV}
+                                                        title={altreVoci > 0 ? `Aggiorna tutte le voci con codice ${v.codice}` : undefined}
                                                         onChange={e => setAnalisiEdit(prev => ({ ...prev, [keyPct]: e.target.value }))}
                                                         onBlur={() => aggiornaAnalisi(a, 'percentuale', pctV, v.prezzo_unitario)}
                                                         onClick={e => e.stopPropagation()} />
@@ -1354,124 +1287,6 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                               </tr>
                             )
                           })()}
-                          {isSel && (
-                            <tr>
-                              <td colSpan={14} style={{ padding: 0, borderBottom: '2px solid #4ade80' }}>
-                                <div className="cmp-piano-panel" onClick={e => e.stopPropagation()}>
-                                  <div className="cmp-piano-hdr">
-                                    <span>PIANO COSTI — {v.codice}</span>
-                                    <span style={{ fontWeight: 400, fontSize: 10, color: '#0369a1', marginLeft: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 300 }}>{v.descrizione?.slice(0, 60)}</span>
-                                    <span style={{ marginLeft: 'auto', fontSize: 10, color: '#374151', fontWeight: 400, flexShrink: 0 }}>Budget voce: <strong>€ {fi(v.importo)}</strong></span>
-                                  </div>
-                                  {pianiVoce.length > 0 && (
-                                    <table className="cmp-piano-t">
-                                      <thead>
-                                        <tr>
-                                          <th style={{ width: 110 }}>Tipo</th>
-                                          <th>Descrizione</th>
-                                          <th style={{ width: 90, textAlign: 'right' }}>Previsto</th>
-                                          <th style={{ width: 90 }}>Stato</th>
-                                          <th style={{ width: 100 }}>Flusso</th>
-                                          <th style={{ width: 30 }} />
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {pianiVoce.map(p => {
-                                          const tc = TIPO_ODA_COLORS[p.tipo]
-                                          return (
-                                            <tr key={p.id}>
-                                              <td>
-                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 600, color: tc?.color }}>
-                                                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: tc?.color || '#9ca3af', flexShrink: 0 }} />
-                                                  {tc?.label || p.tipo}
-                                                </span>
-                                              </td>
-                                              <td style={{ fontSize: 10, color: '#374151' }}>{p.descrizione}</td>
-                                              <td style={{ fontSize: 10, fontFamily: 'monospace', textAlign: 'right', fontWeight: 600, color: '#111827' }}>€ {fi(p.importo_previsto)}</td>
-                                              <td>
-                                                <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 3, fontWeight: 600,
-                                                  background: p.stato === 'pianificato' ? '#f3f4f6' : p.stato === 'in_gara' ? '#eff6ff' : '#f0fdf4',
-                                                  color: p.stato === 'pianificato' ? '#6b7280' : p.stato === 'in_gara' ? '#1d4ed8' : '#065f46' }}>
-                                                  {p.stato === 'pianificato' ? 'Pianificato' : p.stato === 'in_gara' ? 'In gara' : p.stato === 'oda_emesso' ? 'ODA emesso' : p.stato}
-                                                </span>
-                                              </td>
-                                              <td style={{ fontSize: 10 }}>
-                                                {p.rda_id
-                                                  ? <span style={{ color: '#2563eb', cursor: 'pointer', fontSize: 9, fontWeight: 600 }} onClick={() => { window.location.href = '../rda' }}>→ RDA</span>
-                                                  : <button onClick={async () => { await generaRdaDaPiano(p) }}
-                                                      style={{ fontSize: 9, padding: '1px 7px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                                                      📝 Genera RDA
-                                                    </button>
-                                                }
-                                                {p.oda_id && <span style={{ color: '#7c3aed', cursor: 'pointer', fontSize: 9, fontWeight: 600, marginLeft: 6 }} onClick={() => { window.location.href = '../oda' }}>→ ODA</span>}
-                                              </td>
-                                              <td style={{ textAlign: 'center' }}>
-                                                <button onClick={async () => { await eliminaComponente(p.id) }}
-                                                  style={{ fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: '0 4px', lineHeight: 1 }}>
-                                                  🗑
-                                                </button>
-                                              </td>
-                                            </tr>
-                                          )
-                                        })}
-                                      </tbody>
-                                      <tfoot>
-                                        <tr>
-                                          <td colSpan={2} style={{ fontWeight: 700, fontSize: 10 }}>TOTALE PIANO</td>
-                                          <td style={{ fontFamily: 'monospace', textAlign: 'right', fontWeight: 700, fontSize: 10 }}>€ {fi(totalePiano)}</td>
-                                          <td colSpan={3}>
-                                            {Math.abs(delta) < 0.01
-                                              ? <span style={{ fontSize: 9, color: '#059669', fontWeight: 700 }}>✅ Copre il budget</span>
-                                              : delta > 0
-                                              ? <span style={{ fontSize: 9, color: '#d97706', fontWeight: 700 }}>⚠ Manca € {fi(delta)}</span>
-                                              : <span style={{ fontSize: 9, color: '#dc2626', fontWeight: 700 }}>⛔ Supera di € {fi(-delta)}</span>}
-                                          </td>
-                                        </tr>
-                                      </tfoot>
-                                    </table>
-                                  )}
-                                  {pianiVoce.length === 0 && !showForm && (
-                                    <div style={{ padding: '8px 14px', fontSize: 10, color: '#6b7280', fontStyle: 'italic' }}>
-                                      Nessun componente pianificato — clicca "+ Aggiungi" per iniziare
-                                    </div>
-                                  )}
-                                  {showForm ? (
-                                    <div className="cmp-piano-form">
-                                      <select value={pianoForm!.tipo} onChange={e => setPianoForm(f => f ? { ...f, tipo: e.target.value } : f)}
-                                        style={{ fontSize: 10, border: '1px solid #d1d5db', borderRadius: 4, padding: '3px 6px', background: '#fff' }}>
-                                        {Object.entries(TIPO_ODA_COLORS).map(([k, tc]) => (
-                                          <option key={k} value={k}>{tc.label}</option>
-                                        ))}
-                                      </select>
-                                      <input value={pianoForm!.descrizione}
-                                        onChange={e => setPianoForm(f => f ? { ...f, descrizione: e.target.value } : f)}
-                                        placeholder="Descrizione componente (es. Laterizi e cls strutturale)"
-                                        style={{ flex: 1, minWidth: 180, fontSize: 10, border: '1px solid #d1d5db', borderRadius: 4, padding: '3px 8px' }} />
-                                      <input type="number" step="0.01" value={pianoForm!.importo}
-                                        onChange={e => setPianoForm(f => f ? { ...f, importo: e.target.value } : f)}
-                                        placeholder="€ previsti"
-                                        style={{ width: 100, fontSize: 10, border: '1px solid #d1d5db', borderRadius: 4, padding: '3px 8px', textAlign: 'right' }} />
-                                      <button onClick={aggiungiComponente}
-                                        style={{ fontSize: 10, padding: '3px 12px', background: '#0369a1', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
-                                        Salva
-                                      </button>
-                                      <button onClick={() => setPianoForm(null)}
-                                        style={{ fontSize: 10, padding: '3px 8px', background: 'none', border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer', color: '#6b7280' }}>
-                                        Annulla
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <div style={{ padding: '5px 14px', borderTop: pianiVoce.length > 0 ? '1px solid #bae6fd' : 'none' }}>
-                                      <button onClick={() => setPianoForm({ voceId: v.id, tipo: 'materiali', descrizione: '', importo: '' })}
-                                        style={{ fontSize: 10, padding: '3px 10px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
-                                        + Aggiungi componente
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          )}
                         </React.Fragment>
                       )
                     }
