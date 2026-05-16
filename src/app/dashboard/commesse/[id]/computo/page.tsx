@@ -106,9 +106,9 @@ col.cc2{width:34px}col.cc3{width:96px}col.cc4{width:auto}
 col.cc5,col.cc6,col.cc7,col.cc8{width:52px}
 col.cc9{width:66px}col.cc10{width:68px}col.cc11{width:82px}
 col.cc12,col.cc13,col.cc14{width:36px}col.cc15{width:44px}
-table.cmp-t th{padding:3px;font-size:10px;font-weight:700;background:#4ade80;color:#14532d;border-right:1px solid #16a34a;text-align:center;white-space:nowrap;position:sticky;top:0;z-index:10}
+table.cmp-t thead{position:sticky;top:0;z-index:10;background:#4ade80}
+table.cmp-t th{padding:3px;font-size:10px;font-weight:700;background:#4ade80;color:#14532d;border-right:1px solid #16a34a;text-align:center;white-space:nowrap}
 table.cmp-t th.thl{text-align:left;padding-left:6px}
-table.cmp-t th.th2{top:23px}
 table.cmp-t td{padding:2px 3px;vertical-align:top;border-right:1px solid #e5e7eb;border-bottom:1px solid #f3f4f6}
 .cmp-hsc td{background:#1e5631;padding:4px 10px;font-weight:700;font-size:11px;color:#fff;letter-spacing:.4px;border-bottom:2px solid #4ade80}
 .cmp-hca td{background:#166534;padding:3px 10px 3px 20px;font-weight:600;font-size:11px;color:#d1fae5}
