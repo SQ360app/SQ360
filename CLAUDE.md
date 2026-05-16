@@ -134,9 +134,32 @@
 - ✅ Tabella mapping voce RDA ↔ voce estratta con % somiglianza (verde >70%, arancio >40%)
 - ✅ "✓ Conferma importazione" → salva `offerta_voci` (JSON), `importo_offerta`, `stato=risposta_ricevuta`, `data_risposta` sulla RDO
 
+### Sprint 3 — SAL completo (commit ec2d897 → bb35092)
+
+#### SAL Attivi — verso committente (ec2d897)
+- ✅ `sal-attivi/page.tsx` riscritto — legge da tabella `sal` (nuova), scrive in `sal_voci`
+- ✅ Lista SAL: N°, Codice, Data, Metodo, Certificato, Cumulativo, Netto, Ritenuta, Stato, bottone Fattura
+- ✅ Workflow nuovo SAL in 2 step: **Form** (data, radio Manuale/XPWE, note) → **Griglia voci** o **Import XPWE**
+- ✅ Griglia voci manuale: capitoli raggruppati, colonne Qtà contratto / Qtà SAL precedenti (SUM sal_voci) / input Qtà questo SAL / Qtà totale / % completamento / PU / Importo periodo
+- ✅ Quadro economico live: Importo periodo / Cumulativo precedente / Cumulativo totale / Ritenuta 5% / Netto da pagare
+- ✅ Bottone "📄 Genera fattura attiva" → redirect fatturazione con importo pre-compilato
+- ✅ Import XPWE dalla DL: upload → `/api/xpwe-parse-sal` → preview match/non-match → conferma → salva `sal_voci`
+- ✅ `/api/xpwe-parse-sal/route.ts`: parsing XPWE, match per codice tariffa su `voci_computo`, restituisce mapping con `voce_computo_id`
+- ✅ Annulla SAL in bozza: elimina record `sal` + `sal_voci` collegati
+
+#### SAL Passivi — verso subappaltatori (bb35092)
+- ✅ `sal-passivi/page.tsx` riscritto — legge da `contratti_sub` JOIN `professionisti_fornitori` + tabella `sal_passivi`
+- ✅ Card per ogni contratto sub attivo: nome fornitore, badge DURC (verde/rosso con giorni), barra avanzamento %, netto emesso
+- ✅ Accordion con lista SAL per contratto: N°, Date, % avanzamento, Lordo periodo, Ritenuta, Netto, DURC, Stato, Azioni
+- ✅ Modal nuovo SAL: slider + input % avanzamento (deduce già certificato dai SAL precedenti), ritenuta % (default 5%), calcolo live importo periodo
+- ✅ Flusso stati: `ricevuto` → 🔍 Verifica → `in_verifica` → 🔒 Autorizza → `autorizzato` → € Pagato
+- ✅ "Autorizza" bloccato se DURC non valido; DURC controllato su `professionisti_fornitori.durc_scadenza`
+- ✅ Fix: `from('fornitori')` → `from('professionisti_fornitori')`, rimosso `useParams`, ora usa `use(p)` pattern
+
 ## Prossimi task prioritari
-1. **Test flusso register→login** — test end-to-end registrazione → conferma email → primo accesso
-2. **Verifica dominio Resend** — verificare `sq360.app` su Resend → Domains per mittente ufficiale
+1. **Sprint 4** — da definire
+2. **Test flusso register→login** — test end-to-end registrazione → conferma email → primo accesso
+3. **Verifica dominio Resend** — verificare `sq360.app` su Resend → Domains per mittente ufficiale
 
 ## Email notifiche (Resend) — stato configurazione
 - `RESEND_API_KEY`: configurato in produzione ✅
@@ -165,6 +188,8 @@
 18. ~~RDO wizard multi-fornitore da RDA + pagina pubblica /offerta/[token]~~ ✅
 19. ~~Comparativa automatica RDO per gruppo gara con tabella e aggiudicazione~~ ✅
 20. ~~Upload PDF preventivo + AI Gemini estrazione voci offerta~~ ✅
+21. ~~SAL Attivi: griglia voci manuale + import XPWE DL + quadro economico~~ ✅
+22. ~~SAL Passivi: card sub, slider avanzamento, DURC check, autorizzazione pagamento~~ ✅
 
 ## Note implementazione
 - `getAziendaId()` in `src/lib/supabase.ts` — helper condiviso: `auth.uid() → utenti.azienda_id`
