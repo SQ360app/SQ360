@@ -43,12 +43,14 @@ interface FiguraProfessionale {
 
 interface CommessaDati {
   id: string; codice: string; nome: string
-  committente: string; tipo_committente: string
-  cig: string; cup: string
+  committente: string; committente_piva: string; tipo_committente: string
+  cig: string; cup: string; tipo_commessa: string
   importo_contrattuale: number; ribasso_pct: number; oneri_sicurezza: number
   sicurezza_interna_esclusa_ribasso: boolean
-  data_inizio: string; data_fine_prev: string
-  stato: string; indirizzo_cantiere: string; azienda_id: string
+  data_inizio: string; data_fine_prev: string; data_proroga: string
+  stato: string
+  indirizzo_cantiere: string; cap_cantiere: string; comune_cantiere: string; provincia: string
+  note: string; lat?: number; lng?: number; azienda_id: string
 }
 
 // ─── Tutte le figure professionali ────────────────────────────────────────────
@@ -446,15 +448,45 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
     setSalvando(true); setErrore('')
     try {
       const { error: e1 } = await supabase.from('commesse').update({
-        cig: commessa.cig, cup: commessa.cup, committente: commessa.committente,
+        cig: commessa.cig, cup: commessa.cup,
+        committente: commessa.committente,
+        committente_piva: commessa.committente_piva || null,
         tipo_committente: commessa.tipo_committente,
+        tipo_commessa: commessa.tipo_commessa || null,
         importo_contrattuale: commessa.importo_contrattuale,
         ribasso_pct: commessa.ribasso_pct, oneri_sicurezza: commessa.oneri_sicurezza,
         sicurezza_interna_esclusa_ribasso: commessa.sicurezza_interna_esclusa_ribasso,
         data_inizio: commessa.data_inizio, data_fine_prev: commessa.data_fine_prev,
+        data_proroga: commessa.data_proroga || null,
         indirizzo_cantiere: commessa.indirizzo_cantiere,
+        cap_cantiere: commessa.cap_cantiere || null,
+        comune_cantiere: commessa.comune_cantiere || null,
+        provincia: commessa.provincia || null,
+        note: commessa.note || null,
       }).eq('id', id)
       if (e1) throw e1
+
+      // Geocodifica Nominatim (fire-and-forget, non bloccante)
+      if (commessa.comune_cantiere || commessa.indirizzo_cantiere) {
+        try {
+          const geoParams = new URLSearchParams({
+            street: commessa.indirizzo_cantiere || '',
+            city: commessa.comune_cantiere || '',
+            postalcode: commessa.cap_cantiere || '',
+            country: 'Italy', format: 'json', limit: '1'
+          })
+          const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?${geoParams}`, {
+            headers: { 'User-Agent': 'SQ360/1.0 info.sq360@gmail.com' }
+          })
+          const geoData = await geoRes.json()
+          if (geoData?.[0]?.lat) {
+            await supabase.from('commesse').update({
+              lat: parseFloat(geoData[0].lat),
+              lng: parseFloat(geoData[0].lon)
+            }).eq('id', id)
+          }
+        } catch { /* geocodifica non bloccante */ }
+      }
 
       await supabase.from('commessa_figure').delete().eq('commessa_id', id)
       const ins = Object.entries(figure).filter(([,v]) => v.professionista_id)
@@ -548,9 +580,26 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
                 : <p style={S.valueMono}>{commessa.cup || '—'}</p>}
               </div>
               <div style={{ gridColumn: 'span 2' }}>
-                <label style={S.label}>Committente</label>
-                {editDati ? <input style={inpEdit} value={commessa.committente || ''} onChange={e => fc('committente', e.target.value)} />
+                <label style={S.label}>Tipo commessa</label>
+                {editDati ? (
+                  <select style={{ ...inpEdit, cursor: 'pointer' }} value={commessa.tipo_commessa || ''} onChange={e => fc('tipo_commessa', e.target.value)}>
+                    <option value="">— Seleziona —</option>
+                    <option value="pubblica">🏛 Pubblica</option>
+                    <option value="privata">🏠 Privata</option>
+                  </select>
+                ) : (
+                  <p style={S.value}>{commessa.tipo_commessa === 'pubblica' ? '🏛 Pubblica' : commessa.tipo_commessa === 'privata' ? '🏠 Privata' : '—'}</p>
+                )}
+              </div>
+              <div style={{ gridColumn: 'span 3' }}>
+                <label style={S.label}>Committente / Stazione appaltante</label>
+                {editDati ? <input style={inpEdit} value={commessa.committente || ''} onChange={e => fc('committente', e.target.value)} placeholder="Nome ente o privato" />
                 : <p style={S.value}>{commessa.committente || '—'}</p>}
+              </div>
+              <div>
+                <label style={S.label}>P.IVA committente</label>
+                {editDati ? <input style={inpEdit} value={commessa.committente_piva || ''} onChange={e => fc('committente_piva', e.target.value)} placeholder="IT00000000000" />
+                : <p style={S.valueMono}>{commessa.committente_piva || '—'}</p>}
               </div>
               <div>
                 <label style={S.label}><Euro size={10} style={{ display: 'inline', marginRight: 3 }} />Importo contrattuale</label>
@@ -567,6 +616,7 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
                 {editDati ? <input style={inpEdit} type="number" value={commessa.oneri_sicurezza || ''} onChange={e => fc('oneri_sicurezza', parseFloat(e.target.value))} />
                 : <p style={S.value}>€ {(commessa.oneri_sicurezza || 0).toLocaleString('it-IT')}</p>}
               </div>
+              <div /> {/* spacer */}
               <div>
                 <label style={S.label}><Calendar size={10} style={{ display: 'inline', marginRight: 3 }} />Inizio lavori</label>
                 {editDati ? <input style={inpEdit} type="date" value={commessa.data_inizio || ''} onChange={e => fc('data_inizio', e.target.value)} />
@@ -577,11 +627,49 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
                 {editDati ? <input style={inpEdit} type="date" value={commessa.data_fine_prev || ''} onChange={e => fc('data_fine_prev', e.target.value)} />
                 : <p style={S.value}>{commessa.data_fine_prev ? new Date(commessa.data_fine_prev).toLocaleDateString('it-IT') : '—'}</p>}
               </div>
+              <div>
+                <label style={S.label}>Proroga al</label>
+                {editDati ? <input style={inpEdit} type="date" value={commessa.data_proroga || ''} onChange={e => fc('data_proroga', e.target.value)} />
+                : <p style={{ ...S.value, color: commessa.data_proroga ? 'var(--warning)' : 'var(--t4)' }}>{commessa.data_proroga ? new Date(commessa.data_proroga).toLocaleDateString('it-IT') : '—'}</p>}
+              </div>
+              <div /> {/* spacer */}
               <div style={{ gridColumn: 'span 2' }}>
-                <label style={S.label}><MapPin size={10} style={{ display: 'inline', marginRight: 3 }} />Indirizzo cantiere</label>
-                {editDati ? <input style={inpEdit} value={commessa.indirizzo_cantiere || ''} onChange={e => fc('indirizzo_cantiere', e.target.value)} />
+                <label style={S.label}><MapPin size={10} style={{ display: 'inline', marginRight: 3 }} />Via / Indirizzo cantiere</label>
+                {editDati ? <input style={inpEdit} value={commessa.indirizzo_cantiere || ''} onChange={e => fc('indirizzo_cantiere', e.target.value)} placeholder="Via Roma, 1" />
                 : <p style={S.value}>{commessa.indirizzo_cantiere || '—'}</p>}
               </div>
+              <div>
+                <label style={S.label}>CAP</label>
+                {editDati ? <input style={inpEdit} maxLength={5} value={commessa.cap_cantiere || ''} onChange={e => fc('cap_cantiere', e.target.value)} placeholder="80100" />
+                : <p style={S.valueMono}>{commessa.cap_cantiere || '—'}</p>}
+              </div>
+              <div>
+                <label style={S.label}>Comune</label>
+                {editDati ? <input style={inpEdit} value={commessa.comune_cantiere || ''} onChange={e => fc('comune_cantiere', e.target.value)} placeholder="Napoli" />
+                : <p style={S.value}>{commessa.comune_cantiere || '—'}</p>}
+              </div>
+              <div>
+                <label style={S.label}>Provincia</label>
+                {editDati ? <input style={inpEdit} maxLength={2} value={commessa.provincia || ''} onChange={e => fc('provincia', e.target.value.toUpperCase())} placeholder="NA" />
+                : <p style={S.valueMono}>{commessa.provincia || '—'}</p>}
+              </div>
+            </div>
+
+            {/* Note generali */}
+            <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+              <label style={S.label}>Note generali</label>
+              {editDati ? (
+                <textarea
+                  style={{ ...inpEdit, resize: 'vertical' as const, minHeight: 72, fontFamily: 'inherit', lineHeight: 1.5 }}
+                  value={commessa.note || ''}
+                  onChange={e => fc('note', e.target.value)}
+                  placeholder="Note, vincoli, riferimenti contratto, comunicazioni importanti..."
+                />
+              ) : (
+                <p style={{ ...S.value, whiteSpace: 'pre-wrap', color: commessa.note ? 'var(--t1)' : 'var(--t4)', fontStyle: commessa.note ? 'normal' : 'italic' }}>
+                  {commessa.note || 'Nessuna nota'}
+                </p>
+              )}
             </div>
 
             {/* Sicurezza Strato 3 */}
