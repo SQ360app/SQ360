@@ -66,6 +66,9 @@ const CSS = `
 .cmp-sfs{font-size:9px;color:#6ee7b7;margin-top:2px}
 .cmp-resizer{width:5px;background:transparent;cursor:col-resize;flex-shrink:0;transition:background .15s}
 .cmp-resizer:hover,.cmp-resizer.active{background:rgba(74,222,128,.6)}
+.cmp-rvo{cursor:pointer}
+.cmp-rvo:hover td{background:#d1fae5}
+.cmp-rvo.active td{background:#bfdbfe}
 .cmp-cat-tb{display:flex;align-items:center;gap:5px;padding:4px 6px;background:#f0fdf4;border-bottom:1px solid #bbf7d0;flex-shrink:0}
 .cmp-cat-all{font-size:10px;padding:2px 9px;border:none;border-radius:3px;cursor:pointer;font-weight:700;background:#4ade80;color:#14532d}
 .cmp-cat-info{font-size:9px;color:#065f46;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -108,7 +111,7 @@ table.cmp-t td{padding:2px 4px;vertical-align:middle;border-right:1px solid #e5e
 .cmp-hca td{background:#166534;padding:3px 10px 3px 20px;font-weight:600;font-size:11px;color:#d1fae5}
 .cmp-wbadge{display:inline-block;font-size:8px;padding:1px 4px;border-radius:2px;margin-left:4px;font-weight:700;border:1px solid}
 .cmp-wbadge.set{background:#dbeafe;color:#1e40af;border-color:#93c5fd}
-.cmp-wbadge.unset{background:#f1f5f9;color:#94a3b8;border-color:#e2e8f0}
+.cmp-wbadge.unset{background:#fef3c7;color:#92400e;border-color:#fcd34d}
 .cmp-wbs-pi{padding:5px 8px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:6px;border-bottom:1px solid rgba(0,0,0,.05)}
 .cmp-wbs-pi:hover{background:#f0fdf4}
 .cmp-wbs-pi .wbs-code{font-family:monospace;font-size:9px;color:#6b7280;width:48px;flex-shrink:0}
@@ -137,7 +140,7 @@ export default function SalInserimento({
 
   const [stab, setStab]       = useState<'cat' | 'wbs'>('cat')
   const [sbHidden, setSbHidden] = useState(false)
-  const [sbWidth, setSbWidth]   = useState(260)
+  const [sbWidth, setSbWidth]   = useState(270)
   const [catFilter, setCatFilter] = useState<{ sc: string | null; c: string | null }>({ sc: null, c: null })
   const [catExp, setCatExp]     = useState<Record<string, boolean>>({})
   const [wbsExp, setWbsExp]     = useState<Record<string, boolean>>({})
@@ -248,7 +251,7 @@ export default function SalInserimento({
     <>
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <style>{`table.cmp-t tbody td { font-size: ${fontSize}px !important; }`}</style>
-      <div className="cmp-root" style={{ height: 'calc(100vh - 145px)' }}>
+      <div className="cmp-root" style={{ height: 'calc(100vh - 260px)' }}>
 
         {/* SIDEBAR */}
         {!sbHidden && (
@@ -430,7 +433,7 @@ export default function SalInserimento({
                       const pColor  = pctColor(pctTot)
                       const hasWBS  = !!v.wbs_id
                       return (
-                        <tr key={v.id} className={`${qtCorr > 0 ? 'sal-row-act' : ''}${isSoppressione ? ' sal-row-sup' : ''}`}>
+                        <tr key={v.id} className={`cmp-rvo${qtCorr > 0 ? ' sal-row-act' : ''}${isSoppressione ? ' sal-row-sup' : ''}`}>
                           <td style={{ textAlign: 'center', fontWeight: 700 }}>{idx}</td>
                           <td style={{ color: '#1d4ed8', fontFamily: 'monospace', fontSize: 10 }}>{v.codice}</td>
                           <td style={{ maxWidth: 0 }}>
