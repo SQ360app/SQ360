@@ -872,7 +872,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
             </select>
             <button onClick={async () => {
               const n = (salList.length ? Math.max(...salList.map((s: any) => s.numero)) : 0) + 1
-              const { data } = await supabase.from('sal').insert({ commessa_id: id, azienda_id: await getAziendaId(), numero: n, data_emissione: new Date().toISOString().split('T')[0], stato: 'bozza', importo_certificato: 0, ritenuta_garanzia: 0, importo_netto: 0 }).select().single()
+              const { data } = await supabase.from('sal').insert({ commessa_id: id, azienda_id: await getAziendaId(), numero: n, codice: `SAL-A-${String(n).padStart(3,'0')}`, data_emissione: new Date().toISOString().split('T')[0], metodo: 'manuale', stato: 'bozza', importo_certificato: 0, importo_cumulativo: 0, ritenuta_garanzia: 0, importo_netto: 0 }).select().single()
               if (data) { setSalList((p: any) => [...p, data]); setSalSel(data); setQtInput({}) }
             }} style={{ padding: '4px 12px', background: 'rgba(79,142,247,.2)', border: '1px solid rgba(79,142,247,.3)', borderRadius: 6, color: '#7baff8', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>+ Nuovo SAL</button>
             {salSel && <button onClick={async () => {
@@ -884,6 +884,29 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
               Object.entries(qtInput).forEach(([vid, q]) => { nuovoCumul[vid] = (nuovoCumul[vid] || 0) + q })
               setQtCumul(nuovoCumul)
               setQtPerSal((p: any) => ({ ...p, [salSel.id]: qtInput }))
+              const importoPeriodo = Object.entries(qtInput).reduce((sum, [vid, q]) => {
+                const voce = voci.find((x: any) => x.id === vid)
+                return sum + (q * (voce?.prezzo_unitario || 0))
+              }, 0)
+              const ritenuta = importoPeriodo * 0.05
+              const cumulPrev = Object.entries(qtPerSal)
+                .filter(([sid]) => sid !== salSel.id)
+                .reduce((sum, [, perVoce]) =>
+                  sum + Object.entries(perVoce).reduce((s, [vid, q]) => {
+                    const voce = voci.find((x: any) => x.id === vid)
+                    return s + (q as number) * (voce?.prezzo_unitario || 0)
+                  }, 0)
+                , 0)
+              await supabase.from('sal').update({
+                importo_certificato: importoPeriodo,
+                importo_cumulativo: cumulPrev + importoPeriodo,
+                ritenuta_garanzia: ritenuta,
+                importo_netto: importoPeriodo - ritenuta,
+                stato: 'emesso',
+              }).eq('id', salSel.id)
+              setSalList((p: any) => p.map((s: any) =>
+                s.id === salSel.id ? { ...s, importo_certificato: importoPeriodo, stato: 'emesso' } : s
+              ))
               showToast('✓ SAL salvato')
             }} style={{ padding: '4px 12px', background: 'rgba(52,211,153,.2)', border: '1px solid rgba(52,211,153,.3)', borderRadius: 6, color: '#34d399', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>💾 Salva SAL</button>}
           </div>
@@ -955,7 +978,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
                     <th colSpan={4}>DIMENSIONI</th>
                     <th rowSpan={2}>Quantità</th>
                     <th colSpan={2}>IMPORTI</th>
-                    <th colSpan={4} style={{ background: '#1e3a5f', color: '#93c5fd' }}>FLUSSO</th>
+                    <th colSpan={salList.filter((s: any) => s.id !== salSel?.id).length + 3} style={{ background: '#1e3a5f', color: '#93c5fd' }}>SAL PERIODO</th>
                   </tr>
                   <tr>
                     {['par.ug.', 'lung.', 'larg.', 'H/peso'].map(t => <th key={t} className="th2">{t}</th>)}
