@@ -849,18 +849,19 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
           {/* TOOLBAR */}
           <div className="cmp-tbar">
             {sbHidden && <button className="cmp-tbtn green" onClick={() => setSbHidden(false)}>▶</button>}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
+            <div style={{ flex: '0 1 auto', display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, overflow: 'hidden' }}>
               {wbsSel ? (
                 <><span style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed' }}>📐 {wbsSel} {WBS_MAP[wbsSel]}</span>
                   <button style={{ fontSize: 9, padding: '1px 6px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }} onClick={() => setWbsSel(null)}>✕</button></>
               ) : catFilter.sc ? (
                 <><span style={{ fontWeight: 700, color: '#14532d', fontSize: 11 }}>{catFilter.sc}</span>
                   <button style={{ fontSize: 9, padding: '1px 6px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }} onClick={() => setCatFilter({ sc: null, c: null })}>✕</button></>
-              ) : <span style={{ fontSize: 10, color: '#9ca3af' }}>Tutto il computo · click riga per selezionare · Ctrl+click multipla · Shift+click range</span>}
+              ) : <span style={{ fontSize: 10, color: '#9ca3af', whiteSpace: 'nowrap' }}>SAL Attivi · seleziona voce per il dettaglio</span>}
             </div>
             <button className="cmp-tbtn" style={{ fontSize: 11, padding: '3px 8px', opacity: fontSize <= 9 ? 0.4 : 1 }} onClick={() => changeFontSize(-1)} disabled={fontSize <= 9} title="Riduci testo">A-</button>
             <span style={{ fontSize: 10, color: '#6b7280', minWidth: 26, textAlign: 'center' }}>{fontSize}px</span>
             <button className="cmp-tbtn" style={{ fontSize: 12, padding: '3px 8px', opacity: fontSize >= 13 ? 0.4 : 1 }} onClick={() => changeFontSize(1)} disabled={fontSize >= 13} title="Aumenta testo">A+</button>
+            <div style={{ marginLeft: 'auto', position: 'relative', zIndex: 10, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
             <select value={salSel?.id || ''} onChange={e => {
               const s = salList.find((x: any) => x.id === e.target.value) || null
               setSalSel(s)
@@ -909,6 +910,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
               ))
               showToast('✓ SAL salvato')
             }} style={{ padding: '4px 12px', background: 'rgba(52,211,153,.2)', border: '1px solid rgba(52,211,153,.3)', borderRadius: 6, color: '#34d399', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>💾 Salva SAL</button>}
+            </div>
           </div>
 
           {/* IMPORT RESULT */}
@@ -965,10 +967,12 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
             <div className="cmp-tscroll" onClick={() => setCtx(null)}>
               <table className="cmp-t">
                 <colgroup>
-                  <col className="cc2" /><col className="cc3" /><col className="cc4" />
-                  <col className="cc5" /><col className="cc6" /><col className="cc7" /><col className="cc8" />
-                  <col className="cc9" /><col className="cc10" /><col className="cc11" />
-                  <col className="cc12" /><col className="cc13" /><col className="cc14" /><col className="cc15" />
+                  <col style={{ width: 30 }} /><col style={{ width: 80 }} /><col />
+                  <col style={{ width: 40 }} /><col style={{ width: 40 }} /><col style={{ width: 40 }} /><col style={{ width: 40 }} />
+                  <col style={{ width: 65 }} />
+                  <col style={{ width: 65 }} /><col style={{ width: 65 }} />
+                  {salList.filter((s: any) => s.id !== salSel?.id).map((s: any) => <col key={s.id} style={{ width: 60 }} />)}
+                  <col style={{ width: 60 }} /><col style={{ width: 75 }} /><col style={{ width: 65 }} />
                 </colgroup>
                 <thead>
                   <tr>
