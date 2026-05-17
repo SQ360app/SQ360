@@ -23,10 +23,14 @@ interface SAL {
   numero: number; codice: string; data_emissione: string; metodo?: string
   importo_certificato: number; importo_cumulativo?: number
   ritenuta_garanzia: number; importo_netto: number; stato: string; note?: string
+  pdf_dl_url?: string; pdf_certificato_url?: string
 }
 interface VoceComputo {
   id: string; codice: string; descrizione: string; um: string
   quantita: number; prezzo_unitario: number; importo: number; capitolo: string
+  wbs_id?: string
+  _isVariante?: boolean; _varianteNumero?: number
+  _tipoModifica?: 'aggiunta' | 'modifica_quantita' | 'soppressione'
 }
 interface Commessa { id: string; nome: string; importo_contrattuale: number }
 
@@ -63,6 +67,7 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
 
   const [saving, setSaving] = useState(false)
   const [toast, setToast]   = useState('')
+  const [pdfDlFile, setPdfDlFile] = useState<File | null>(null)
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
@@ -79,20 +84,26 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
 
   useEffect(() => { carica() }, [carica])
 
-  const caricaVociGrid = async (salIdEsclude?: string) => {
+  const caricaVociGrid = async (salIdEsclude?: string, preloadSalId?: string) => {
     setVociLoading(true)
     const { data: computo } = await supabase.from('computo_metrico').select('id').eq('commessa_id', id).single()
     if (!computo) { setVociLoading(false); return }
 
     const salIds = salList.map(s => s.id).filter(sid => sid !== salIdEsclude)
 
-    const [{ data: voci }, { data: salVociPrec }] = await Promise.all([
+    const [{ data: voci }, { data: salVociPrec }, { data: vociVarRaw }, preloadRes] = await Promise.all([
       supabase.from('voci_computo')
-        .select('id,codice,descrizione,um,quantita,prezzo_unitario,importo,capitolo')
+        .select('id,codice,descrizione,um,quantita,prezzo_unitario,importo,capitolo,wbs_id')
         .eq('computo_id', computo.id)
         .order('capitolo').order('codice'),
       salIds.length > 0
         ? supabase.from('sal_voci').select('voce_computo_id,quantita_periodo').in('sal_id', salIds)
+        : Promise.resolve({ data: [] }),
+      supabase.from('voci_variante')
+        .select('id,codice,descrizione,um,quantita,prezzo_unitario,importo,tipo_modifica,variante:varianti(numero,stato)')
+        .eq('commessa_id', id),
+      preloadSalId
+        ? supabase.from('sal_voci').select('voce_computo_id,quantita_periodo').eq('sal_id', preloadSalId)
         : Promise.resolve({ data: [] })
     ])
 
@@ -100,12 +111,58 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
     for (const sv of (salVociPrec || [])) {
       qtPrec[sv.voce_computo_id] = (qtPrec[sv.voce_computo_id] || 0) + (sv.quantita_periodo || 0)
     }
-    setVociComputo((voci as VoceComputo[]) || [])
+
+    const vociEsecutive: VoceComputo[] = ((vociVarRaw || []) as any[])
+      .filter(v => (v.variante as any)?.stato === 'esecutiva')
+      .map(v => ({
+        id: v.id, codice: v.codice, descrizione: v.descrizione, um: v.um,
+        quantita: v.quantita, prezzo_unitario: v.prezzo_unitario, importo: v.importo,
+        capitolo: `Variante n.${(v.variante as any)?.numero ?? '?'}`,
+        _isVariante: true,
+        _varianteNumero: (v.variante as any)?.numero,
+        _tipoModifica: v.tipo_modifica,
+      }))
+
+    const tutteVoci = [...(voci as VoceComputo[] || []), ...vociEsecutive]
+    setVociComputo(tutteVoci)
     setQtPrecedente(qtPrec)
+
     const init: Record<string, string> = {}
-    for (const v of (voci as VoceComputo[] || [])) { init[v.id] = '' }
+    for (const v of tutteVoci) { init[v.id] = '' }
+    if (preloadSalId) {
+      for (const sv of ((preloadRes as any).data || [])) {
+        if (sv.voce_computo_id in init) init[sv.voce_computo_id] = String(sv.quantita_periodo || '')
+      }
+    }
     setQtInput(init)
     setVociLoading(false)
+  }
+
+  const riaperturaBozza = async (sal: SAL) => {
+    setSalAttivo(sal)
+    setXpwePreview([])
+    await caricaVociGrid(sal.id, sal.id)
+    setFase('voci')
+  }
+
+  const caricaCertificato = async (sal: SAL) => {
+    const input = document.createElement('input')
+    input.type = 'file'; input.accept = '.pdf'
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (!file) return
+      const aziendaId = await getAziendaId()
+      const path = `${aziendaId}/sal/${id}/SAL-${sal.numero}-certificato.pdf`
+      const { data: up } = await supabase.storage.from('documenti').upload(path, file, { upsert: true })
+      if (up) {
+        const { data: pub } = supabase.storage.from('documenti').getPublicUrl(path)
+        await supabase.from('sal').update({ pdf_certificato_url: pub.publicUrl }).eq('id', sal.id)
+        showToast('✓ Certificato RUP caricato'); carica()
+      } else {
+        showToast('Errore upload certificato')
+      }
+    }
+    input.click()
   }
 
   const avvia = async () => {
@@ -119,9 +176,18 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
       stato: 'bozza', note: formSal.note,
       importo_certificato: 0, importo_cumulativo: 0, ritenuta_garanzia: 0, importo_netto: 0,
     }).select().single()
-    setSaving(false)
-    if (error || !nuovoSal) { showToast('Errore creazione SAL'); return }
+    if (error || !nuovoSal) { setSaving(false); showToast('Errore creazione SAL'); return }
+    if (pdfDlFile) {
+      const path = `${aziendaId}/sal/${id}/SAL-${numero}-DL.pdf`
+      const { data: up } = await supabase.storage.from('documenti').upload(path, pdfDlFile, { upsert: true })
+      if (up) {
+        const { data: pub } = supabase.storage.from('documenti').getPublicUrl(path)
+        await supabase.from('sal').update({ pdf_dl_url: pub.publicUrl }).eq('id', nuovoSal.id)
+      }
+      setPdfDlFile(null)
+    }
     setSalAttivo(nuovoSal as SAL)
+    setSaving(false)
     if (formSal.metodo === 'manuale') {
       await caricaVociGrid(nuovoSal.id)
       setFase('voci')
@@ -133,17 +199,18 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
   const salvaVoci = async () => {
     if (!salAttivo) return
     setSaving(true)
+    await supabase.from('sal_voci').delete().eq('sal_id', salAttivo.id)
     const vociDaSalvare = vociComputo
-      .filter(v => parseFloat(qtInput[v.id] || '0') > 0)
+      .filter(v => parseFloat(qtInput[v.id] || '0') > 0 && v._tipoModifica !== 'soppressione')
       .map(v => {
         const qt = parseFloat(qtInput[v.id] || '0')
-        return { sal_id: salAttivo.id, voce_computo_id: v.id, codice: v.codice, descrizione: v.descrizione, um: v.um, quantita_contratto: v.quantita, quantita_periodo: qt, prezzo_unitario: v.prezzo_unitario, importo_periodo: parseFloat((qt * v.prezzo_unitario).toFixed(2)) }
+        return { sal_id: salAttivo.id, voce_computo_id: v.id, quantita_periodo: qt, wbs_id: v.wbs_id ?? null }
       })
     if (vociDaSalvare.length > 0) await supabase.from('sal_voci').insert(vociDaSalvare)
-    const certPeriodo   = vociDaSalvare.reduce((s, v) => s + v.importo_periodo, 0)
-    const cumulPrec     = salList.reduce((s, s2) => s + (s2.importo_certificato || 0), 0)
-    const ritenuta      = parseFloat((certPeriodo * 0.05).toFixed(2))
-    const netto         = parseFloat((certPeriodo - ritenuta).toFixed(2))
+    const certPeriodo = importoPeriodo
+    const cumulPrec   = salList.filter(s => s.id !== salAttivo.id).reduce((s, s2) => s + (s2.importo_certificato || 0), 0)
+    const ritenuta    = parseFloat((certPeriodo * 0.05).toFixed(2))
+    const netto       = parseFloat((certPeriodo - ritenuta).toFixed(2))
     await supabase.from('sal').update({
       importo_certificato: parseFloat(certPeriodo.toFixed(2)),
       importo_cumulativo:  parseFloat((cumulPrec + certPeriodo).toFixed(2)),
@@ -172,14 +239,12 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
     if (!salAttivo) return
     setSaving(true)
     const vociDaSalvare = xpwePreview.filter(v => v.voce_computo_id).map(v => ({
-      sal_id: salAttivo.id, voce_computo_id: v.voce_computo_id, codice: v.codice, descrizione: v.descrizione, um: v.um,
-      quantita_contratto: v.quantita_contratto || 0, quantita_periodo: v.quantita_xpwe || 0,
-      prezzo_unitario: v.prezzo_unitario || 0,
-      importo_periodo: parseFloat(((v.quantita_xpwe || 0) * (v.prezzo_unitario || 0)).toFixed(2)),
+      sal_id: salAttivo.id, voce_computo_id: v.voce_computo_id,
+      quantita_periodo: v.quantita_xpwe || 0,
     }))
     if (vociDaSalvare.length > 0) await supabase.from('sal_voci').insert(vociDaSalvare)
-    const certPeriodo = vociDaSalvare.reduce((s, v) => s + v.importo_periodo, 0)
-    const cumulPrec   = salList.reduce((s, s2) => s + (s2.importo_certificato || 0), 0)
+    const certPeriodo = xpweTotale
+    const cumulPrec   = salList.filter(s => s.id !== salAttivo.id).reduce((s, s2) => s + (s2.importo_certificato || 0), 0)
     const ritenuta    = parseFloat((certPeriodo * 0.05).toFixed(2))
     await supabase.from('sal').update({
       importo_certificato: parseFloat(certPeriodo.toFixed(2)),
@@ -212,7 +277,7 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
 
   // Quadro economico voci (live)
   const importoPeriodo  = vociComputo.reduce((s, v) => s + (parseFloat(qtInput[v.id] || '0') || 0) * v.prezzo_unitario, 0)
-  const cumulPrec       = salList.reduce((s, s2) => s + (s2.importo_certificato || 0), 0)
+  const cumulPrec       = salList.filter(s => !salAttivo || s.id !== salAttivo.id).reduce((s, s2) => s + (s2.importo_certificato || 0), 0)
   const ritenuta5       = parseFloat((importoPeriodo * 0.05).toFixed(2))
   const nettoSal        = parseFloat((importoPeriodo - ritenuta5).toFixed(2))
 
@@ -288,6 +353,12 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
               <label style={S.lbl}>Note</label>
               <input style={S.inp} value={formSal.note} placeholder="Descrizione del periodo, annotazioni..." onChange={e => setFormSal(p=>({...p,note:e.target.value}))} />
             </div>
+            <div>
+              <label style={S.lbl}>PDF SAL dalla DL (opzionale)</label>
+              <input type="file" accept=".pdf" style={{...S.inp, cursor:'pointer'}}
+                onChange={e => setPdfDlFile(e.target.files?.[0] || null)} />
+              {pdfDlFile && <p style={{ fontSize:11, color:'var(--accent)', marginTop:4 }}>📄 {pdfDlFile.name}</p>}
+            </div>
             <div style={{ display:'flex', gap:8, justifyContent:'flex-end', paddingTop:8 }}>
               <button style={S.btn('#6b7280')} onClick={() => setFase('lista')}>Annulla</button>
               <button style={S.btn('var(--accent)')} onClick={avvia} disabled={saving}>{saving ? '...' : 'Avanti →'}</button>
@@ -318,11 +389,11 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
                     <col style={{width:80}} /><col /><col style={{width:36}} />
                     <col style={{width:72}} /><col style={{width:72}} /><col style={{width:84}} />
                     <col style={{width:72}} /><col style={{width:46}} />
-                    <col style={{width:78}} /><col style={{width:88}} />
+                    <col style={{width:72}} /><col style={{width:78}} /><col style={{width:88}} />
                   </colgroup>
                   <thead>
                     <tr>
-                      {['Tariffa','Descrizione','UM','Qtà contr.','Qtà prec.','Qtà questo SAL','Qtà tot.','%','P.U.','Imp. periodo'].map(h => (
+                      {['Tariffa','Descrizione','UM','Qtà contr.','Qtà prec.','Qtà questo SAL','Qtà tot.','%','Residuo','P.U.','Imp. periodo'].map(h => (
                         <th key={h} style={{...S.th, position:'sticky' as const, top:0, zIndex:5}}>{h}</th>
                       ))}
                     </tr>
@@ -332,10 +403,12 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
                       const rows: React.ReactNode[] = []
                       let lastCap = ''
                       for (const v of vociComputo) {
+                        const isSoppressione = v._tipoModifica === 'soppressione'
                         if (v.capitolo !== lastCap) {
+                          const isVarCap = v._isVariante
                           rows.push(
                             <tr key={`cap_${v.capitolo}`}>
-                              <td colSpan={10} style={{ padding:'5px 10px', background:'#166534', color:'#d1fae5', fontWeight:700, fontSize:10, letterSpacing:'0.04em', textTransform:'uppercase' as const }}>
+                              <td colSpan={11} style={{ padding:'5px 10px', background: isVarCap ? '#1e3a5f' : '#166534', color: isVarCap ? '#bfdbfe' : '#d1fae5', fontWeight:700, fontSize:10, letterSpacing:'0.04em', textTransform:'uppercase' as const }}>
                                 ▸ {v.capitolo}
                               </td>
                             </tr>
@@ -343,28 +416,37 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
                           lastCap = v.capitolo
                         }
                         const qtPrec  = qtPrecedente[v.id] || 0
-                        const qtCorr  = parseFloat(qtInput[v.id] || '0') || 0
+                        const qtCorr  = isSoppressione ? 0 : (parseFloat(qtInput[v.id] || '0') || 0)
                         const qtTot   = qtPrec + qtCorr
                         const pctComp = pct(qtTot, v.quantita)
                         const impPer  = qtCorr * v.prezzo_unitario
+                        const residuo = v.quantita - qtPrec - qtCorr
                         rows.push(
-                          <tr key={v.id} style={{ background: qtCorr > 0 ? 'rgba(16,185,129,0.04)' : 'transparent' }}
+                          <tr key={v.id} style={{ background: qtCorr > 0 ? 'rgba(16,185,129,0.04)' : 'transparent', opacity: isSoppressione ? 0.5 : 1 }}
                             onMouseEnter={e=>(e.currentTarget.style.background='var(--accent-light)')}
                             onMouseLeave={e=>(e.currentTarget.style.background=qtCorr>0?'rgba(16,185,129,0.04)':'transparent')}>
                             <td style={{...S.td, fontFamily:'monospace', fontSize:10, color:'var(--accent)'}}>{v.codice?.slice(0,14)}</td>
-                            <td style={{...S.td, fontSize:10, maxWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const}} title={v.descrizione}>{v.descrizione}</td>
+                            <td style={{...S.td, fontSize:10, maxWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const, textDecoration: isSoppressione ? 'line-through' : 'none'}} title={v.descrizione}>{v.descrizione}</td>
                             <td style={{...S.td, fontSize:10, textAlign:'center' as const}}>{v.um}</td>
                             <td style={{...S.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums', fontSize:10}}>{v.quantita?.toLocaleString('it-IT',{maximumFractionDigits:3})}</td>
                             <td style={{...S.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums', fontSize:10, color:'var(--t3)'}}>{qtPrec>0?qtPrec.toLocaleString('it-IT',{maximumFractionDigits:3}):'—'}</td>
                             <td style={{...S.td, padding:'2px 4px'}}>
-                              <input type="number" step="any" min="0" placeholder="0"
-                                style={{ width:'100%', padding:'4px 6px', borderRadius:4, border:`1px solid ${qtCorr>0?'var(--accent)':'var(--border)'}`, fontSize:11, fontFamily:'monospace', textAlign:'right' as const, background:'var(--panel)', color:'var(--t1)', outline:'none' }}
+                              <input type="number" step="any" min="0" placeholder="0" disabled={isSoppressione}
+                                style={{ width:'100%', padding:'4px 6px', borderRadius:4, border:`1px solid ${qtCorr>0?'var(--accent)':'var(--border)'}`, fontSize:11, fontFamily:'monospace', textAlign:'right' as const, background:'var(--panel)', color:'var(--t1)', outline:'none', cursor: isSoppressione ? 'not-allowed' : 'text' }}
                                 value={qtInput[v.id] ?? ''}
                                 onChange={e => setQtInput(prev => ({...prev, [v.id]: e.target.value}))} />
                             </td>
                             <td style={{...S.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums', fontSize:10, fontWeight: qtTot>0?700:400}}>{qtTot>0?qtTot.toLocaleString('it-IT',{maximumFractionDigits:3}):'—'}</td>
                             <td style={{...S.td, textAlign:'center' as const, fontSize:10}}>
                               {qtTot>0 ? <span style={{ color: pctComp>=100?'#10b981':pctComp>=50?'#f59e0b':'var(--t3)' }}>{pctComp.toFixed(0)}%</span> : '—'}
+                            </td>
+                            <td style={{...S.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums', fontSize:10}}>
+                              {isSoppressione ? <span style={{ color:'var(--t3)' }}>—</span> : residuo === 0
+                                ? <span style={{ color:'var(--t3)' }}>✓</span>
+                                : <span style={{ color: residuo > 0 ? '#10b981' : '#ef4444', fontWeight:700 }}>
+                                    {residuo.toLocaleString('it-IT', {maximumFractionDigits:3})}
+                                  </span>
+                              }
                             </td>
                             <td style={{...S.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums', fontSize:10}}>{fi(v.prezzo_unitario)}</td>
                             <td style={{...S.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums', fontSize:11, fontWeight:impPer>0?700:400, color:impPer>0?'var(--accent)':'var(--t4)'}}>
@@ -513,10 +595,30 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
                       </select>
                     </td>
                     <td style={S.td}>
-                      <button style={{...S.btn('#0d9488'), fontSize:11, padding:'4px 10px'}} onClick={() => {
-                        const base = window.location.pathname.replace('/sal-attivi','/fatturazione')
-                        window.location.href = base + '?' + new URLSearchParams({ importo: String((sal.importo_netto||0).toFixed(2)), note: sal.codice })
-                      }}>📄 Fattura</button>
+                      <div style={{ display:'flex', gap:4, flexWrap:'wrap' as const, alignItems:'center' }}>
+                        {sal.stato === 'bozza' && (
+                          <button style={{...S.btn('#f59e0b'), fontSize:11, padding:'4px 10px'}} onClick={() => riaperturaBozza(sal)}>✏️ Modifica</button>
+                        )}
+                        <button style={{...S.btn('#0d9488'), fontSize:11, padding:'4px 10px'}} onClick={() => {
+                          const base = window.location.pathname.replace('/sal-attivi','/fatturazione')
+                          window.location.href = base + '?' + new URLSearchParams({ importo: String((sal.importo_netto||0).toFixed(2)), note: sal.codice })
+                        }}>📄 Fattura</button>
+                        {sal.pdf_dl_url && (
+                          <a href={sal.pdf_dl_url} target="_blank" rel="noreferrer"
+                            style={{ fontSize:11, color:'var(--accent)', padding:'4px 8px', borderRadius:6, border:'1px solid var(--border)', textDecoration:'none' }}>
+                            📄 PDF DL
+                          </a>
+                        )}
+                        {sal.stato === 'emesso' && !sal.pdf_certificato_url && (
+                          <button style={{...S.btn('#8b5cf6'), fontSize:11, padding:'4px 10px'}} onClick={() => caricaCertificato(sal)}>📎 Cert.</button>
+                        )}
+                        {sal.pdf_certificato_url && (
+                          <a href={sal.pdf_certificato_url} target="_blank" rel="noreferrer"
+                            style={{ fontSize:11, color:'#14b8a6', padding:'4px 8px', borderRadius:6, border:'1px solid #14b8a644', textDecoration:'none' }}>
+                            📋 Cert. RUP
+                          </a>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
