@@ -849,7 +849,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
           {/* TOOLBAR */}
           <div className="cmp-tbar">
             {sbHidden && <button className="cmp-tbtn green" onClick={() => setSbHidden(false)}>▶</button>}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
               {wbsSel ? (
                 <><span style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed' }}>📐 {wbsSel} {WBS_MAP[wbsSel]}</span>
                   <button style={{ fontSize: 9, padding: '1px 6px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }} onClick={() => setWbsSel(null)}>✕</button></>
@@ -1119,7 +1119,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
                           <td><span className="cmp-edt cmp-mono">{f3(v.quantita)}</span></td>
                           <td /><td />
                           <td style={{ textAlign: 'right', fontWeight: 600, fontSize: 10, fontFamily: 'monospace' }}>{f3(v.quantita)}</td>
-                          <td /><td /><td /><td /><td /><td />
+                          <td /><td />{Array.from({ length: salList.filter((s: any) => s.id !== salSel?.id).length + 3 }).map((_, i) => <td key={i} />)}
                         </tr>
                       )
                     }
