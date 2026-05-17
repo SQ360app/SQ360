@@ -125,9 +125,6 @@ export default function MapCommesse() {
       const { data } = await supabase
         .from('commesse')
         .select('id,codice,nome,stato,importo_contratto,lat,lng,indirizzo_cantiere,comune_cantiere,cap_cantiere,provincia')
-        .eq('azienda_id', aziendaId || '')
-        .not('stato', 'in', '("CHIUSA","ARCHIVIATA","chiusa","archiviata")')
-        .order('nome')
 
       if (cancelled) return
       const raw = (data || []) as CommessaRaw[]

@@ -200,6 +200,7 @@ export default function DashboardPage() {
 
     /* ── Elaborazione dati ──────────────────────────────────────────── */
     const comm   = rC.data   || []
+    console.log('Dashboard commesse:', comm?.length, comm?.map((c: any) => c.stato))
     const fpArr  = rFP.data  || []
     const dsArr  = rDS.data  || []
     const csArr  = rCS.data  || []
