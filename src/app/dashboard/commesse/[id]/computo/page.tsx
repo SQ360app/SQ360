@@ -369,16 +369,20 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
 
   const aggiungiExtra = async (voceId: string, tipo: string) => {
     const aziendaId = await getAziendaId()
-    const { data } = await supabase.from('analisi_extra_voce').insert({
+    const { error } = await supabase.from('analisi_extra_voce').insert({
       voce_computo_id: voceId, commessa_id: id, azienda_id: aziendaId || null,
-      tipo, importo_unitario: 0,
-    }).select().single()
-    if (data) setAnalisiExtra(prev => [...prev, data as AnalisiExtraVoce])
+      tipo, descrizione: '', importo_unitario: 0,
+    })
+    if (error) { console.error('Extra voce error:', error); showToast('Errore: ' + error.message); return }
+    const { data } = await supabase.from('analisi_extra_voce').select('*').eq('commessa_id', id)
+    if (data) setAnalisiExtra(data as AnalisiExtraVoce[])
   }
 
   const eliminaExtra = async (extraId: string) => {
-    await supabase.from('analisi_extra_voce').delete().eq('id', extraId)
-    setAnalisiExtra(prev => prev.filter(e => e.id !== extraId))
+    const { error } = await supabase.from('analisi_extra_voce').delete().eq('id', extraId)
+    if (error) { console.error('Extra voce error:', error); showToast('Errore: ' + error.message); return }
+    const { data } = await supabase.from('analisi_extra_voce').select('*').eq('commessa_id', id)
+    if (data) setAnalisiExtra(data as AnalisiExtraVoce[])
   }
 
   const aggiornaExtra = async (e: AnalisiExtraVoce, rawVal: string) => {
@@ -1072,22 +1076,32 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                                       <span>ANALISI PREZZI — {v.codice}</span>
                                       <span style={{ fontWeight: 400, fontSize: 10, color: '#92400e', marginLeft: 4 }}>P.U. € {fi(v.prezzo_unitario)}/{v.um}</span>
                                       <span style={{ fontSize: 9, color: '#78350f', marginLeft: 4, fontWeight: 400 }}>· condivisa tra tutte le voci con codice {v.codice}</span>
-                                      {codiciConAnalisi.length > 0 && (
-                                        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-                                          <span style={{ fontSize: 9, color: '#78350f' }}>📋 Copia da:</span>
-                                          <select value={copiaSource} onChange={e => setCopiaSource(e.target.value)}
-                                            style={{ fontSize: 9, border: '1px solid #fcd34d', borderRadius: 3, padding: '1px 4px', background: '#fffbeb' }}>
-                                            <option value="">scegli tariffa...</option>
-                                            {codiciConAnalisi.map(c => <option key={c} value={c}>{c}</option>)}
-                                          </select>
-                                          {copiaSource && (
-                                            <button onClick={() => copiaAnalisi(copiaSource, v.codice)}
-                                              style={{ fontSize: 9, padding: '1px 7px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 700 }}>
-                                              Copia
-                                            </button>
-                                          )}
-                                        </span>
-                                      )}
+                                      <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                                        {codiciConAnalisi.length > 0 && (
+                                          <>
+                                            <span style={{ fontSize: 9, color: '#78350f' }}>📋 Copia da:</span>
+                                            <select value={copiaSource} onChange={e => setCopiaSource(e.target.value)}
+                                              style={{ fontSize: 9, border: '1px solid #fcd34d', borderRadius: 3, padding: '1px 4px', background: '#fffbeb' }}>
+                                              <option value="">scegli tariffa...</option>
+                                              {codiciConAnalisi.map(c => <option key={c} value={c}>{c}</option>)}
+                                            </select>
+                                            {copiaSource && (
+                                              <button onClick={() => copiaAnalisi(copiaSource, v.codice)}
+                                                style={{ fontSize: 9, padding: '1px 7px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 700 }}>
+                                                Copia
+                                              </button>
+                                            )}
+                                          </>
+                                        )}
+                                        <button onClick={() => { setSel(null); showToast('Analisi salvata') }}
+                                          style={{ fontSize: 9, padding: '2px 8px', background: '#14532d', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 700 }}>
+                                          ✓ Fatto
+                                        </button>
+                                        <button onClick={() => setSel(null)}
+                                          style={{ fontSize: 9, padding: '2px 7px', background: 'rgba(0,0,0,.1)', color: '#78350f', border: '1px solid #fcd34d', borderRadius: 3, cursor: 'pointer' }}>
+                                          ✕ Chiudi
+                                        </button>
+                                      </span>
                                     </div>
 
                                     {/* Banner propagazione automatica */}
