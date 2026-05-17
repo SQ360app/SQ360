@@ -3,6 +3,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import dynamic from 'next/dynamic'
+
+const MapCommesse = dynamic(() => import('@/components/MapCommesse'), { ssr: false })
 
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 const fmt  = (n: number) => (n || 0).toLocaleString('it-IT', { maximumFractionDigits: 0 })
@@ -341,6 +344,9 @@ export default function DashboardPage() {
             onClick={() => router.push('/dashboard/commesse')}
           />
         </div>
+
+        {/* ── MAPPA CANTIERI ───────────────────────────────────────── */}
+        <MapCommesse />
 
         {/* ── MAIN: Commesse + Scadenziario ────────────────────────── */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 14 }}>
