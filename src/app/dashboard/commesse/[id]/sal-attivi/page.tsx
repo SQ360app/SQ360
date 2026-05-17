@@ -68,6 +68,7 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
   const [saving, setSaving] = useState(false)
   const [toast, setToast]   = useState('')
   const [pdfDlFile, setPdfDlFile] = useState<File | null>(null)
+  const [pdfLoading, setPdfLoading] = useState<string | null>(null)
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
@@ -136,6 +137,42 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
     }
     setQtInput(init)
     setVociLoading(false)
+  }
+
+  const generaPdfSal = async (sal: SAL) => {
+    setPdfLoading(sal.id)
+    try {
+      const [{ data: svList }, { data: comm }] = await Promise.all([
+        supabase.from('sal_voci').select('voce_computo_id,quantita_periodo').eq('sal_id', sal.id),
+        supabase.from('commesse').select('codice,nome,committente,importo_contrattuale').eq('id', id).single()
+      ])
+      const vcIds = (svList || []).map((sv: any) => sv.voce_computo_id).filter(Boolean)
+      const { data: vcList } = vcIds.length > 0
+        ? await supabase.from('voci_computo').select('id,codice,descrizione,um,prezzo_unitario').in('id', vcIds)
+        : { data: [] as any[] }
+      const vcMap = new Map((vcList || []).map((vc: any) => [vc.id, vc]))
+      const voci = (svList || [])
+        .filter((sv: any) => (sv.quantita_periodo || 0) > 0)
+        .map((sv: any) => {
+          const vc = vcMap.get(sv.voce_computo_id) as any
+          const qt = sv.quantita_periodo || 0
+          const pu = vc?.prezzo_unitario || 0
+          return { codice: vc?.codice || '', descrizione: vc?.descrizione || '', um: vc?.um || '', quantita_periodo: qt, prezzo_unitario: pu, importo_periodo: qt * pu }
+        })
+      const { SalDocument } = await import('@/components/pdf/SalDocument')
+      const { pdf } = await import('@react-pdf/renderer')
+      const blob = await pdf(
+        React.createElement(SalDocument, {
+          sal,
+          commessa: { codice: (comm as any)?.codice || '', nome: (comm as any)?.nome || '', committente: (comm as any)?.committente, importo_contratto: (comm as any)?.importo_contrattuale },
+          voci,
+        }) as any
+      ).toBlob()
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 30000)
+    } catch { showToast('Errore generazione PDF') }
+    setPdfLoading(null)
   }
 
   const riaperturaBozza = async (sal: SAL) => {
@@ -599,6 +636,10 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
                         {sal.stato === 'bozza' && (
                           <button style={{...S.btn('#f59e0b'), fontSize:11, padding:'4px 10px'}} onClick={() => riaperturaBozza(sal)}>✏️ Modifica</button>
                         )}
+                        <button style={{...S.btn('#1e3a5f'), fontSize:11, padding:'4px 10px'}}
+                          onClick={() => generaPdfSal(sal)} disabled={pdfLoading === sal.id}>
+                          {pdfLoading === sal.id ? '...' : '📄 PDF'}
+                        </button>
                         <button style={{...S.btn('#0d9488'), fontSize:11, padding:'4px 10px'}} onClick={() => {
                           const base = window.location.pathname.replace('/sal-attivi','/fatturazione')
                           window.location.href = base + '?' + new URLSearchParams({ importo: String((sal.importo_netto||0).toFixed(2)), note: sal.codice })

@@ -83,7 +83,9 @@ export default function ContrattiPage({ params: pp }: { params: Promise<{ id: st
   const [contratti, setContratti]           = useState<ContrattoSub[]>([])
   const [fornitori, setFornitori]           = useState<{ id: string; ragione_sociale: string }[]>([])
   const [importoContratto, setImportoContratto] = useState(0)
+  const [commessaInfo, setCommessaInfo]     = useState<{ codice: string; nome: string; committente?: string; importo_contratto?: number } | null>(null)
   const [loading, setLoading]               = useState(true)
+  const [pdfLoading, setPdfLoading]         = useState<string | null>(null)
   const [expanded, setExpanded]             = useState<string | null>(null)
   const [saving, setSaving]                 = useState(false)
   const [activeTab, setActiveTab]           = useState<Record<string, string>>({})
@@ -129,11 +131,12 @@ export default function ContrattiPage({ params: pp }: { params: Promise<{ id: st
         .select('*, fornitore:professionisti_fornitori(ragione_sociale, piva)')
         .eq('commessa_id', id).order('created_at', { ascending: false }),
       supabase.from('professionisti_fornitori').select('id,ragione_sociale').order('ragione_sociale'),
-      supabase.from('commesse').select('importo_contratto').eq('id', id).single(),
+      supabase.from('commesse').select('importo_contratto,codice,nome,committente').eq('id', id).single(),
     ])
     setContratti((c || []) as ContrattoSub[])
     setFornitori(f || [])
-    setImportoContratto(comm?.importo_contratto || 0)
+    setImportoContratto((comm as any)?.importo_contratto || 0)
+    setCommessaInfo(comm ? { codice: (comm as any).codice || '', nome: (comm as any).nome || '', committente: (comm as any).committente, importo_contratto: (comm as any).importo_contratto } : null)
 
     if (c && c.length > 0) {
       const ids = c.map((x: any) => x.id)
@@ -254,6 +257,28 @@ export default function ContrattiPage({ params: pp }: { params: Promise<{ id: st
       note: 'Svincolo ritenuta di garanzia a collaudo', tipo: 'svincolo_ritenuta',
     })
     await load()
+  }
+
+  async function generaPdfContratto(c: ContrattoSub) {
+    setPdfLoading(c.id)
+    try {
+      const lavs = (lavoratori[c.id] || []).map(l => ({ nome: l.nome, cognome: l.cognome, cf: l.cf }))
+      const { ContrattoSubDocument } = await import('@/components/pdf/ContrattoSubDocument')
+      const { pdf } = await import('@react-pdf/renderer')
+      const React = await import('react')
+      const blob = await pdf(
+        React.createElement(ContrattoSubDocument, {
+          contratto: { tipo: c.tipo, oggetto: c.oggetto, importo_netto: c.importo_netto, ritenuta_pct: c.ritenuta_pct, data_stipula: c.data_stipula, data_inizio: c.data_inizio, data_fine_prevista: c.data_fine_prevista, percentuale_subappalto: c.percentuale_subappalto, cat_soa: c.cat_soa, note: c.note },
+          fornitore: { ragione_sociale: c.fornitore?.ragione_sociale || 'Fornitore non assegnato', piva: c.fornitore?.piva },
+          commessa: { codice: commessaInfo?.codice || '', nome: commessaInfo?.nome || '', committente: commessaInfo?.committente, importo_contratto: commessaInfo?.importo_contratto },
+          lavoratori: lavs,
+        }) as any
+      ).toBlob()
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 30000)
+    } catch { console.error('Errore PDF contratto') }
+    setPdfLoading(null)
   }
 
   function getChecklistStatus(contrattoId: string) {
@@ -471,6 +496,10 @@ export default function ContrattiPage({ params: pp }: { params: Promise<{ id: st
                           </button>
                         )}
                         <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 8, fontWeight: 600, background: si.bg, color: si.color }}>{si.icon} {si.label}</span>
+                        <button disabled={pdfLoading === c.id} onClick={() => generaPdfContratto(c)}
+                          style={{ marginLeft: 'auto', fontSize: 11, padding: '4px 12px', background: '#1e3a5f', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, opacity: pdfLoading === c.id ? 0.6 : 1 }}>
+                          {pdfLoading === c.id ? '...' : '📄 Contratto PDF'}
+                        </button>
                       </div>
                     </>
                   )}

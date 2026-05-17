@@ -32,16 +32,19 @@ interface OrdineServizio {
   note?: string
 }
 interface Variante { id: string; numero: number; descrizione: string }
+interface CommessaInfo { codice: string; nome: string }
 
 export default function OrdiniServizioPage({ params: pp }: { params: Promise<{ id: string }> }) {
   const { id } = use(pp)
   const [ordini, setOrdini] = useState<OrdineServizio[]>([])
   const [varianti, setVarianti] = useState<Variante[]>([])
+  const [commessa, setCommessa] = useState<CommessaInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
+  const [pdfLoading, setPdfLoading] = useState<string | null>(null)
 
   // Form nuovo OS
   const [fData, setFData] = useState(new Date().toISOString().slice(0, 10))
@@ -59,13 +62,36 @@ export default function OrdiniServizioPage({ params: pp }: { params: Promise<{ i
 
   async function load() {
     setLoading(true)
-    const [{ data: os }, { data: v }] = await Promise.all([
+    const [{ data: os }, { data: v }, { data: comm }] = await Promise.all([
       supabase.from('ordini_servizio').select('*').eq('commessa_id', id).order('numero'),
       supabase.from('varianti').select('id,numero,descrizione').eq('commessa_id', id).order('numero'),
+      supabase.from('commesse').select('codice,nome').eq('id', id).single(),
     ])
     setOrdini(os || [])
     setVarianti(v || [])
+    setCommessa(comm as CommessaInfo | null)
     setLoading(false)
+  }
+
+  async function generaPdfOs(os: OrdineServizio) {
+    setPdfLoading(os.id)
+    try {
+      const varLink = varianti.find(v => v.id === os.variante_id)
+      const { OsDocument } = await import('@/components/pdf/OsDocument')
+      const { pdf } = await import('@react-pdf/renderer')
+      const React = await import('react')
+      const blob = await pdf(
+        React.createElement(OsDocument, {
+          os: { ...os, descrizione: os.descrizione_estesa },
+          commessa: { codice: commessa?.codice || '', nome: commessa?.nome || '' },
+          variante: varLink ? { numero: varLink.numero, descrizione: varLink.descrizione } : undefined,
+        }) as any
+      ).toBlob()
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 30000)
+    } catch { console.error('Errore PDF OS') }
+    setPdfLoading(null)
   }
 
   useEffect(() => { load() }, [id])
@@ -258,6 +284,10 @@ export default function OrdiniServizioPage({ params: pp }: { params: Promise<{ i
 
                     {/* Workflow azioni */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <button onClick={() => generaPdfOs(o)} disabled={pdfLoading === o.id}
+                        style={{ fontSize: 11, padding: '4px 12px', background: '#1e3a5f', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, opacity: pdfLoading === o.id ? 0.6 : 1 }}>
+                        {pdfLoading === o.id ? '...' : '📄 PDF'}
+                      </button>
                       {o.stato === 'emesso' && (
                         <>
                           <button onClick={() => cambiaStato(o.id, 'firmato')}
