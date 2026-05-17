@@ -241,6 +241,26 @@
 #### Fix descrizione EP (89e2c0c → f55bab8)
 - ✅ Cella descrizione tabella EP: `WebkitLineClamp: 2` per max 2 righe + `title` tooltip completo + `cursor: 'help'`
 
+### Sprint 8 — Migliorie gare + commessa (commit 68319f5 → 2a3aebf)
+
+#### Migliorie in Analisi Gare (68319f5)
+- ✅ `gare/page.tsx` riscritto (369 → 575 righe): accordion dettaglio per ogni gara (click su riga)
+- ✅ **Tab 1 Dati gara**: griglia 12 campi in visualizzazione, link bando, pulsante "🏆 Crea commessa" (solo se AGGIUDICATA e senza commessa_id) → INSERT commesse + UPDATE gare.commessa_id + UPDATE migliorie.commessa_id (offerta=true) + redirect
+- ✅ **Tab 2 Checklist offerta**: 8 voci con checkbox (Domanda, DGUE, Offerta economica, Offerta tecnica, Cauzione 2%, PassOE ANAC, Antimafia, Riferimenti bancari), barra progresso, badge "CRITICO" per voci obbligatorie; persistito in `localStorage('checklist-{gara_id}')`; badge "N/8 docs" visibile nella riga collassata
+- ✅ **Tab 3 Migliorie proposte**: KPI 3 card (valutate/offerte/costo), lista migliorie con badge categoria (Tecnica/Temporale/Qualitativa/Ambientale/Sociale), toggle "★ Offri", form inline (categoria/descrizione/costo/punti), badge "★ N migliorie" nella riga collassata
+- ✅ **Simulatore margine offerta**: ribasso % input → calcolo importo offerta / detrazione costo migliorie offerte / margine % colorato (verde ≥15% / arancio 5-15% / rosso <5%) + punteggio tecnico stimato
+- ✅ Tabella `migliorie` in Supabase: `gara_id`, `commessa_id`, `categoria`, `descrizione`, `costo_stimato`, `costo_effettivo`, `punteggio_tecnico_stimato`, `note`, `offerta` (bool), `fase` ('gara'|'commessa'), `stato`
+
+#### Migliorie nella commessa (2a3aebf)
+- ✅ `migliorie/page.tsx` (nuovo, 250 righe): carica migliorie dirette (`commessa_id = id`) + ereditate da gara aggiudicata (`gara.commessa_id = id, offerta = true, commessa_id IS NULL`), badge "Ereditata da gara"
+- ✅ Banner impatto CE fisso: "Costo stimato non remunerato: €X · Impatto su margine: −Y%"
+- ✅ KPI 5 card: migliorie totali, costo stimato, costo effettivo, completate, in esecuzione
+- ✅ Workflow stati: `contrattuale → da_eseguire → in_esecuzione → completata → verificata_dl`; bottoni sequenziali, alert "In attesa verifica DL" sullo stato completata
+- ✅ Costo effettivo editabile on-blur con alert scarto vs stimato (rosso se supera)
+- ✅ Riepilogo impatto CE in fondo: costi stimati / effettivi / incidenza %
+- ✅ Form inline per aggiungere migliorie direttamente sulla commessa (fase='commessa', stato='contrattuale')
+- ✅ Tab "Migliorie" aggiunto nel gruppo Contrattuale ⚖️ del layout a due livelli
+
 ## Prossimi task prioritari
 1. **Test flusso register→login** — test end-to-end registrazione → conferma email → primo accesso
 2. **Verifica dominio Resend** — verificare `sq360.app` su Resend → Domains per mittente ufficiale
@@ -283,6 +303,8 @@
 28. ~~Subappalti flusso completo: checklist documentale 7 doc, lavoratori, pagamenti, workflow sequenziale~~ ✅
 29. ~~Elenco Prezzi: popolazione automatica dal computo, analisi per tariffa, prezzi nuovi/variante~~ ✅
 30. ~~Navigazione commessa a due livelli: 6 gruppi pill + sotto-moduli per gruppo~~ ✅
+31. ~~Migliorie gare: accordion dettaglio, checklist offerta, simulatore margine con ribasso~~ ✅
+32. ~~Migliorie commessa: tracking stati esecuzione, costo effettivo, impatto CE~~ ✅
 
 ## Note implementazione
 - `getAziendaId()` in `src/lib/supabase.ts` — helper condiviso: `auth.uid() → utenti.azienda_id`
@@ -293,6 +315,8 @@
 - Tabella `elenco_prezzi`: `codice`, `descrizione`, `um`, `prezzo_unitario`, `fonte` ('prezzario'|'prezzo_nuovo'|'variante'), `prezzario_riferimento`, `anno_prezzario`, `approvato_da`, `data_approvazione`, `variante_id`, `note`
 - Tabelle Sprint 6 subappalti (da creare se non esistono): `documenti_contratto_sub` (tipo, url, nome_file, data_scadenza, extra JSONB), `lavoratori_sub` (nome, cognome, cf, documenti), `pagamenti_sub` (data, importo_lordo, ritenuta_pct, importo_netto, tipo)
 - Pattern navigazione layout commessa: `GRUPPI` array con `id`, `color`, `bg`, `border`, `tabs[]` — gruppo attivo rilevato da `pathname.startsWith(base + '/' + t.href)`
+- Tabella `migliorie`: `gara_id`, `commessa_id`, `azienda_id`, `categoria`, `descrizione`, `costo_stimato`, `costo_effettivo`, `punteggio_tecnico_stimato`, `note`, `offerta` bool, `fase` ('gara'|'commessa'), `stato` (contrattuale|da_eseguire|in_esecuzione|completata|verificata_dl)
+- Checklist offerta gare: persistita in `localStorage('checklist-{gara_id}')` — non in DB
 
 ## Principi UX
 - Semplicità estrema: max 3 tap per qualsiasi azione
