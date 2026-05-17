@@ -13,7 +13,8 @@ interface Commessa {
 const TABS = [
   { key: 'anagrafica',    label: 'Anagrafica',      path: '/anagrafica' },
   { key: 'documenti',     label: 'Documenti',        path: '/documenti' },
-  { key: 'computo',       label: 'Computo',          path: '/computo' },
+  { key: 'computo',        label: 'Computo',          path: '/computo' },
+  { key: 'elenco-prezzi', label: 'Elenco Prezzi',   path: '/elenco-prezzi' },
   { key: 'rda',           label: 'RDA',              path: '/rda' },
   { key: 'rdo',           label: 'RDO',              path: '/rdo' },
   { key: 'oda',           label: 'ODA',              path: '/oda' },
