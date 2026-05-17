@@ -317,7 +317,7 @@ export default function ElencoPrezziPage({ params: pp }: { params: Promise<{ id:
                   style={{ display: 'grid', gridTemplateColumns: '20px 100px 1fr 50px 90px 100px 90px 60px', gap: 8, padding: '8px 14px', cursor: 'pointer', background: isExp ? '#f0f9ff' : '#fff', alignItems: 'center' }}>
                   <div>{isExp ? <ChevronDown size={12} style={{ color: '#9ca3af' }} /> : <ChevronRight size={12} style={{ color: '#9ca3af' }} />}</div>
                   <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#1d4ed8', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.codice}</div>
-                  <div style={{ fontSize: 12, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.descrizione}</div>
+                  <div title={p.descrizione} style={{ fontSize: 12, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 0, minWidth: '100%' }}>{p.descrizione}</div>
                   <div style={{ fontSize: 11, color: '#6b7280' }}>{p.um}</div>
                   <div style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 600 }}>{fmt(p.prezzo_unitario)}</div>
                   <div><FonteBadge fonte={p.fonte} varNum={varLink?.numero} /></div>
