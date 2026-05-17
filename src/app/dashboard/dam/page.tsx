@@ -163,7 +163,7 @@ export default function DAMPage() {
     <div style={{ padding: '24px 32px', background: 'var(--bg)', minHeight: '100vh' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--t1)', margin: 0 }}>DAM — Dossier Accettazione Materiali</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--t1)', margin: 0 }}>SAM — Scheda Approvazione Materiali</h1>
           <p style={{ fontSize: 12, color: 'var(--t3)', margin: '4px 0 0' }}>Workflow completo con DL · Senza prezzi verso DL</p>
         </div>
         <button onClick={() => setShowForm(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--accent)', border: 'none', borderRadius: 10, padding: '10px 20px', color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>

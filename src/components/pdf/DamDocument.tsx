@@ -92,7 +92,7 @@ export function DamDocument({ dam, commessa, fornitore }: DamDocProps) {
     : new Date().toLocaleDateString('it-IT')
 
   return (
-    <Document title={`DAM ${dam.codice}`} author="SQ360" subject="Dossier Accettazione Materiali">
+    <Document title={`SAM ${dam.codice}`} author="SQ360" subject="Scheda Approvazione Materiali">
       <Page size="A4" style={s.page}>
 
         {/* Header */}

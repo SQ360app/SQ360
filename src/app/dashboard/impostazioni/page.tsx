@@ -41,7 +41,7 @@ const RUOLO_META: Record<Ruolo, { label: string; color: string; descrizione: str
   responsabile_commessa: {
     label: 'Resp. Commessa', color: '#8b5cf6',
     descrizione: 'Gestione completa delle commesse assegnate',
-    permessi: ['Commesse assegnate', 'DAM', 'SAL passivi', 'Pianificazione', 'Cantiere', 'Fornitori']
+    permessi: ['Commesse assegnate', 'SAM', 'SAL passivi', 'Pianificazione', 'Cantiere', 'Fornitori']
   },
   contabilita: {
     label: 'Contabilità', color: '#f59e0b',
@@ -268,7 +268,7 @@ export default function ImpostazioniPage() {
                 { label: 'SOA in scadenza (30 giorni prima)', key: 'n2', default: true },
                 { label: 'Patente crediti aggiornata', key: 'n3', default: true },
                 { label: 'SAL passivo in attesa approvazione', key: 'n4', default: true },
-                { label: 'DAM in attesa risposta DL (> 5 giorni)', key: 'n5', default: true },
+                { label: 'SAM in attesa risposta DL (> 5 giorni)', key: 'n5', default: true },
                 { label: 'Fattura scaduta senza pagamento', key: 'n6', default: true },
                 { label: 'Margine sotto soglia alert (configurabile %)', key: 'n7', default: false },
                 { label: 'Task pianificazione in ritardo', key: 'n8', default: false },

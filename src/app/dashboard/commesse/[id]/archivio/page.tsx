@@ -392,7 +392,7 @@ export default function ArchivioPage() {
         {expanded.has('acquisti') && (
           <div style={{ padding: 14, display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(170px,1fr))', gap: 10 }}>
             <LinkBox icon="📋" label="ODA" count={counts.oda} onClick={() => router.push(base + '/oda')} />
-            <LinkBox icon="✅" label="DAM" count={counts.dam} onClick={() => router.push(base + '/dam')} />
+            <LinkBox icon="✅" label="SAM" count={counts.dam} onClick={() => router.push(base + '/dam')} />
             <LinkBox icon="📝" label="RDA" count={counts.rda} onClick={() => router.push(base + '/rda')} />
             <LinkBox icon="🏷️" label="RDO" count={counts.rdo} onClick={() => router.push(base + '/rdo')} />
           </div>

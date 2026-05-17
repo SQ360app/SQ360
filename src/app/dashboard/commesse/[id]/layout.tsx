@@ -29,7 +29,7 @@ const GRUPPI = [
     tabs: [
       { href: 'rda', label: 'RDA' },
       { href: 'rdo', label: 'RDO' },
-      { href: 'dam', label: 'DAM' },
+      { href: 'dam', label: 'SAM' },
       { href: 'oda', label: 'ODA' },
     ],
   },

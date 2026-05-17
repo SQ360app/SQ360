@@ -187,7 +187,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
       })
       const blob = await pdfrMod.pdf(element as any).toBlob()
       const url = URL.createObjectURL(blob)
-      const a = document.createElement('a'); a.href = url; a.download = `${d.codice || 'DAM'}-Rev${d.revisione}.pdf`; a.click()
+      const a = document.createElement('a'); a.href = url; a.download = `${d.codice || 'SAM'}-Rev${d.revisione}.pdf`; a.click()
       URL.revokeObjectURL(url)
     } finally { setPdfLoading(null) }
   }
@@ -232,7 +232,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
       {/* Lista DAM */}
       <div style={(styleObj as any).card as React.CSSProperties}>
         <div style={(styleObj as any).hdr as React.CSSProperties}>
-          <span style={(styleObj as any).hl as React.CSSProperties}>Dossier Accettazione Materiali</span>
+          <span style={(styleObj as any).hl as React.CSSProperties}>Scheda Approvazione Materiali</span>
           <div style={{ display:'flex', gap:8 }}>
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cerca materiale..." style={{ ...(styleObj as any).inp, width:200 }} />
             <button className="btn-primary" style={{ fontSize:12, padding:'8px 14px', whiteSpace:'nowrap' as const }}

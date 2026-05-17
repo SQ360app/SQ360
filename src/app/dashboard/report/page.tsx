@@ -21,7 +21,7 @@ const REPORT_DISPONIBILI: TipoReport[] = [
   { id:'r4', titolo:'Scadenzario DURC/SOA', descrizione:'Fornitori con scadenze documento entro X giorni', modulo:'Fornitori', formati:['pdf','xlsx','csv'], icona:'📅', template:'scadenze_compliance' },
   { id:'r5', titolo:'Giornale Lavori', descrizione:'Registro accessi, consegne e annotazioni per commessa', modulo:'Cantiere', formati:['pdf'], icona:'📝', template:'giornale_lavori' },
   { id:'r6', titolo:'Situazione Crediti/Debiti', descrizione:'Fatture attive/passive con scadenze e ritenute', modulo:'Amministrazione', formati:['pdf','xlsx'], icona:'💼', template:'crediti_debiti' },
-  { id:'r7', titolo:'DAM — Stato Accettazione Materiali', descrizione:'Tutti i dossier con stato (approvato/annotazioni/rev)', modulo:'DAM', formati:['pdf','xlsx'], icona:'📦', template:'dam_stato' },
+  { id:'r7', titolo:'SAM — Scheda Approvazione Materiali', descrizione:'Tutte le schede con stato (approvato/annotazioni/rev)', modulo:'SAM', formati:['pdf','xlsx'], icona:'📦', template:'dam_stato' },
   { id:'r8', titolo:'Contratti Subappalto', descrizione:'Elenco contratti, importi, SAL passivi, ritenute per sub', modulo:'Contratti', formati:['pdf','xlsx'], icona:'📜', template:'contratti_sub' },
   { id:'r9', titolo:'Preventivo Costi', descrizione:'Preventivo per gruppi di lavoro con breakdown per tipo', modulo:'M2', formati:['pdf','xlsx'], icona:'🔢', template:'preventivo_costi' },
   { id:'r10', titolo:'Pianificazione Gantt', descrizione:'Diagramma Gantt con percorso critico e milestone', modulo:'M3', formati:['pdf'], icona:'📈', template:'gantt' },
