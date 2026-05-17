@@ -265,6 +265,18 @@
 - ✅ Label "DAM" → "SAM" (Scheda Approvazione Materiali) in: layout commessa, titolo pagina, lista archivio, PDF, report, impostazioni
 - ✅ URL `/dam`, variabili e tabella DB rimasti invariati
 
+### SAL Attivi — migliorato (commit 46b4903)
+- ✅ `sal_voci` INSERT semplificato: salva solo `sal_id`, `voce_computo_id`, `quantita_periodo`, `wbs_id`; rimossi campi snapshot ridondanti (codice, descrizione, um, quantita_contratto, prezzo_unitario, importo_periodo) — JOIN su `voci_computo` garantisce dati sempre aggiornati
+- ✅ `salvaVoci()`: DELETE+INSERT per idempotenza — funziona correttamente anche su riapertura bozza
+- ✅ Colonna **Residuo live** nella griglia: `quantità_contratto − precedente − corrente`; verde se >0, rosso se <0 (supera contratto), ✓ grigio se =0; si aggiorna mentre si digita
+- ✅ Voci da **varianti esecutive** in griglia SAL: `caricaVociGrid` carica `voci_variante` JOIN `varianti(stato='esecutiva')`, filtro client-side; sezioni variante con header blu `#1e3a5f`; voci `soppressione` in grigio barrato con input disabilitato
+- ✅ Upload **PDF DL** nel form creazione SAL (opzionale) → Storage `documenti/{azienda_id}/sal/{commessa_id}/SAL-N-DL.pdf`; URL salvato in `sal.pdf_dl_url`
+- ✅ **Carica Certificato RUP**: bottone 📎 Cert. per SAL in stato `emesso` → Storage `documenti/{azienda_id}/sal/{commessa_id}/SAL-N-certificato.pdf`; URL in `sal.pdf_certificato_url`
+- ✅ Lista SAL: link 📄 PDF DL, link 📋 Cert. RUP se presenti; bottone ✏️ Modifica per SAL in bozza
+- ✅ **Riapertura SAL in bozza**: `riaperturaBozza()` esclude il SAL corrente dal `qtPrecedente` e pre-popola `qtInput` dai `sal_voci` esistenti
+- ✅ `cumulPrec` esclude sempre il SAL corrente — corretto sia per creazione che per riapertura bozza
+- ⚠️ **SQL da eseguire su Supabase**: `ALTER TABLE sal ADD COLUMN IF NOT EXISTS pdf_dl_url text; ALTER TABLE sal ADD COLUMN IF NOT EXISTS pdf_certificato_url text;`
+
 ### Mappa cantieri dashboard (commit c731b7b → f2c28ec)
 - ⚠️ **Implementata ma non verificata visivamente** — griglia card 3 colonne, immagini statiche `staticmap.openstreetmap.de`, geocodifica Nominatim con salvataggio coordinate nel DB
 - ⚠️ **Possibile causa mancata visualizzazione**: tabella `commesse` non ha colonne `lat`, `lng`, `indirizzo_cantiere`, `comune_cantiere`, `cap_cantiere`, `provincia` — verificare schema DB
@@ -273,11 +285,12 @@
 - `console.log('MapCommesse mounted')` e `console.log('Commesse caricate:', N)` presenti per debug
 
 ## Prossimi task prioritari
-1. **Mappa cantieri** — verificare in console browser: "MapCommesse mounted" e "Commesse caricate: N". Se N=0 → tabella vuota o colonne `lat/lng/indirizzo` mancanti nello schema DB
-2. **SQL colonne mappa** — aggiungere a `commesse` se mancanti: `lat FLOAT`, `lng FLOAT`, `indirizzo_cantiere TEXT`, `comune_cantiere TEXT`, `cap_cantiere TEXT`
-3. **Test flusso register→login** — test end-to-end registrazione → conferma email → primo accesso
-4. **Verifica dominio Resend** — verificare `sq360.app` su Resend → Domains per mittente ufficiale
-5. **SQL tabelle Sprint 6** — creare su Supabase: `documenti_contratto_sub`, `lavoratori_sub`, `pagamenti_sub`
+1. **SQL colonne SAL PDF** — eseguire su Supabase: `ALTER TABLE sal ADD COLUMN IF NOT EXISTS pdf_dl_url text; ALTER TABLE sal ADD COLUMN IF NOT EXISTS pdf_certificato_url text;`
+2. **Mappa cantieri** — verificare in console browser: "MapCommesse mounted" e "Commesse caricate: N". Se N=0 → tabella vuota o colonne `lat/lng/indirizzo` mancanti nello schema DB
+3. **SQL colonne mappa** — aggiungere a `commesse` se mancanti: `lat FLOAT`, `lng FLOAT`, `indirizzo_cantiere TEXT`, `comune_cantiere TEXT`, `cap_cantiere TEXT`
+4. **Test flusso register→login** — test end-to-end registrazione → conferma email → primo accesso
+5. **Verifica dominio Resend** — verificare `sq360.app` su Resend → Domains per mittente ufficiale
+6. **SQL tabelle Sprint 6** — creare su Supabase: `documenti_contratto_sub`, `lavoratori_sub`, `pagamenti_sub`
 
 ## Email notifiche (Resend) — stato configurazione
 - `RESEND_API_KEY`: configurato in produzione ✅
@@ -306,7 +319,7 @@
 18. ~~RDO wizard multi-fornitore da RDA + pagina pubblica /offerta/[token]~~ ✅
 19. ~~Comparativa automatica RDO per gruppo gara con tabella e aggiudicazione~~ ✅
 20. ~~Upload PDF preventivo + AI Gemini estrazione voci offerta~~ ✅
-21. ~~SAL Attivi: griglia voci manuale + import XPWE DL + quadro economico~~ ✅
+21. ~~SAL Attivi: griglia voci manuale + import XPWE DL + quadro economico + residuo live + varianti esecutive + PDF DL/Cert RUP + riapertura bozza~~ ✅
 22. ~~SAL Passivi: card sub, slider avanzamento, DURC check, autorizzazione pagamento~~ ✅
 23. ~~6 tipi ODA (materiali/nolo_freddo/nolo_caldo/subappalto/manodopera/servizio) + tipo_oda in INSERT~~ ✅
 24. ~~Piano costi voce nel computo: dot indicatori, pannello componenti, genera RDA diretta~~ ✅
@@ -338,6 +351,9 @@
 - Pattern navigazione layout commessa: `GRUPPI` array con `id`, `color`, `bg`, `border`, `tabs[]` — gruppo attivo rilevato da `pathname.startsWith(base + '/' + t.href)`
 - Tabella `migliorie`: `gara_id`, `commessa_id`, `azienda_id`, `categoria`, `descrizione`, `costo_stimato`, `costo_effettivo`, `punteggio_tecnico_stimato`, `note`, `offerta` bool, `fase` ('gara'|'commessa'), `stato` (contrattuale|da_eseguire|in_esecuzione|completata|verificata_dl)
 - Checklist offerta gare: persistita in `localStorage('checklist-{gara_id}')` — non in DB
+- Tabella `sal`: aggiungere `pdf_dl_url text`, `pdf_certificato_url text` (ALTER TABLE già in Prossimi task)
+- Tabella `sal_voci`: schema minimo — `sal_id`, `voce_computo_id`, `quantita_periodo`, `wbs_id`; tutti gli altri dati si leggono via JOIN su `voci_computo` (non duplicare)
+- Upload SAL: bucket `documenti`, path `{azienda_id}/sal/{commessa_id}/SAL-{numero}-DL.pdf` e `SAL-{numero}-certificato.pdf`
 
 ## Principi UX
 - Semplicità estrema: max 3 tap per qualsiasi azione
