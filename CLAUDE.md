@@ -261,10 +261,23 @@
 - ✅ Form inline per aggiungere migliorie direttamente sulla commessa (fase='commessa', stato='contrattuale')
 - ✅ Tab "Migliorie" aggiunto nel gruppo Contrattuale ⚖️ del layout a due livelli
 
+### Rename DAM → SAM (commit 9f407cb)
+- ✅ Label "DAM" → "SAM" (Scheda Approvazione Materiali) in: layout commessa, titolo pagina, lista archivio, PDF, report, impostazioni
+- ✅ URL `/dam`, variabili e tabella DB rimasti invariati
+
+### Mappa cantieri dashboard (commit c731b7b → f2c28ec)
+- ⚠️ **Implementata ma non verificata visivamente** — griglia card 3 colonne, immagini statiche `staticmap.openstreetmap.de`, geocodifica Nominatim con salvataggio coordinate nel DB
+- ⚠️ **Possibile causa mancata visualizzazione**: tabella `commesse` non ha colonne `lat`, `lng`, `indirizzo_cantiere`, `comune_cantiere`, `cap_cantiere`, `provincia` — verificare schema DB
+- ⚠️ **Alternativa**: se le colonne non esistono, il componente mostra card senza mappa (placeholder colorato con stato)
+- Rimossi tutti i filtri sulla query (nessun filtro stato, nessun filtro azienda_id) per massimizzare debug
+- `console.log('MapCommesse mounted')` e `console.log('Commesse caricate:', N)` presenti per debug
+
 ## Prossimi task prioritari
-1. **Test flusso register→login** — test end-to-end registrazione → conferma email → primo accesso
-2. **Verifica dominio Resend** — verificare `sq360.app` su Resend → Domains per mittente ufficiale
-3. **SQL tabelle Sprint 6** — creare su Supabase: `documenti_contratto_sub`, `lavoratori_sub`, `pagamenti_sub`
+1. **Mappa cantieri** — verificare in console browser: "MapCommesse mounted" e "Commesse caricate: N". Se N=0 → tabella vuota o colonne `lat/lng/indirizzo` mancanti nello schema DB
+2. **SQL colonne mappa** — aggiungere a `commesse` se mancanti: `lat FLOAT`, `lng FLOAT`, `indirizzo_cantiere TEXT`, `comune_cantiere TEXT`, `cap_cantiere TEXT`
+3. **Test flusso register→login** — test end-to-end registrazione → conferma email → primo accesso
+4. **Verifica dominio Resend** — verificare `sq360.app` su Resend → Domains per mittente ufficiale
+5. **SQL tabelle Sprint 6** — creare su Supabase: `documenti_contratto_sub`, `lavoratori_sub`, `pagamenti_sub`
 
 ## Email notifiche (Resend) — stato configurazione
 - `RESEND_API_KEY`: configurato in produzione ✅
@@ -305,6 +318,14 @@
 30. ~~Navigazione commessa a due livelli: 6 gruppi pill + sotto-moduli per gruppo~~ ✅
 31. ~~Migliorie gare: accordion dettaglio, checklist offerta, simulatore margine con ribasso~~ ✅
 32. ~~Migliorie commessa: tracking stati esecuzione, costo effettivo, impatto CE~~ ✅
+33. ~~Rename DAM → SAM (Scheda Approvazione Materiali) — label UI aggiornate, URL/DB invariati~~ ✅
+34. Mappa cantieri dashboard con card griglia + staticmap OSM + geocodifica Nominatim ⚠️ (da verificare)
+35. Registro di contabilità (libro giornale lavori strutturato) 📋
+36. PDF aggiuntivi (SAL, Varianti, Contratti sub) 📋
+37. Mobile PWA migliorata (offline, push notification) 📋
+38. Export completo commessa in formato ZIP strutturato 📋
+39. Knowledge base AI edile (normativa D.Lgs. 36/2023, prezzari regionali) 📋
+40. Billing e piani tariffari (Stripe integration) 📋
 
 ## Note implementazione
 - `getAziendaId()` in `src/lib/supabase.ts` — helper condiviso: `auth.uid() → utenti.azienda_id`
