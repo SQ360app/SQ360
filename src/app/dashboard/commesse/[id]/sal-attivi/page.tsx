@@ -874,7 +874,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
             <button onClick={async () => {
               const n = (salList.length ? Math.max(...salList.map((s: any) => s.numero)) : 0) + 1
               const aziendaId = await getAziendaId()
-              const { data, error } = await supabase.from('sal').insert({ commessa_id: id, azienda_id: aziendaId, numero: n, codice: `SAL-A-${String(n).padStart(3,'0')}`, data_emissione: new Date().toISOString().split('T')[0], metodo: 'manuale', stato: 'bozza', importo_certificato: 0, importo_cumulativo: 0, ritenuta_garanzia: 0, importo_netto: 0 }).select().single()
+              const { data, error } = await supabase.from('sal').insert({ commessa_id: id, azienda_id: aziendaId, numero: n, data_emissione: new Date().toISOString().split('T')[0], stato: 'bozza', metodo: 'manuale', note: '' }).select().single()
               if (error) { showToast('Errore creazione SAL: ' + error.message); return }
               if (data) { setSalList((p: any) => [...p, data]); setSalSel(data); setQtInput({}) }
             }} style={{ padding: '4px 12px', background: 'rgba(79,142,247,.2)', border: '1px solid rgba(79,142,247,.3)', borderRadius: 6, color: '#7baff8', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>+ Nuovo SAL</button>
