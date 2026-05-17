@@ -10,30 +10,66 @@ interface Commessa {
   stato: string; importo_contratto: number; committente: string
 }
 
-const TABS = [
-  { key: 'anagrafica',    label: 'Anagrafica',      path: '/anagrafica' },
-  { key: 'documenti',     label: 'Documenti',        path: '/documenti' },
-  { key: 'elenco-prezzi', label: 'Elenco Prezzi',   path: '/elenco-prezzi' },
-  { key: 'computo',       label: 'Computo',          path: '/computo' },
-  { key: 'rda',           label: 'RDA',              path: '/rda' },
-  { key: 'rdo',           label: 'RDO',              path: '/rdo' },
-  { key: 'oda',           label: 'ODA',              path: '/oda' },
-  { key: 'contratti',     label: 'Contratti Sub',    path: '/contratti' },
-  { key: 'dam',           label: 'DAM',              path: '/dam' },
-  { key: 'ddt',           label: 'DDT',              path: '/ddt' },
-  { key: 'cantiere',      label: 'Cantiere',         path: '/cantiere' },
-  { key: 'sicurezza',     label: 'Sicurezza',        path: '/sicurezza' },
-  { key: 'persone',       label: 'Persone',          path: '/persone' },
-  { key: 'spese',         label: 'Spese',            path: '/spese' },
-  { key: 'sal-attivi',    label: 'SAL Attivi',       path: '/sal-attivi' },
-  { key: 'sal-passivi',      label: 'SAL Passivi',      path: '/sal-passivi' },
-  { key: 'varianti',         label: 'Varianti',         path: '/varianti' },
-  { key: 'ordini-servizio',  label: 'Ordini Servizio',  path: '/ordini-servizio' },
-  { key: 'marginalita',      label: 'Marginalità',      path: '/marginalita' },
-  { key: 'fatturazione',  label: 'Fatturazione',     path: '/fatturazione' },
-  { key: 'fatture',       label: 'Fatt. passive',    path: '/fatture' },
-  { key: 'conto-economico', label: 'CE',             path: '/conto-economico' },
-  { key: 'archivio',        label: 'Archivio',       path: '/archivio' },
+const GRUPPI = [
+  {
+    id: 'contratto', label: 'Contratto', ico: '📋',
+    color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe',
+    tabs: [
+      { href: 'anagrafica',    label: 'Anagrafica' },
+      { href: 'documenti',     label: 'Documenti' },
+      { href: 'elenco-prezzi', label: 'Elenco Prezzi' },
+      { href: 'computo',       label: 'Computo' },
+      { href: 'sal-attivi',    label: 'SAL Attivi' },
+      { href: 'sal-passivi',   label: 'SAL Passivi' },
+    ],
+  },
+  {
+    id: 'acquisti', label: 'Acquisti', ico: '🛒',
+    color: '#c2410c', bg: '#fff7ed', border: '#fed7aa',
+    tabs: [
+      { href: 'rda', label: 'RDA' },
+      { href: 'rdo', label: 'RDO' },
+      { href: 'dam', label: 'DAM' },
+      { href: 'oda', label: 'ODA' },
+    ],
+  },
+  {
+    id: 'cantiere', label: 'Cantiere', ico: '🏗️',
+    color: '#065f46', bg: '#f0fdf4', border: '#bbf7d0',
+    tabs: [
+      { href: 'cantiere',  label: 'Giornale' },
+      { href: 'sicurezza', label: 'Sicurezza' },
+      { href: 'persone',   label: 'Persone' },
+      { href: 'ddt',       label: 'DDT' },
+      { href: 'spese',     label: 'Spese' },
+    ],
+  },
+  {
+    id: 'economico', label: 'Economico', ico: '💰',
+    color: '#6d28d9', bg: '#f5f3ff', border: '#ddd6fe',
+    tabs: [
+      { href: 'fatturazione',   label: 'Fatturazione' },
+      { href: 'fatture',        label: 'Fatt. passive' },
+      { href: 'conto-economico',label: 'CE' },
+      { href: 'marginalita',    label: 'Marginalità' },
+    ],
+  },
+  {
+    id: 'contrattuale', label: 'Contrattuale', ico: '⚖️',
+    color: '#991b1b', bg: '#fef2f2', border: '#fecaca',
+    tabs: [
+      { href: 'contratti',      label: 'Contratti Sub' },
+      { href: 'varianti',       label: 'Varianti' },
+      { href: 'ordini-servizio',label: 'Ordini Servizio' },
+    ],
+  },
+  {
+    id: 'archivio', label: 'Archivio', ico: '📁',
+    color: '#374151', bg: '#f9fafb', border: '#e5e7eb',
+    tabs: [
+      { href: 'archivio', label: 'Archivio' },
+    ],
+  },
 ]
 
 const STATI_COLOR: Record<string, string> = {
@@ -43,11 +79,11 @@ const STATI_COLOR: Record<string, string> = {
 
 export default function CommessaLayout({ children }: { children: React.ReactNode }) {
   const { id } = useParams() as { id: string }
-  const router = useRouter()
+  const router   = useRouter()
   const pathname = usePathname()
-  const [commessa, setCommessa] = useState<Commessa | null>(null)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [deleting, setDeleting] = useState(false)
+  const [commessa,           setCommessa]           = useState<Commessa | null>(null)
+  const [showDeleteConfirm,  setShowDeleteConfirm]  = useState(false)
+  const [deleting,           setDeleting]           = useState(false)
 
   useEffect(() => {
     supabase.from('commesse')
@@ -58,16 +94,21 @@ export default function CommessaLayout({ children }: { children: React.ReactNode
 
   async function handleDelete() {
     setDeleting(true)
-        const { error: delErr } = await supabase.from('commesse').delete().eq('id', id)
-        if (delErr) { setDeleting(false); return }
+    const { error: delErr } = await supabase.from('commesse').delete().eq('id', id)
+    if (delErr) { setDeleting(false); return }
     router.push('/dashboard/commesse')
   }
 
   const base = '/dashboard/commesse/' + id
-  const currentTab = TABS.find(t => {
-    if (t.path === '') return pathname === base
-    return pathname.startsWith(base + t.path)
-  })?.key || 'anagrafica'
+
+  // Detect active group and active tab from pathname
+  const activeGruppo = GRUPPI.find(g =>
+    g.tabs.some(t => pathname.startsWith(base + '/' + t.href))
+  ) || GRUPPI[0]
+
+  const activeTabHref = activeGruppo.tabs.find(t =>
+    pathname.startsWith(base + '/' + t.href)
+  )?.href || activeGruppo.tabs[0].href
 
   const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })
   const statoColor = commessa ? (STATI_COLOR[commessa.stato] || '#6b7280') : '#6b7280'
@@ -76,52 +117,82 @@ export default function CommessaLayout({ children }: { children: React.ReactNode
     <div style={{ minHeight: 0, background: '#f9fafb' }}>
 
       {/* Header */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', padding: '5px 20px', position: 'sticky', top: 0, zIndex: 40 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+      <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', position: 'sticky', top: 0, zIndex: 40 }}>
+
+        {/* Riga breadcrumb + commessa */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 20px', borderBottom: '1px solid #f3f4f6' }}>
           <button onClick={() => router.push('/dashboard/commesse')}
-            style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', flexShrink: 0 }}>
             <ArrowLeft size={14} /> Commesse
           </button>
           <span style={{ color: '#d1d5db' }}>/</span>
-          {commessa && (
+          {commessa ? (
             <>
-              <span style={{ fontFamily: 'monospace', fontSize: 11, background: '#f3f4f6', padding: '2px 8px', borderRadius: 4, color: '#6b7280' }}>
+              <span style={{ fontFamily: 'monospace', fontSize: 11, background: '#f3f4f6', padding: '2px 8px', borderRadius: 4, color: '#6b7280', flexShrink: 0 }}>
                 {commessa.codice}
               </span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#111827', flex: 1 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#111827', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {commessa.nome}
               </span>
-              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, fontWeight: 500,
-                background: statoColor + '20', color: statoColor }}>
-                {commessa.stato?.replace('_', ' ')}
+              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, fontWeight: 500, background: statoColor + '20', color: statoColor, flexShrink: 0 }}>
+                {commessa.stato?.replace(/_/g, ' ')}
               </span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#059669' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#059669', flexShrink: 0 }}>
                 EUR {fmt(commessa.importo_contratto || 0)}
               </span>
-              {/* BOTTONE DELETE */}
-              <button onClick={() => setShowDeleteConfirm(true)}
-                title="Elimina commessa"
-                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', border: '1px solid #fca5a5', borderRadius: 6, background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: 11 }}>
+              <button onClick={() => setShowDeleteConfirm(true)} title="Elimina commessa"
+                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', border: '1px solid #fca5a5', borderRadius: 6, background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: 11, flexShrink: 0 }}>
                 <Trash2 size={13} /> Elimina
               </button>
             </>
+          ) : (
+            <span style={{ fontSize: 12, color: '#9ca3af' }}>Caricamento...</span>
           )}
         </div>
 
-        {/* TAB BAR — senza Assegnazione */}
-        <div style={{ display: 'flex', gap: 0, overflowX: 'auto', scrollbarWidth: 'none' }}>
-          {TABS.map(tab => {
-            const active = tab.key === currentTab
+        {/* RIGA 1 — Gruppi pill */}
+        <div style={{ display: 'flex', gap: 4, padding: '5px 16px', overflowX: 'auto', scrollbarWidth: 'none' }}>
+          {GRUPPI.map(g => {
+            const isActive = g.id === activeGruppo.id
             return (
-              <button key={tab.key}
-                onClick={() => router.push(base + tab.path)}
+              <button key={g.id}
+                onClick={() => {
+                  if (!isActive) router.push(base + '/' + g.tabs[0].href)
+                }}
                 style={{
-                  padding: '8px 14px', fontSize: 12, fontWeight: active ? 600 : 400,
-                  border: 'none', borderBottom: active ? '2px solid #2563eb' : '2px solid transparent',
-                  background: 'transparent', color: active ? '#2563eb' : '#6b7280',
-                  cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  padding: '4px 12px', borderRadius: 20, flexShrink: 0,
+                  fontSize: 12, fontWeight: isActive ? 700 : 500,
+                  border: `1px solid ${isActive ? g.border : '#e5e7eb'}`,
+                  background: isActive ? g.bg : '#fff',
+                  color: isActive ? g.color : '#6b7280',
+                  cursor: isActive ? 'default' : 'pointer',
+                  transition: 'all .15s',
                 }}>
-                {tab.label}
+                <span style={{ fontSize: 14 }}>{g.ico}</span>
+                {g.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* RIGA 2 — Sotto-tab del gruppo attivo */}
+        <div style={{ display: 'flex', gap: 0, padding: '0 16px', overflowX: 'auto', scrollbarWidth: 'none', borderTop: `2px solid ${activeGruppo.bg}` }}>
+          {activeGruppo.tabs.map(t => {
+            const isActive = t.href === activeTabHref
+            return (
+              <button key={t.href}
+                onClick={() => router.push(base + '/' + t.href)}
+                style={{
+                  padding: '6px 14px', fontSize: 12,
+                  fontWeight: isActive ? 600 : 400,
+                  border: 'none', flexShrink: 0,
+                  borderBottom: isActive ? `2px solid ${activeGruppo.color}` : '2px solid transparent',
+                  background: 'transparent',
+                  color: isActive ? activeGruppo.color : '#6b7280',
+                  cursor: 'pointer', whiteSpace: 'nowrap',
+                }}>
+                {t.label}
               </button>
             )
           })}
@@ -150,7 +221,8 @@ export default function CommessaLayout({ children }: { children: React.ReactNode
             </div>
             <p style={{ fontSize: 13, color: '#374151', margin: '0 0 16px', lineHeight: 1.5 }}>
               Stai per eliminare <strong>{commessa?.nome}</strong> ({commessa?.codice}).
-              Tutti i dati collegati (computo, RDA, RDO, ODA, SAL) verranno eliminati definitivamente. Il database Contatti (fornitori, professionisti) NON viene eliminato.
+              Tutti i dati collegati (computo, RDA, RDO, ODA, SAL) verranno eliminati definitivamente.
+              Il database Contatti (fornitori, professionisti) NON viene eliminato.
             </p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button onClick={() => setShowDeleteConfirm(false)}
