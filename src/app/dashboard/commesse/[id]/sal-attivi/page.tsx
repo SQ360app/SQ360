@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { getAziendaId } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
 import SalGrid from './SalGrid'
 
 const supabase = createClient(
@@ -59,6 +60,7 @@ const S = {
 
 export default function SALAttiviPage({ params: p }: { params: Promise<{ id: string }> }) {
   const { id } = use(p)
+  const router = useRouter()
 
   const [salList, setSalList]   = useState<SAL[]>([])
   const [commessa, setCommessa] = useState<Partial<Commessa>>({})
@@ -235,11 +237,8 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
     setPdfLoading(null)
   }
 
-  const riaperturaBozza = async (sal: SAL) => {
-    setSalAttivo(sal)
-    setXpwePreview([])
-    await caricaVociGrid(sal.id, sal.id)
-    setFase('voci')
+  const riaperturaBozza = (sal: SAL) => {
+    router.push(`sal-attivi/inserimento/${sal.id}`)
   }
 
   const caricaCertificato = async (sal: SAL) => {
@@ -286,8 +285,7 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
     setSalAttivo(nuovoSal as SAL)
     setSaving(false)
     if (formSal.metodo === 'manuale') {
-      await caricaVociGrid(nuovoSal.id)
-      setFase('voci')
+      router.push(`sal-attivi/inserimento/${nuovoSal.id}`)
     } else {
       setFase('xpwe')
     }
