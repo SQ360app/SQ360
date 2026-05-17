@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { getAziendaId } from '@/lib/supabase'
-import SalInserimento from './SalInserimento'
+import SalGrid from './SalGrid'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -69,7 +69,7 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
 
   // Voci grid
   const [vociComputo, setVociComputo] = useState<VoceComputo[]>([])
-  const [qtInput, setQtInput]         = useState<Record<string, string>>({})
+  const [qtInput, setQtInput]         = useState<Record<string, number>>({})
   const [qtPrecedente, setQtPrecedente] = useState<Record<string, number>>({})
   const [vociLoading, setVociLoading] = useState(false)
 
@@ -188,11 +188,11 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
     setVociComputo(tutteVoci)
     setQtPrecedente(qtPrec)
 
-    const init: Record<string, string> = {}
-    for (const v of tutteVoci) { init[v.id] = '' }
+    const init: Record<string, number> = {}
+    for (const v of tutteVoci) { init[v.id] = 0 }
     if (preloadSalId) {
       for (const sv of ((preloadRes as any).data || [])) {
-        if (sv.voce_computo_id in init) init[sv.voce_computo_id] = String(sv.quantita_periodo || '')
+        if (sv.voce_computo_id in init) init[sv.voce_computo_id] = sv.quantita_periodo || 0
       }
     }
     setQtInput(init)
@@ -298,9 +298,9 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
     setSaving(true)
     await supabase.from('sal_voci').delete().eq('sal_id', salAttivo.id)
     const vociDaSalvare = vociComputo
-      .filter(v => parseFloat(qtInput[v.id] || '0') > 0 && v._tipoModifica !== 'soppressione')
+      .filter(v => (qtInput[v.id] || 0) > 0 && v._tipoModifica !== 'soppressione')
       .map(v => {
-        const qt = parseFloat(qtInput[v.id] || '0')
+        const qt = qtInput[v.id] || 0
         return { sal_id: salAttivo.id, voce_computo_id: v.id, quantita_periodo: qt, wbs_id: v.wbs_id ?? null }
       })
     if (vociDaSalvare.length > 0) await supabase.from('sal_voci').insert(vociDaSalvare)
@@ -386,7 +386,7 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
   const avanzPct    = pct(certTotale, contratto)
 
   // Quadro economico voci (live)
-  const importoPeriodo  = vociComputo.reduce((s, v) => s + (parseFloat(qtInput[v.id] || '0') || 0) * v.prezzo_unitario, 0)
+  const importoPeriodo  = vociComputo.reduce((s, v) => s + (qtInput[v.id] || 0) * v.prezzo_unitario, 0)
   const cumulPrec       = salList.filter(s => !salAttivo || s.id !== salAttivo.id).reduce((s, s2) => s + (s2.importo_certificato || 0), 0)
   const ritenuta5       = parseFloat((importoPeriodo * 0.05).toFixed(2))
   const nettoSal        = parseFloat((importoPeriodo - ritenuta5).toFixed(2))
@@ -604,10 +604,11 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
         <div style={S.card}><div style={{ padding:40, textAlign:'center' }}><span className="spinner" /></div></div>
       )}
       {fase === 'voci' && salAttivo && !vociLoading && (
-        <SalInserimento
-          voci={vociComputo}
+        <SalGrid
+          commessaId={id}
+          salId={salAttivo.id}
           salNumero={salAttivo.numero}
-          salPrecedenti={salList.filter(s => s.id !== salAttivo.id).map(s => ({ id: s.id, numero: s.numero, stato: s.stato, data_emissione: s.data_emissione }))}
+          salPrecedenti={salList.filter(s => s.id !== salAttivo.id).map(s => ({ id: s.id, numero: s.numero, stato: s.stato }))}
           qtPerSal={qtPerSalPrec}
           qtCumulative={qtPrecedente}
           qtInput={qtInput}
