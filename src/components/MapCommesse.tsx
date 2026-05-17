@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
 import { supabase, getAziendaId } from '@/lib/supabase'
-import 'leaflet/dist/leaflet.css'
 import L from 'leaflet'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -158,7 +157,7 @@ export default function MapCommesse() {
         <MapContainer
           center={[42, 12]}
           zoom={6}
-          style={{ height: 320, width: '100%' }}
+          style={{ height: '320px', width: '100%' }}
           attributionControl={false}
         >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
