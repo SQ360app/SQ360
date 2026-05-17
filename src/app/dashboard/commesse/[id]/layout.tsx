@@ -61,6 +61,7 @@ const GRUPPI = [
       { href: 'contratti',      label: 'Contratti Sub' },
       { href: 'varianti',       label: 'Varianti' },
       { href: 'ordini-servizio',label: 'Ordini Servizio' },
+      { href: 'migliorie',      label: 'Migliorie' },
     ],
   },
   {
