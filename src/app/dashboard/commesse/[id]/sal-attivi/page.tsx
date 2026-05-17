@@ -22,6 +22,49 @@ const SC: Record<string,string> = {
   bozza:'#f59e0b', emesso:'#3b82f6', approvato:'#8b5cf6', fatturato:'#14b8a6', pagato:'#10b981'
 }
 
+const SAL_GRID_CSS = `
+.sal-root{display:flex;overflow:hidden;border-radius:12px;border:1px solid var(--border);box-shadow:var(--shadow-sm);height:calc(100vh - 210px);min-height:480px}
+.sal-sb{background:var(--panel);border-right:1px solid rgba(0,0,0,.12);display:flex;flex-direction:column;overflow:hidden;width:240px;flex-shrink:0}
+.sal-sb-hdr{padding:8px 10px;background:#1e3a5f;display:flex;align-items:center;gap:6px;flex-shrink:0}
+.sal-sb-title{color:#fff;font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sal-sb-sub{font-size:9px;color:#93c5fd;white-space:nowrap}
+.sal-stabs{display:flex;border-bottom:2px solid #4ade80;flex-shrink:0}
+.sal-stab{flex:1;padding:7px 3px;font-size:10px;font-weight:700;border:none;cursor:pointer;background:transparent;color:#6b7280;transition:all .15s}
+.sal-stab.on{background:#14532d;color:#fff}
+.sal-stab:hover:not(.on){background:#f0fdf4;color:#14532d}
+.sal-sbody{flex:1;overflow-y:auto;overflow-x:hidden}
+.sal-sbody::-webkit-scrollbar{width:4px}.sal-sbody::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:2px}
+.sal-sfoot{padding:8px 10px;background:#14532d;flex-shrink:0}
+.sal-sft{display:flex;justify-content:space-between;color:#bbf7d0;font-size:11px;font-weight:600;margin-bottom:2px}
+.sal-all-btn{display:block;width:calc(100% - 12px);margin:5px 6px;font-size:10px;padding:3px 9px;border:none;border-radius:3px;cursor:pointer;font-weight:700;background:#4ade80;color:#14532d;text-align:left}
+.sal-node{display:flex;align-items:center;min-height:26px;cursor:pointer;border-bottom:1px solid rgba(0,0,0,.05);padding:2px 8px;transition:background .1s}
+.sal-node:hover{background:#f0fdf4}
+.sal-node.on{background:#14532d}
+.sal-node.on .sal-nlb,.sal-node.on .sal-ncnt,.sal-node.on .sal-nimp{color:#fff!important;opacity:1}
+.sal-nlb{flex:1;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t1)}
+.sal-ncnt{width:24px;font-size:9px;text-align:right;color:var(--t3);flex-shrink:0}
+.sal-nimp{font-size:9px;text-align:right;font-weight:600;color:#065f46;padding-right:2px;min-width:60px;flex-shrink:0}
+.sal-main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;background:var(--bg)}
+.sal-tbar{display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.sal-tscroll{flex:1;overflow:auto}
+.sal-tscroll::-webkit-scrollbar{width:6px;height:6px}.sal-tscroll::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}
+table.sal-t{border-collapse:collapse;white-space:nowrap;font-size:11px;width:100%}
+table.sal-t thead{position:sticky;top:0;z-index:10}
+table.sal-t th{padding:4px 6px;font-size:9px;font-weight:700;background:#4ade80;color:#14532d;border-right:1px solid #16a34a;text-align:center;white-space:nowrap}
+table.sal-t th.l{text-align:left;padding-left:8px}
+table.sal-t th.blu{background:#1e3a5f!important;color:#93c5fd!important;border-right-color:#1e3a5f!important}
+table.sal-t th.grey{background:#374151!important;color:#d1d5db!important;border-right-color:#374151!important}
+table.sal-t td{padding:3px 6px;border-right:1px solid #e5e7eb;border-bottom:1px solid #f3f4f6;vertical-align:middle;font-size:10px}
+.sal-hca td{background:#166534!important;padding:4px 10px!important;font-weight:700!important;font-size:10px!important;color:#d1fae5!important;letter-spacing:.4px;text-transform:uppercase;border-bottom:2px solid #4ade80!important}
+.sal-hvar td{background:#1e3a5f!important;padding:4px 10px!important;font-weight:700!important;font-size:10px!important;color:#bfdbfe!important;letter-spacing:.4px;text-transform:uppercase;border-bottom:2px solid #3b82f6!important}
+.sal-row:hover td{background:#d1fae5}
+.sal-row.has-qt td{background:rgba(16,185,129,.04)}
+.sal-row.soppressione{opacity:.45}
+.sal-inp-cell{width:76px;border:1.5px solid #3b82f6;border-radius:3px;padding:2px 5px;font-size:11px;font-family:monospace;background:#eff6ff;outline:none;box-shadow:0 0 0 2px rgba(59,130,246,.15);color:#1e40af;text-align:right;display:block}
+.sal-inp-cell:focus{border-color:#1d4ed8;box-shadow:0 0 0 3px rgba(29,78,216,.2)}
+.sal-inp-cell:disabled{background:var(--bg);border-color:var(--border);color:var(--t4);cursor:not-allowed}
+`
+
 interface SAL {
   id: string; commessa_id: string; azienda_id?: string
   numero: number; codice: string; data_emissione: string; metodo?: string
@@ -84,6 +127,12 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
   const [vociAvanzamento, setVociAvanzamento] = useState<VoceAvanzamento[]>([])
   const [avanzamentoLoading, setAvanzamentoLoading] = useState(false)
   const [avanzamentoOpen, setAvanzamentoOpen] = useState(true)
+
+  // Sidebar layout voci inserimento
+  const [salSbTab, setSalSbTab] = useState<'cat' | 'wbs'>('cat')
+  const [salCatFilter, setSalCatFilter] = useState<string | null>(null)
+  const [salWbsFilter, setSalWbsFilter] = useState<string | null>(null)
+  const [qtPerSalPrec, setQtPerSalPrec] = useState<Record<string, Record<string, number>>>({})
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
@@ -150,8 +199,8 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
         .eq('computo_id', computo.id)
         .order('capitolo').order('codice'),
       salIds.length > 0
-        ? supabase.from('sal_voci').select('voce_computo_id,quantita_periodo').in('sal_id', salIds)
-        : Promise.resolve({ data: [] }),
+        ? supabase.from('sal_voci').select('voce_computo_id,quantita_periodo,sal_id').in('sal_id', salIds)
+        : Promise.resolve({ data: [] as any[] }),
       supabase.from('voci_variante')
         .select('id,codice,descrizione,um,quantita,prezzo_unitario,importo,tipo_modifica,variante:varianti(numero,stato)')
         .eq('commessa_id', id),
@@ -161,9 +210,13 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
     ])
 
     const qtPrec: Record<string, number> = {}
+    const qtPerSal: Record<string, Record<string, number>> = {}
     for (const sv of (salVociPrec || [])) {
       qtPrec[sv.voce_computo_id] = (qtPrec[sv.voce_computo_id] || 0) + (sv.quantita_periodo || 0)
+      if (!qtPerSal[sv.voce_computo_id]) qtPerSal[sv.voce_computo_id] = {}
+      qtPerSal[sv.voce_computo_id][sv.sal_id] = (qtPerSal[sv.voce_computo_id][sv.sal_id] || 0) + (sv.quantita_periodo || 0)
     }
+    setQtPerSalPrec(qtPerSal)
 
     const vociEsecutive: VoceComputo[] = ((vociVarRaw || []) as any[])
       .filter(v => (v.variante as any)?.stato === 'esecutiva')
@@ -228,6 +281,7 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
   }
 
   const riaperturaBozza = async (sal: SAL) => {
+    setSalCatFilter(null); setSalWbsFilter(null); setSalSbTab('cat')
     setSalAttivo(sal)
     setXpwePreview([])
     await caricaVociGrid(sal.id, sal.id)
@@ -276,6 +330,7 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
       setPdfDlFile(null)
     }
     setSalAttivo(nuovoSal as SAL)
+    setSalCatFilter(null); setSalWbsFilter(null); setSalSbTab('cat')
     setSaving(false)
     if (formSal.metodo === 'manuale') {
       await caricaVociGrid(nuovoSal.id)
@@ -357,6 +412,34 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
     await supabase.from('sal').update({ stato }).eq('id', sal.id)
     showToast(`${sal.codice} → ${stato}`); carica()
   }
+
+  // Sidebar derivati (fase voci)
+  const prevSals = salList.filter(s => !salAttivo || s.id !== salAttivo.id)
+  const filteredVoci = vociComputo.filter(v => {
+    if (salCatFilter) return v.capitolo === salCatFilter
+    if (salWbsFilter) return salWbsFilter === '_no_wbs' ? !v.wbs_id : v.wbs_id === salWbsFilter
+    return true
+  })
+  const capImporto: Record<string, number> = {}; const capCount: Record<string, number> = {}
+  for (const v of vociComputo) {
+    const qt = v._tipoModifica !== 'soppressione' ? (parseFloat(qtInput[v.id] || '0') || 0) : 0
+    capImporto[v.capitolo] = (capImporto[v.capitolo] || 0) + qt * v.prezzo_unitario
+    capCount[v.capitolo] = (capCount[v.capitolo] || 0) + 1
+  }
+  const capGroups = [...new Set(vociComputo.map(v => v.capitolo))].map(cap => ({
+    cap, count: capCount[cap] || 0, importo: capImporto[cap] || 0
+  }))
+  const wbsImporto: Record<string, number> = {}; const wbsCount: Record<string, number> = {}
+  for (const v of vociComputo) {
+    const key = v.wbs_id || '_no_wbs'
+    const qt = v._tipoModifica !== 'soppressione' ? (parseFloat(qtInput[v.id] || '0') || 0) : 0
+    wbsImporto[key] = (wbsImporto[key] || 0) + qt * v.prezzo_unitario
+    wbsCount[key] = (wbsCount[key] || 0) + 1
+  }
+  const wbsGroups = Object.keys(wbsCount).map(wbsId => ({
+    wbsId, label: wbsId === '_no_wbs' ? 'Nessun WBS' : wbsId,
+    count: wbsCount[wbsId], importo: wbsImporto[wbsId] || 0
+  }))
 
   // KPI
   const contratto   = commessa.importo_contrattuale || 0
@@ -580,133 +663,200 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
 
       {/* ── STEP 2a: VOCI MANUALE ── */}
       {fase === 'voci' && salAttivo && (
-        <div style={S.card}>
-          <div style={S.hdr}>
-            <span style={S.hl}>{salAttivo.codice} — Inserimento quantità</span>
-            <span style={{ fontSize:11, color:'var(--t3)' }}>{vociComputo.length} voci computo · doppio click per modificare</span>
-          </div>
+        <>
+          <style>{SAL_GRID_CSS}</style>
           {vociLoading ? (
-            <div style={{ padding:40, textAlign:'center' }}><span className="spinner" /></div>
+            <div style={S.card}><div style={{ padding:40, textAlign:'center' }}><span className="spinner" /></div></div>
           ) : vociComputo.length === 0 ? (
-            <div style={{ padding:32, textAlign:'center', color:'var(--t3)' }}>
+            <div style={S.card}><div style={{ padding:32, textAlign:'center', color:'var(--t3)' }}>
               <p style={{ fontWeight:600, marginBottom:6 }}>Nessun computo importato per questa commessa.</p>
               <p style={{ fontSize:12 }}>Importa prima un file XPWE nella sezione Computo.</p>
-            </div>
+            </div></div>
           ) : (
-            <>
-              <div style={{ overflowX:'auto', maxHeight:480, overflowY:'auto' }}>
-                <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
-                  <colgroup>
-                    <col style={{width:80}} /><col /><col style={{width:36}} />
-                    <col style={{width:72}} /><col style={{width:72}} /><col style={{width:84}} />
-                    <col style={{width:72}} /><col style={{width:46}} />
-                    <col style={{width:72}} /><col style={{width:78}} /><col style={{width:88}} />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      {['Tariffa','Descrizione','UM','Qtà contr.','Qtà prec.','Qtà questo SAL','Qtà tot.','%','Residuo','P.U.','Imp. periodo'].map(h => (
-                        <th key={h} style={{...S.th, position:'sticky' as const, top:0, zIndex:5}}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const rows: React.ReactNode[] = []
-                      let lastCap = ''
-                      for (const v of vociComputo) {
-                        const isSoppressione = v._tipoModifica === 'soppressione'
-                        if (v.capitolo !== lastCap) {
-                          const isVarCap = v._isVariante
+            <div className="sal-root">
+
+              {/* ── SIDEBAR ── */}
+              <div className="sal-sb">
+                <div className="sal-sb-hdr">
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div className="sal-sb-title">{salAttivo.codice}</div>
+                    <div className="sal-sb-sub">{formSal.dataEmissione} · {vociComputo.length} voci</div>
+                  </div>
+                  {salAttivo.pdf_dl_url ? (
+                    <a href={salAttivo.pdf_dl_url} target="_blank" rel="noreferrer"
+                      style={{ fontSize:11, color:'#4ade80', textDecoration:'none', flexShrink:0 }} title="Apri PDF DL">📄</a>
+                  ) : (
+                    <label title="Carica PDF dalla DL" style={{ cursor:'pointer', fontSize:14, color:'#93c5fd', flexShrink:0 }}>
+                      📎
+                      <input type="file" accept=".pdf" style={{ display:'none' }}
+                        onChange={async e => {
+                          const file = e.target.files?.[0]; if (!file || !salAttivo) return
+                          const aziendaId = await getAziendaId()
+                          const path = `${aziendaId}/sal/${id}/SAL-${salAttivo.numero}-DL.pdf`
+                          const { data: up } = await supabase.storage.from('documenti').upload(path, file, { upsert: true })
+                          if (up) {
+                            const { data: pub } = supabase.storage.from('documenti').getPublicUrl(path)
+                            await supabase.from('sal').update({ pdf_dl_url: pub.publicUrl }).eq('id', salAttivo.id)
+                            setSalAttivo(prev => prev ? { ...prev, pdf_dl_url: pub.publicUrl } : prev)
+                            showToast('✓ PDF DL caricato')
+                          }
+                          e.target.value = ''
+                        }} />
+                    </label>
+                  )}
+                </div>
+
+                <div className="sal-stabs">
+                  <button className={`sal-stab${salSbTab === 'cat' ? ' on' : ''}`} onClick={() => setSalSbTab('cat')}>Categorie</button>
+                  <button className={`sal-stab${salSbTab === 'wbs' ? ' on' : ''}`} onClick={() => setSalSbTab('wbs')}>WBS</button>
+                </div>
+
+                <div className="sal-sbody">
+                  <button className="sal-all-btn" onClick={() => { setSalCatFilter(null); setSalWbsFilter(null) }}>
+                    Tutte le voci ({vociComputo.length})
+                  </button>
+                  {salSbTab === 'cat'
+                    ? capGroups.map(({ cap, count, importo }) => (
+                        <div key={cap} className={`sal-node${salCatFilter === cap ? ' on' : ''}`}
+                          onClick={() => { setSalCatFilter(cap); setSalWbsFilter(null) }}>
+                          <span className="sal-nlb" title={cap}>{cap}</span>
+                          <span className="sal-ncnt">{count}</span>
+                          <span className="sal-nimp">{importo > 0 ? `€ ${fi(importo, 0)}` : ''}</span>
+                        </div>
+                      ))
+                    : wbsGroups.map(({ wbsId, label, count, importo }) => (
+                        <div key={wbsId} className={`sal-node${salWbsFilter === wbsId ? ' on' : ''}`}
+                          onClick={() => { setSalWbsFilter(wbsId); setSalCatFilter(null) }}>
+                          <span className="sal-nlb" title={label}>{label}</span>
+                          <span className="sal-ncnt">{count}</span>
+                          <span className="sal-nimp">{importo > 0 ? `€ ${fi(importo, 0)}` : ''}</span>
+                        </div>
+                      ))
+                  }
+                </div>
+
+                <div className="sal-sfoot">
+                  <div className="sal-sft"><span>Periodo</span><span>€ {fi(importoPeriodo)}</span></div>
+                  <div className="sal-sft"><span>Cumulativo</span><span>€ {fi(cumulPrec + importoPeriodo)}</span></div>
+                  <div className="sal-sft"><span>Ritenuta 5%</span><span style={{ color:'#fca5a5' }}>(€ {fi(ritenuta5)})</span></div>
+                  <div className="sal-sft" style={{ marginTop:5, borderTop:'1px solid rgba(255,255,255,.2)', paddingTop:5 }}>
+                    <span style={{ fontWeight:800, fontSize:12 }}>NETTO</span>
+                    <span style={{ color:'#4ade80', fontWeight:800, fontSize:14, fontVariantNumeric:'tabular-nums' }}>€ {fi(nettoSal)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── MAIN ── */}
+              <div className="sal-main">
+                <div className="sal-tbar">
+                  <span style={{ fontSize:11, fontWeight:700, color:'var(--t1)' }}>{salAttivo.codice}</span>
+                  <span style={{ fontSize:10, color:'var(--t3)' }}>
+                    {filteredVoci.length < vociComputo.length
+                      ? `${filteredVoci.length} / ${vociComputo.length} voci`
+                      : `${vociComputo.length} voci`}
+                    {prevSals.length > 0 ? ` · ${prevSals.length} SAL precedenti` : ''}
+                  </span>
+                  <div style={{ marginLeft:'auto', display:'flex', gap:6, flexWrap:'wrap' }}>
+                    <button onClick={annullaEliminaSal}
+                      style={{ fontSize:11, padding:'4px 10px', borderRadius:6, border:'1px solid var(--border)', background:'var(--panel)', color:'var(--t2)', cursor:'pointer', fontWeight:600 }}>
+                      ✕ Annulla
+                    </button>
+                    {importoPeriodo > 0 && (
+                      <button style={{ fontSize:11, padding:'4px 10px', borderRadius:6, border:'none', background:'#0d9488', color:'#fff', cursor:'pointer', fontWeight:600 }}
+                        onClick={() => {
+                          const base = window.location.pathname.replace('/sal-attivi','/fatturazione')
+                          window.location.href = base + '?' + new URLSearchParams({ importo: String(nettoSal.toFixed(2)), note: salAttivo.codice || '' })
+                        }}>📄 Fattura</button>
+                    )}
+                    <button onClick={salvaVoci} disabled={saving || importoPeriodo === 0}
+                      style={{ fontSize:11, padding:'4px 14px', borderRadius:6, border:'none', fontWeight:700, cursor: importoPeriodo > 0 ? 'pointer' : 'default', background: importoPeriodo > 0 ? 'var(--accent)' : '#9ca3af', color:'#fff' }}>
+                      {saving ? '...' : `✓ Salva — € ${fi(importoPeriodo)}`}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="sal-tscroll">
+                  <table className="sal-t">
+                    <thead>
+                      <tr>
+                        <th className="l" style={{ minWidth:72 }}>Tariffa</th>
+                        <th className="l" style={{ minWidth:200 }}>Descrizione</th>
+                        <th style={{ width:34 }}>UM</th>
+                        <th style={{ width:68 }}>Qt.Contr.</th>
+                        {prevSals.map(s => (
+                          <th key={s.id}
+                            style={{ width:52, background:(SC[s.stato]||'#666')+'28', color:SC[s.stato]||'#666', borderRightColor:(SC[s.stato]||'#666')+'44' }}
+                            title={`${s.codice} · ${s.data_emissione}`}>
+                            N.{s.numero}
+                          </th>
+                        ))}
+                        <th className="grey" style={{ width:68 }}>Cumul.</th>
+                        <th className="blu" style={{ width:88 }}>Questo SAL</th>
+                        <th style={{ width:64 }}>Residuo</th>
+                        <th style={{ width:56 }}>P.U.</th>
+                        <th style={{ width:76 }}>Imp.periodo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const rows: React.ReactNode[] = []
+                        const nFixed = 9 + prevSals.length
+                        let lastCap = ''
+                        for (const v of filteredVoci) {
+                          const isSoppressione = v._tipoModifica === 'soppressione'
+                          if (!salCatFilter && !salWbsFilter && v.capitolo !== lastCap) {
+                            rows.push(
+                              <tr key={`cap_${v.capitolo}`} className={v._isVariante ? 'sal-hvar' : 'sal-hca'}>
+                                <td colSpan={nFixed}>▸ {v.capitolo}</td>
+                              </tr>
+                            )
+                            lastCap = v.capitolo
+                          }
+                          const qtPrec  = qtPrecedente[v.id] || 0
+                          const qtCorr  = isSoppressione ? 0 : (parseFloat(qtInput[v.id] || '0') || 0)
+                          const residuo = v.quantita - qtPrec - qtCorr
+                          const impPer  = qtCorr * v.prezzo_unitario
                           rows.push(
-                            <tr key={`cap_${v.capitolo}`}>
-                              <td colSpan={11} style={{ padding:'5px 10px', background: isVarCap ? '#1e3a5f' : '#166534', color: isVarCap ? '#bfdbfe' : '#d1fae5', fontWeight:700, fontSize:10, letterSpacing:'0.04em', textTransform:'uppercase' as const }}>
-                                ▸ {v.capitolo}
+                            <tr key={v.id} className={`sal-row${isSoppressione ? ' soppressione' : qtCorr > 0 ? ' has-qt' : ''}`}>
+                              <td style={{ fontFamily:'monospace', color:'var(--accent)' }}>{v.codice?.slice(0,14)}</td>
+                              <td style={{ maxWidth:200, overflow:'hidden', textOverflow:'ellipsis', textDecoration: isSoppressione ? 'line-through' : 'none' }} title={v.descrizione}>{v.descrizione}</td>
+                              <td style={{ textAlign:'center' }}>{v.um}</td>
+                              <td style={{ textAlign:'right', fontVariantNumeric:'tabular-nums' }}>{fiq(v.quantita)}</td>
+                              {prevSals.map(sal => {
+                                const q = qtPerSalPrec[v.id]?.[sal.id] || 0
+                                return (
+                                  <td key={sal.id} style={{ textAlign:'right', fontVariantNumeric:'tabular-nums', color: q > 0 ? (SC[sal.stato]||'var(--t2)') : 'var(--t4)' }}>
+                                    {q > 0 ? fiq(q) : '—'}
+                                  </td>
+                                )
+                              })}
+                              <td style={{ textAlign:'right', fontVariantNumeric:'tabular-nums', color: qtPrec > 0 ? 'var(--t1)' : 'var(--t4)', fontWeight: qtPrec > 0 ? 600 : 400 }}>{qtPrec > 0 ? fiq(qtPrec) : '—'}</td>
+                              <td style={{ padding:'2px 4px' }}>
+                                <input type="number" step="any" min="0" placeholder="0"
+                                  className="sal-inp-cell"
+                                  disabled={isSoppressione}
+                                  value={qtInput[v.id] ?? ''}
+                                  onChange={e => setQtInput(prev => ({ ...prev, [v.id]: e.target.value }))} />
+                              </td>
+                              <td style={{ textAlign:'right', fontVariantNumeric:'tabular-nums', color: residuo < 0 ? '#ef4444' : residuo === 0 ? '#10b981' : 'var(--t2)', fontWeight: residuo <= 0 ? 700 : 400 }}>
+                                {isSoppressione ? '—' : residuo === 0 ? '✓' : fiq(residuo)}
+                              </td>
+                              <td style={{ textAlign:'right', fontVariantNumeric:'tabular-nums', color:'var(--t3)' }}>{fi(v.prezzo_unitario)}</td>
+                              <td style={{ textAlign:'right', fontVariantNumeric:'tabular-nums', fontWeight: impPer > 0 ? 700 : 400, color: impPer > 0 ? 'var(--accent)' : 'var(--t4)' }}>
+                                {impPer > 0 ? `€ ${fi(impPer)}` : '—'}
                               </td>
                             </tr>
                           )
-                          lastCap = v.capitolo
                         }
-                        const qtPrec  = qtPrecedente[v.id] || 0
-                        const qtCorr  = isSoppressione ? 0 : (parseFloat(qtInput[v.id] || '0') || 0)
-                        const qtTot   = qtPrec + qtCorr
-                        const pctComp = pct(qtTot, v.quantita)
-                        const impPer  = qtCorr * v.prezzo_unitario
-                        const residuo = v.quantita - qtPrec - qtCorr
-                        rows.push(
-                          <tr key={v.id} style={{ background: qtCorr > 0 ? 'rgba(16,185,129,0.04)' : 'transparent', opacity: isSoppressione ? 0.5 : 1 }}
-                            onMouseEnter={e=>(e.currentTarget.style.background='var(--accent-light)')}
-                            onMouseLeave={e=>(e.currentTarget.style.background=qtCorr>0?'rgba(16,185,129,0.04)':'transparent')}>
-                            <td style={{...S.td, fontFamily:'monospace', fontSize:10, color:'var(--accent)'}}>{v.codice?.slice(0,14)}</td>
-                            <td style={{...S.td, fontSize:10, maxWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const, textDecoration: isSoppressione ? 'line-through' : 'none'}} title={v.descrizione}>{v.descrizione}</td>
-                            <td style={{...S.td, fontSize:10, textAlign:'center' as const}}>{v.um}</td>
-                            <td style={{...S.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums', fontSize:10}}>{v.quantita?.toLocaleString('it-IT',{maximumFractionDigits:3})}</td>
-                            <td style={{...S.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums', fontSize:10, color:'var(--t3)'}}>{qtPrec>0?qtPrec.toLocaleString('it-IT',{maximumFractionDigits:3}):'—'}</td>
-                            <td style={{...S.td, padding:'2px 4px'}}>
-                              <input type="number" step="any" min="0" placeholder="0" disabled={isSoppressione}
-                                style={{ width:'100%', padding:'4px 6px', borderRadius:4, border:`1px solid ${qtCorr>0?'var(--accent)':'var(--border)'}`, fontSize:11, fontFamily:'monospace', textAlign:'right' as const, background:'var(--panel)', color:'var(--t1)', outline:'none', cursor: isSoppressione ? 'not-allowed' : 'text' }}
-                                value={qtInput[v.id] ?? ''}
-                                onChange={e => setQtInput(prev => ({...prev, [v.id]: e.target.value}))} />
-                            </td>
-                            <td style={{...S.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums', fontSize:10, fontWeight: qtTot>0?700:400}}>{qtTot>0?qtTot.toLocaleString('it-IT',{maximumFractionDigits:3}):'—'}</td>
-                            <td style={{...S.td, textAlign:'center' as const, fontSize:10}}>
-                              {qtTot>0 ? <span style={{ color: pctComp>=100?'#10b981':pctComp>=50?'#f59e0b':'var(--t3)' }}>{pctComp.toFixed(0)}%</span> : '—'}
-                            </td>
-                            <td style={{...S.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums', fontSize:10}}>
-                              {isSoppressione ? <span style={{ color:'var(--t3)' }}>—</span> : residuo === 0
-                                ? <span style={{ color:'var(--t3)' }}>✓</span>
-                                : <span style={{ color: residuo > 0 ? '#10b981' : '#ef4444', fontWeight:700 }}>
-                                    {residuo.toLocaleString('it-IT', {maximumFractionDigits:3})}
-                                  </span>
-                              }
-                            </td>
-                            <td style={{...S.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums', fontSize:10}}>{fi(v.prezzo_unitario)}</td>
-                            <td style={{...S.td, textAlign:'right' as const, fontVariantNumeric:'tabular-nums', fontSize:11, fontWeight:impPer>0?700:400, color:impPer>0?'var(--accent)':'var(--t4)'}}>
-                              {impPer>0?`€ ${fi(impPer)}`:'—'}
-                            </td>
-                          </tr>
-                        )
-                      }
-                      return rows
-                    })()}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Quadro economico */}
-              <div style={{ padding:'16px 20px', borderTop:'2px solid var(--border)', background:'var(--bg)' }}>
-                <p style={{ fontSize:11, fontWeight:700, color:'var(--t3)', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:12 }}>Quadro economico SAL</p>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:10, marginBottom:16 }}>
-                  {[
-                    { l:'Importo periodo', v:importoPeriodo, c:'var(--accent)', bold:true },
-                    { l:'Cumulativo precedente', v:cumulPrec, c:'var(--t2)' },
-                    { l:'Cumulativo totale', v:cumulPrec+importoPeriodo, c:'var(--t1)', bold:true },
-                    { l:'Ritenuta garanzia 5%', v:ritenuta5, c:'#ef4444', neg:true },
-                    { l:'Netto da pagare', v:nettoSal, c:'#10b981', bold:true },
-                  ].map((k, i) => (
-                    <div key={i} style={{ background:'var(--panel)', border:'1px solid var(--border)', borderRadius:8, padding:'10px 14px' }}>
-                      <p style={{ fontSize:10, color:'var(--t3)', fontWeight:600, textTransform:'uppercase', marginBottom:4 }}>{k.l}</p>
-                      <p style={{ fontSize:15, fontWeight:k.bold?800:600, color:k.c, fontVariantNumeric:'tabular-nums' }}>
-                        {k.neg ? `(€ ${fi(k.v)})` : `€ ${fi(k.v)}`}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
-                  <button style={S.btn('#6b7280')} onClick={annullaEliminaSal}>Annulla</button>
-                  <button style={S.btn('var(--accent)')} onClick={salvaVoci} disabled={saving || importoPeriodo === 0}>
-                    {saving ? '...' : `✓ Salva SAL — € ${fi(importoPeriodo)}`}
-                  </button>
-                  {importoPeriodo > 0 && (
-                    <button style={S.btn('#0d9488')} onClick={() => {
-                      const base = window.location.pathname.replace('/sal-attivi','/fatturazione')
-                      window.location.href = base + '?' + new URLSearchParams({ importo: String(nettoSal.toFixed(2)), note: salAttivo?.codice||'' })
-                    }}>📄 Genera fattura attiva</button>
-                  )}
+                        return rows
+                      })()}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-            </>
+            </div>
           )}
-        </div>
+        </>
       )}
 
       {/* ── STEP 2b: XPWE ── */}
