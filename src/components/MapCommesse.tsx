@@ -66,8 +66,9 @@ function StaticMapCard({ c, onNavigate }: { c: CommessaCard; onNavigate: (id: st
       onClick={() => onNavigate(c.id)}>
 
       {/* Immagine mappa o placeholder */}
-      <div style={{ position: 'relative', height: 130, background: '#e8f0fe', flexShrink: 0 }}>
+      <div style={{ position: 'relative', height: 130, background: col + '18', flexShrink: 0 }}>
         {hasCoords && !imgErr ? (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={staticMapUrl(c.resolvedLat!, c.resolvedLng!)}
             alt={c.nome}
@@ -75,21 +76,22 @@ function StaticMapCard({ c, onNavigate }: { c: CommessaCard; onNavigate: (id: st
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
           />
         ) : (
-          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0 12px', textAlign: 'center' }}>
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0 14px', textAlign: 'center' }}>
             {c.geocoding ? (
               <>
-                <span style={{ fontSize: 22 }}>🔍</span>
-                <span style={{ fontSize: 10, color: '#6b7280' }}>Geolocalizzazione...</span>
+                <span style={{ fontSize: 24 }}>🔍</span>
+                <span style={{ fontSize: 10, color: col, fontWeight: 600 }}>Geolocalizzazione...</span>
               </>
             ) : addr ? (
               <>
-                <span style={{ fontSize: 22 }}>📍</span>
-                <span style={{ fontSize: 10, color: '#6b7280', lineHeight: 1.4 }}>{addr}</span>
+                <span style={{ fontSize: 24 }}>📍</span>
+                <span style={{ fontSize: 11, color: col, fontWeight: 600, lineHeight: 1.4 }}>{addr}</span>
               </>
             ) : (
               <>
-                <span style={{ fontSize: 22 }}>🏗️</span>
-                <span style={{ fontSize: 10, color: '#9ca3af' }}>Nessun indirizzo</span>
+                <span style={{ fontSize: 28 }}>🏗️</span>
+                <span style={{ fontSize: 10, color: col, fontWeight: 600 }}>Aggiungi indirizzo</span>
+                <span style={{ fontSize: 9, color: '#9ca3af' }}>in Anagrafica</span>
               </>
             )}
           </div>
@@ -134,6 +136,7 @@ export default function MapCommesse() {
 
       if (cancelled) return
       const raw = (data || []) as CommessaRaw[]
+      console.log('Commesse caricate:', raw.length, raw.map(c => c.nome))
 
       // Inizializza subito tutte le card (anche quelle senza coordinate)
       const initial: CommessaCard[] = raw.map(c => ({
@@ -180,7 +183,6 @@ export default function MapCommesse() {
   const nav = (id: string) => window.location.href = `/dashboard/commesse/${id}/anagrafica`
 
   if (loading) return null
-  if (cards.length === 0) return null
 
   return (
     <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
@@ -191,14 +193,14 @@ export default function MapCommesse() {
         </span>
       </div>
 
-      <div style={{ padding: 14, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-        {cards.map(c => <StaticMapCard key={c.id} c={c} onNavigate={nav} />)}
-      </div>
-
-      {cards.every(c => !c.resolvedLat) && geocCnt === 0 && (
-        <div style={{ padding: '0 14px 14px', fontSize: 11, color: 'var(--t3)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span>💡</span>
-          <span>Aggiungi l&apos;indirizzo del cantiere in <strong>Anagrafica</strong> per vedere la mappa statica</span>
+      {cards.length === 0 ? (
+        <div style={{ padding: '20px 16px', display: 'flex', alignItems: 'center', gap: 10, color: 'var(--t3)', fontSize: 12 }}>
+          <span style={{ fontSize: 20 }}>🏗️</span>
+          <span>Nessuna commessa attiva</span>
+        </div>
+      ) : (
+        <div style={{ padding: 14, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+          {cards.map(c => <StaticMapCard key={c.id} c={c} onNavigate={nav} />)}
         </div>
       )}
     </div>
