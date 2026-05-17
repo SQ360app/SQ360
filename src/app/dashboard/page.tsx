@@ -154,8 +154,7 @@ export default function DashboardPage() {
         .gte('created_at', meseS),
 
       supabase.from('fatture_passive')
-        .select('id,importo_totale')
-        .eq('stato', 'da_pagare'),
+        .select('id,importo_totale'),
 
       supabase.from('documenti_sicurezza')
         .select('id,tipo,soggetto,data_scadenza,commessa_id')
@@ -170,30 +169,29 @@ export default function DashboardPage() {
         .lt('data_scadenza', todayS),
 
       supabase.from('contratti_sub')
-        .select('id,durc_ok,pos_approvato,comunicazione_sa,antimafia_ok')
-        .neq('stato', 'RESCISSO'),
+        .select('id,stato'),
 
       supabase.from('oda')
         .select('commessa_id,importo_netto')
         .neq('stato', 'ANNULLATO'),
 
       supabase.from('oda')
-        .select('id,numero,commessa_id,importo_netto,created_at,fornitore:professionisti_fornitori(ragione_sociale),commessa:commesse(codice)')
+        .select('id,numero,commessa_id,importo_netto,created_at')
         .order('created_at', { ascending: false })
         .limit(5),
 
       supabase.from('ddt')
-        .select('id,numero,commessa_id,stato,created_at,commessa:commesse(codice)')
+        .select('id,numero,commessa_id,stato,created_at')
         .order('created_at', { ascending: false })
         .limit(5),
 
       supabase.from('documenti_commessa')
-        .select('id,nome,categoria,commessa_id,created_at,commessa:commesse(codice)')
+        .select('id,nome,categoria,commessa_id,created_at')
         .order('created_at', { ascending: false })
         .limit(5),
 
       supabase.from('fatture_passive')
-        .select('id,numero,importo_totale,data_scadenza,commessa_id,commessa:commesse(codice,nome)')
+        .select('id,numero,importo_totale,data_scadenza,commessa_id')
         .not('data_scadenza', 'is', null)
         .gte('data_scadenza', todayS)
         .lte('data_scadenza', tra30S)
@@ -214,9 +212,9 @@ export default function DashboardPage() {
     const sMap: Record<string, number> = {}
     for (const o of osArr) sMap[o.commessa_id] = (sMap[o.commessa_id] || 0) + (o.importo_netto || 0)
 
-    // Subappaltatori con checklist incompleta (tutti e 4 i flag devono essere true)
+    // Subappaltatori attivi (checklist semplificata — conta quelli non completati)
     const subIncompl = csArr.filter(
-      (c: any) => !(c.durc_ok && c.pos_approvato && c.comunicazione_sa && c.antimafia_ok)
+      (c: any) => !['completato', 'CONCLUSO', 'concluso'].includes(c.stato)
     ).length
 
     // Scadenziario: merge doc sicurezza + fatture, ordinato per data
@@ -257,22 +255,22 @@ export default function DashboardPage() {
       oda: (rOR.data || []).map((o: any) => ({
         id: o.id, cid: o.commessa_id,
         primary: o.numero || '—',
-        secondary: (o.fornitore as any)?.ragione_sociale || '—',
-        meta: fmtM(o.importo_netto || 0),
+        secondary: fmtM(o.importo_netto || 0),
+        meta: o.commessa_id?.slice(0, 8) || '—',
         date: o.created_at,
       })),
       ddt: (rDR.data || []).map((d: any) => ({
         id: d.id, cid: d.commessa_id,
         primary: d.numero || '—',
         secondary: d.stato || '—',
-        meta: (d.commessa as any)?.codice || '—',
+        meta: d.commessa_id?.slice(0, 8) || '—',
         date: d.created_at,
       })),
       docs: (rDocR.data || []).map((d: any) => ({
         id: d.id, cid: d.commessa_id,
         primary: d.nome || '—',
         secondary: d.categoria || '—',
-        meta: (d.commessa as any)?.codice || '—',
+        meta: d.commessa_id?.slice(0, 8) || '—',
         date: d.created_at,
       })),
     })

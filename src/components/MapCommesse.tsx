@@ -1,13 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@supabase/supabase-js'
-import { getAziendaId } from '@/lib/supabase'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { supabase, getAziendaId } from '@/lib/supabase'
 
 const STATO_COL: Record<string, string> = {
   IN_ESECUZIONE: '#10b981', AGGIUDICATA: '#3b82f6',
@@ -118,6 +112,7 @@ function StaticMapCard({ c, onNavigate }: { c: CommessaCard; onNavigate: (id: st
 }
 
 export default function MapCommesse() {
+  console.log('MapCommesse mounted')
   const [cards,    setCards]    = useState<CommessaCard[]>([])
   const [loading,  setLoading]  = useState(true)
   const [geocCnt,  setGeocCnt]  = useState(0)
