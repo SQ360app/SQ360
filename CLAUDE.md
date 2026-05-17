@@ -191,10 +191,60 @@
 - ✅ Funzionalità unificata in Analisi Prezzi BASE + EXTRA — approccio più preciso e condiviso per codice tariffa
 - ⚠️ Tabella `piano_costi_voce` rimane in Supabase (dati storici) ma non è più usata dal frontend
 
+### Fix analisi extra voce + layout pannello analisi (commit b7641fd → aee0ea2)
+- ✅ `aggiungiExtra`: payload completo (`descrizione: ''`), error handling con toast, reload da DB dopo INSERT
+- ✅ `eliminaExtra`: error handling con toast, reload da DB dopo DELETE
+- ✅ Pannello analisi prezzi: layout unificato BASE e EXTRA (stesso pattern collapsed/expanded)
+- ✅ Sezione EXTRA: stato `extraExpanded` keyed per `voce_computo_id`, bottone `✏️ Modifica` come BASE
+- ✅ Rimosso vincolo 100% (Bilancia/Scarto/Supera) — sostituito con quadro economico reale
+- ✅ Quadro economico per voce: Costo previsto / P.U. contratto / Margine €+% (per unità) + Costo totale / Ricavo / Margine atteso (per quantità totale)
+- ✅ Colori margine: verde ≥15% / arancio 5-15% / rosso 0-5% / rosso scuro <0%
+- ✅ Pulsanti `✓ Fatto` e `✕ Chiudi` nell'header del pannello analisi
+
+### Sprint 5 — Varianti e Ordini di Servizio (già completi in codebase)
+- ✅ `varianti/page.tsx` (454 righe): KPI, banner soglia D.Lgs.36/2023, lista accordion, workflow proposta→RUP→SA→esecutiva, voci variante, modal nuova variante con preview soglia
+- ✅ `ordini-servizio/page.tsx` (367 righe): KPI, alert banner non firmati >5gg e riserve in scadenza, workflow firma/firma-con-riserva/chiudi, genera variante da OS
+
+### Sprint 6 — Subappalti flusso completo (commit 41fa145)
+- ✅ `contratti/page.tsx` riscritto (232 → 424 righe nette): fix `useParams` → `use(paramsPromise)`
+- ✅ Modal creazione diretta contratto sub: fornitore, tipo (subappalto/subaffidamento/nolo_caldo), oggetto, importo con warning >40%, % subappalto, date, SOA, note
+- ✅ Workflow sequenziale forzato: `bozza → attesa_autorizzazione → autorizzato → in_esecuzione → completato`; Sospendi sempre disponibile; compatibile con stati legacy uppercase via `STATI_ALIAS`
+- ✅ "Avvia lavori" bloccato se documenti critici mancanti nella checklist
+- ✅ Tab per contratto: Dettagli | Documenti | Lavoratori | Pagamenti
+- ✅ **Tab Documenti** — checklist 7 documenti obbligatori: Contratto firmato, DURC (con scadenza), SOA (categoria+classifica), DVR, POS, Notifica SA, IBAN L.136/2010; upload su Storage Supabase `{azienda_id}/contratti-sub/{id}/{tipo}.pdf`; stato verde/rosso/arancio
+- ✅ **Tab Lavoratori** — lista con nome/cognome/CF/crediti patente, alert scadenze UNILAV/idoneità/formazione, form inline aggiunta
+- ✅ **Tab Pagamenti** — riepilogo pagato/ritenute/residuo, tabella SAL con ritenuta 5% auto, pulsante "Svincola ritenuta" (solo se completato)
+- ✅ Nuove tabelle Supabase richieste: `documenti_contratto_sub`, `lavoratori_sub`, `pagamenti_sub`
+
+### Sprint 7 — Elenco Prezzi + Navigazione a due livelli (commit 6072f67 → f55bab8)
+
+#### Modulo Elenco Prezzi (6072f67)
+- ✅ `elenco-prezzi/page.tsx`: popolazione automatica dal computo al mount (INSERT batch codici mancanti, fonte='prezzario')
+- ✅ Banner sync "N tariffe sincronizzate" dopo ogni caricamento con nuove tariffe
+- ✅ KPI 6 card: totale tariffe, da prezzario, prezzi nuovi, da variante, con analisi, senza analisi
+- ✅ Filtri pill: Tutte / Da prezzario / Prezzi nuovi / Da variante / Con analisi / Senza analisi
+- ✅ Tabella tariffe: Codice | Descrizione (2 righe con tooltip) | UM | P.U. | Fonte (badge colorati) | Analisi (✅/⚠️/○ con margine%) | Voci (count cliccabile)
+- ✅ Accordion dettaglio tariffa:
+  - **Dati tariffa**: tutti i campi editabili on-blur; campi fonte-specifici (prezzario: riferimento+anno; prezzo_nuovo: approvato_da+data; variante: select variante)
+  - **Analisi del prezzo**: home canonica dell'analisi BASE — stessa interfaccia computo (collapsed/expanded, tabella editabile, copia da altra tariffa, quadro margine)
+  - **Voci del computo**: lista mini con WBS/Descrizione/Quantità/Importo + totale per tariffa
+- ✅ Modal nuovo prezzo: selezione fonte, codice/descrizione/um/PU, variante collegata, giustificazione
+- ✅ Tab "Elenco Prezzi" aggiunto in layout.tsx prima di "Computo"
+
+#### Navigazione commessa a due livelli (b5e5934)
+- ✅ `layout.tsx` riscritto: sostituiti 20 tab flat con navigazione a 2 righe
+- ✅ **RIGA 1** — 6 pill colorate: Contratto 📋 (blu) / Acquisti 🛒 (arancio) / Cantiere 🏗️ (verde) / Economico 💰 (viola) / Contrattuale ⚖️ (rosso) / Archivio 📁 (grigio)
+- ✅ **RIGA 2** — sotto-tab del gruppo attivo con bordo inferiore nel colore gruppo; cambia automaticamente al cambio gruppo
+- ✅ Rilevamento gruppo attivo da pathname (no state aggiuntivo); click gruppo non attivo → naviga al primo sotto-modulo
+- ✅ Mantiene: breadcrumb, info commessa, bottone elimina, modal conferma, padding contenuto
+
+#### Fix descrizione EP (89e2c0c → f55bab8)
+- ✅ Cella descrizione tabella EP: `WebkitLineClamp: 2` per max 2 righe + `title` tooltip completo + `cursor: 'help'`
+
 ## Prossimi task prioritari
-1. **Sprint 6** — da definire
-2. **Test flusso register→login** — test end-to-end registrazione → conferma email → primo accesso
-3. **Verifica dominio Resend** — verificare `sq360.app` su Resend → Domains per mittente ufficiale
+1. **Test flusso register→login** — test end-to-end registrazione → conferma email → primo accesso
+2. **Verifica dominio Resend** — verificare `sq360.app` su Resend → Domains per mittente ufficiale
+3. **SQL tabelle Sprint 6** — creare su Supabase: `documenti_contratto_sub`, `lavoratori_sub`, `pagamenti_sub`
 
 ## Email notifiche (Resend) — stato configurazione
 - `RESEND_API_KEY`: configurato in produzione ✅
@@ -228,6 +278,11 @@
 23. ~~6 tipi ODA (materiali/nolo_freddo/nolo_caldo/subappalto/manodopera/servizio) + tipo_oda in INSERT~~ ✅
 24. ~~Piano costi voce nel computo: dot indicatori, pannello componenti, genera RDA diretta~~ ✅
 25. ~~CE breakdown costi per tipo ODA + confronto piano previsto vs ODA emessi~~ ✅
+26. ~~Varianti contrattuali: iter approvazione D.Lgs.36/2023, soglie RUP/SA, voci variante~~ ✅
+27. ~~Ordini di Servizio: workflow firma/riserva/chiudi, alert non firmati, genera variante da OS~~ ✅
+28. ~~Subappalti flusso completo: checklist documentale 7 doc, lavoratori, pagamenti, workflow sequenziale~~ ✅
+29. ~~Elenco Prezzi: popolazione automatica dal computo, analisi per tariffa, prezzi nuovi/variante~~ ✅
+30. ~~Navigazione commessa a due livelli: 6 gruppi pill + sotto-moduli per gruppo~~ ✅
 
 ## Note implementazione
 - `getAziendaId()` in `src/lib/supabase.ts` — helper condiviso: `auth.uid() → utenti.azienda_id`
@@ -235,6 +290,9 @@
 - Tutti i moduli salvano `azienda_id` negli INSERT; RLS attivo su DB garantisce isolamento completo
 - Tabella `utenti`: `id` = `auth.uid`, `azienda_id` FK, `email`, `nome`, `cognome`, `ruolo` (admin/user)
 - Tabella `aziende`: `id`, `nome`, `piva`, `cf`, `provincia`, `created_at`
+- Tabella `elenco_prezzi`: `codice`, `descrizione`, `um`, `prezzo_unitario`, `fonte` ('prezzario'|'prezzo_nuovo'|'variante'), `prezzario_riferimento`, `anno_prezzario`, `approvato_da`, `data_approvazione`, `variante_id`, `note`
+- Tabelle Sprint 6 subappalti (da creare se non esistono): `documenti_contratto_sub` (tipo, url, nome_file, data_scadenza, extra JSONB), `lavoratori_sub` (nome, cognome, cf, documenti), `pagamenti_sub` (data, importo_lordo, ritenuta_pct, importo_netto, tipo)
+- Pattern navigazione layout commessa: `GRUPPI` array con `id`, `color`, `bg`, `border`, `tabs[]` — gruppo attivo rilevato da `pathname.startsWith(base + '/' + t.href)`
 
 ## Principi UX
 - Semplicità estrema: max 3 tap per qualsiasi azione
