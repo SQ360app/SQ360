@@ -277,6 +277,23 @@
 - ✅ `cumulPrec` esclude sempre il SAL corrente — corretto sia per creazione che per riapertura bozza
 - ⚠️ **SQL da eseguire su Supabase**: `ALTER TABLE sal ADD COLUMN IF NOT EXISTS pdf_dl_url text; ALTER TABLE sal ADD COLUMN IF NOT EXISTS pdf_certificato_url text;`
 
+### PDF professionali SAL, OS, Contratto Sub (commit 28e367b)
+- ✅ `src/components/pdf/SalDocument.tsx`: PDF SAL con header `#1e3a5f`, quadro economico (NETTO in verde), tabella voci alternata, firme DL/Impresa
+- ✅ `src/components/pdf/OsDocument.tsx`: PDF Ordine di Servizio con bordo blu sinistra per oggetto, box riserva rosso se presente
+- ✅ `src/components/pdf/ContrattoSubDocument.tsx`: PDF Contratto Sub con sezione Le Parti, condizioni economiche, tabella lavoratori, nota legale D.Lgs. 36/2023
+- ✅ Pulsanti "📄 PDF" aggiunti in `ordini-servizio/page.tsx` e `contratti/page.tsx`
+
+### SalGrid — griglia inserimento SAL (commit b87ed7f)
+- ✅ `sal-attivi/SalGrid.tsx`: copia meccanica di `computo/page.tsx` con `cp` (1541 righe, ±54 righe rispetto all'originale)
+- ✅ Solo 3 differenze rispetto al computo originale:
+  1. **Colonne FLUSSO** (RDA/RDO/ODA/SAL%) → colonne SAL dinamiche (N.1…Cumul./Questo SAL input/Residuo)
+  2. **Pannello analisi prezzi** → box blu con Contratto/Cumulativo/Questo SAL/Residuo (read-only)
+  3. **Toolbar** XPWE/RDA → `📎 PDF DL | ✕ Annulla | 💾 Salva SAL`
+- ✅ Dipendenza live: legge sempre da `voci_computo` + `voci_variante` (stato=esecutiva) al mount — mai da snapshot; le varianti appaiono automaticamente
+- ✅ `sal-attivi/page.tsx`: usa `SalGrid` quando `fase === 'voci'`; `qtInput` cambiato da `Record<string,string>` a `Record<string,number>`
+- ✅ `SalGridProps`: `commessaId`, `salId`, `salNumero`, `salPrecedenti`, `qtPerSal`, `qtCumulative`, `qtInput`, `onQtChange`, `onSalva`, `onAnnulla`, `pdfDlUrl`, `onUploadPdf`, `saving`
+- ✅ Pannello analisi originale mantenuto come `{false && (() => {...})()}` — TypeScript-safe, mai renderizzato
+
 ### Mappa cantieri dashboard (commit c731b7b → f2c28ec)
 - ⚠️ **Implementata ma non verificata visivamente** — griglia card 3 colonne, immagini statiche `staticmap.openstreetmap.de`, geocodifica Nominatim con salvataggio coordinate nel DB
 - ⚠️ **Possibile causa mancata visualizzazione**: tabella `commesse` non ha colonne `lat`, `lng`, `indirizzo_cantiere`, `comune_cantiere`, `cap_cantiere`, `provincia` — verificare schema DB
@@ -333,12 +350,17 @@
 32. ~~Migliorie commessa: tracking stati esecuzione, costo effettivo, impatto CE~~ ✅
 33. ~~Rename DAM → SAM (Scheda Approvazione Materiali) — label UI aggiornate, URL/DB invariati~~ ✅
 34. Mappa cantieri dashboard con card griglia + staticmap OSM + geocodifica Nominatim ⚠️ (da verificare)
-35. Registro di contabilità (libro giornale lavori strutturato) 📋
-36. PDF aggiuntivi (SAL, Varianti, Contratti sub) 📋
-37. Mobile PWA migliorata (offline, push notification) 📋
-38. Export completo commessa in formato ZIP strutturato 📋
-39. Knowledge base AI edile (normativa D.Lgs. 36/2023, prezzari regionali) 📋
-40. Billing e piani tariffari (Stripe integration) 📋
+35. ~~PDF aggiuntivi SAL, Ordine di Servizio, Contratto Sub~~ ✅
+36. ~~SalGrid: griglia inserimento SAL copia meccanica del computo — colonne SAL, pannello semplificato~~ ✅
+37. Registro di contabilità (libro giornale lavori strutturato) 📋
+38. Mobile PWA migliorata (offline, push notification) 📋
+39. Export completo commessa in formato ZIP strutturato 📋
+40. Knowledge base AI edile (normativa D.Lgs. 36/2023, prezzari regionali) 📋
+41. Billing e piani tariffari (Stripe integration) 📋
+38. Mobile PWA migliorata (offline, push notification) 📋
+39. Export completo commessa in formato ZIP strutturato 📋
+40. Knowledge base AI edile (normativa D.Lgs. 36/2023, prezzari regionali) 📋
+41. Billing e piani tariffari (Stripe integration) 📋
 
 ## Note implementazione
 - `getAziendaId()` in `src/lib/supabase.ts` — helper condiviso: `auth.uid() → utenti.azienda_id`
@@ -354,6 +376,7 @@
 - Tabella `sal`: aggiungere `pdf_dl_url text`, `pdf_certificato_url text` (ALTER TABLE già in Prossimi task)
 - Tabella `sal_voci`: schema minimo — `sal_id`, `voce_computo_id`, `quantita_periodo`, `wbs_id`; tutti gli altri dati si leggono via JOIN su `voci_computo` (non duplicare)
 - Upload SAL: bucket `documenti`, path `{azienda_id}/sal/{commessa_id}/SAL-{numero}-DL.pdf` e `SAL-{numero}-certificato.pdf`
+- `SalGrid`: copia meccanica di `computo/page.tsx` con `cp`; usa `props.commessaId` invece di `use(paramsPromise)`; il pannello analisi originale è disabilitato con `{false && (() => {...})()}` per mantenere TypeScript-safe
 
 ## Principi UX
 - Semplicità estrema: max 3 tap per qualsiasi azione
