@@ -11,7 +11,11 @@ const supabase = createClient(
 
 const fi = (n: number | undefined | null, d = 2) =>
   n?.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? '—'
+const fiq = (n: number) =>
+  Number(n || 0).toLocaleString('it-IT', { maximumFractionDigits: 3 })
 const pct = (a: number, b: number) => b > 0 ? Math.min(100, (a / b) * 100) : 0
+const pctColor = (p: number) =>
+  p === 0 ? 'var(--t4)' : p < 50 ? '#f59e0b' : p < 100 ? '#3b82f6' : '#10b981'
 
 const STATI = ['bozza','emesso','approvato','fatturato','pagato']
 const SC: Record<string,string> = {
@@ -33,6 +37,12 @@ interface VoceComputo {
   _tipoModifica?: 'aggiunta' | 'modifica_quantita' | 'soppressione'
 }
 interface Commessa { id: string; nome: string; importo_contrattuale: number }
+interface VoceAvanzamento {
+  id: string; codice: string; descrizione: string; um: string; capitolo: string; wbs_id?: string
+  quantita_contratto: number; prezzo_unitario: number
+  qtPerSal: Record<string, number>
+  certificato_cumulativo: number; percentuale: number; residuo: number
+}
 
 const S = {
   card: { background:'var(--panel)', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden', boxShadow:'var(--shadow-sm)' } as React.CSSProperties,
@@ -70,7 +80,47 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
   const [pdfDlFile, setPdfDlFile] = useState<File | null>(null)
   const [pdfLoading, setPdfLoading] = useState<string | null>(null)
 
+  // Vista computo parallelo
+  const [vociAvanzamento, setVociAvanzamento] = useState<VoceAvanzamento[]>([])
+  const [avanzamentoLoading, setAvanzamentoLoading] = useState(false)
+  const [avanzamentoOpen, setAvanzamentoOpen] = useState(true)
+
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
+
+  const caricaAvanzamento = async (salListData: SAL[]) => {
+    setAvanzamentoLoading(true)
+    const { data: computo } = await supabase.from('computo_metrico').select('id').eq('commessa_id', id).single()
+    if (!computo) { setAvanzamentoLoading(false); return }
+    const salIds = salListData.map(s => s.id)
+    const [{ data: voci }, { data: svAll }] = await Promise.all([
+      supabase.from('voci_computo')
+        .select('id,codice,descrizione,um,quantita,prezzo_unitario,capitolo,wbs_id')
+        .eq('computo_id', computo.id)
+        .order('capitolo').order('codice'),
+      salIds.length > 0
+        ? supabase.from('sal_voci').select('voce_computo_id,quantita_periodo,sal_id').in('sal_id', salIds)
+        : Promise.resolve({ data: [] as any[] })
+    ])
+    const qtMap: Record<string, Record<string, number>> = {}
+    for (const sv of ((svAll as any[]) || [])) {
+      if (!qtMap[sv.voce_computo_id]) qtMap[sv.voce_computo_id] = {}
+      qtMap[sv.voce_computo_id][sv.sal_id] = (qtMap[sv.voce_computo_id][sv.sal_id] || 0) + (sv.quantita_periodo || 0)
+    }
+    setVociAvanzamento((voci || []).map((v: any): VoceAvanzamento => {
+      const qtPerSal = qtMap[v.id] || {}
+      const cumulativo = Object.values(qtPerSal).reduce((s, q) => s + (q as number), 0)
+      return {
+        id: v.id, codice: v.codice, descrizione: v.descrizione, um: v.um,
+        capitolo: v.capitolo, wbs_id: v.wbs_id,
+        quantita_contratto: v.quantita, prezzo_unitario: v.prezzo_unitario,
+        qtPerSal,
+        certificato_cumulativo: cumulativo,
+        percentuale: v.quantita > 0 ? Math.min(100, (cumulativo / v.quantita) * 100) : 0,
+        residuo: v.quantita - cumulativo,
+      }
+    }))
+    setAvanzamentoLoading(false)
+  }
 
   const carica = useCallback(async () => {
     setLoading(true)
@@ -78,9 +128,11 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
       supabase.from('sal').select('*').eq('commessa_id', id).order('numero'),
       supabase.from('commesse').select('id,nome,importo_contrattuale').eq('id', id).single()
     ])
-    setSalList((sal as SAL[]) || [])
+    const salListData = (sal as SAL[]) || []
+    setSalList(salListData)
     if (comm) setCommessa(comm as Commessa)
     setLoading(false)
+    caricaAvanzamento(salListData)
   }, [id])
 
   useEffect(() => { carica() }, [carica])
@@ -353,6 +405,128 @@ export default function SALAttiviPage({ params: p }: { params: Promise<{ id: str
           ))}
         </div>
       </div>
+
+      {/* ── AVANZAMENTO COMPUTO PARALLELO ── */}
+      {fase === 'lista' && (
+        <div style={S.card}>
+          <div style={{ ...S.hdr, cursor:'pointer', userSelect:'none' }} onClick={() => setAvanzamentoOpen(o => !o)}>
+            <span style={S.hl}>📊 Avanzamento voci — computo parallelo</span>
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              {vociAvanzamento.length > 0 && !avanzamentoLoading && (
+                <span style={{ fontSize:11, color:'var(--t3)' }}>{vociAvanzamento.length} voci · {salList.length} SAL</span>
+              )}
+              <span style={{ fontSize:14, color:'var(--t3)', transition:'transform 0.2s', display:'inline-block', transform: avanzamentoOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
+            </div>
+          </div>
+          {avanzamentoOpen && (
+            avanzamentoLoading ? (
+              <div style={{ padding:32, textAlign:'center' }}><span className="spinner" /></div>
+            ) : vociAvanzamento.length === 0 ? (
+              <div style={{ padding:28, textAlign:'center', color:'var(--t3)', fontSize:12 }}>
+                Nessun computo importato — importa un file XPWE dalla sezione Computo per vedere l'avanzamento.
+              </div>
+            ) : (
+              <div style={{ overflowX:'auto', maxHeight:440, overflowY:'auto' }}>
+                <table style={{ borderCollapse:'collapse', whiteSpace:'nowrap' as const, width:'100%' }}>
+                  <thead>
+                    <tr>
+                      {(['Tariffa','Descrizione','UM','Qt.Contratto','Cert.Cumul.','%','Residuo',
+                        ...salList.map(s => `N.${s.numero}`)
+                      ]).map((h, i) => (
+                        <th key={i} style={{
+                          ...S.th, position:'sticky' as const, top:0, zIndex:5,
+                          width: i === 0 ? 80 : i === 1 ? 200 : i === 2 ? 34 : i >= 7 ? 56 : 78,
+                          background: i >= 7 ? '#0d1525' : 'var(--bg)',
+                          color: i >= 7 ? (SC[salList[i-7]?.stato] || 'var(--t3)') : 'var(--t3)',
+                        }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const rows: React.ReactNode[] = []
+                      let lastCap = ''
+                      for (const v of vociAvanzamento) {
+                        if (v.capitolo !== lastCap) {
+                          rows.push(
+                            <tr key={`cap_${v.capitolo}`}>
+                              <td colSpan={7 + salList.length} style={{ padding:'5px 10px', background:'#166534', color:'#d1fae5', fontWeight:700, fontSize:10, letterSpacing:'0.04em', textTransform:'uppercase' as const }}>
+                                ▸ {v.capitolo}
+                              </td>
+                            </tr>
+                          )
+                          lastCap = v.capitolo
+                        }
+                        const pc   = v.percentuale
+                        const pcC  = pctColor(pc)
+                        const res  = v.residuo
+                        rows.push(
+                          <tr key={v.id}
+                            style={{ background: pc >= 100 ? 'rgba(16,185,129,0.04)' : 'transparent' }}
+                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--accent-light)')}
+                            onMouseLeave={e => (e.currentTarget.style.background = pc >= 100 ? 'rgba(16,185,129,0.04)' : 'transparent')}>
+
+                            {/* Tariffa */}
+                            <td style={{ ...S.td, fontFamily:'monospace', fontSize:10, color:'var(--accent)', width:80 }}>
+                              {v.codice?.slice(0,12)}
+                            </td>
+
+                            {/* Descrizione */}
+                            <td style={{ ...S.td, fontSize:10, maxWidth:200, overflow:'hidden', textOverflow:'ellipsis' }} title={v.descrizione}>
+                              {v.descrizione}
+                            </td>
+
+                            {/* UM */}
+                            <td style={{ ...S.td, fontSize:10, textAlign:'center' as const, width:34 }}>{v.um}</td>
+
+                            {/* Qt.Contratto */}
+                            <td style={{ ...S.td, textAlign:'right' as const, fontSize:10, fontVariantNumeric:'tabular-nums', width:78 }}>
+                              {fiq(v.quantita_contratto)}
+                            </td>
+
+                            {/* Certificato cumulativo */}
+                            <td style={{ ...S.td, textAlign:'right' as const, fontSize:10, fontVariantNumeric:'tabular-nums', fontWeight: v.certificato_cumulativo > 0 ? 700 : 400, color: v.certificato_cumulativo > 0 ? pcC : 'var(--t4)', width:78 }}>
+                              {v.certificato_cumulativo > 0 ? fiq(v.certificato_cumulativo) : '—'}
+                            </td>
+
+                            {/* % con barra */}
+                            <td style={{ ...S.td, width:78, padding:'6px 8px' }}>
+                              {pc > 0 ? (
+                                <div>
+                                  <div style={{ height:3, borderRadius:2, background:'var(--border)', overflow:'hidden', marginBottom:2 }}>
+                                    <div style={{ height:'100%', background:pcC, width:`${pc}%`, borderRadius:2, transition:'width 0.3s' }} />
+                                  </div>
+                                  <span style={{ fontSize:10, color:pcC, fontWeight:700 }}>{pc.toFixed(0)}%</span>
+                                </div>
+                              ) : <span style={{ fontSize:10, color:'var(--t4)' }}>—</span>}
+                            </td>
+
+                            {/* Residuo */}
+                            <td style={{ ...S.td, textAlign:'right' as const, fontSize:10, fontVariantNumeric:'tabular-nums', width:78, color: res < 0 ? '#ef4444' : res === 0 ? 'var(--t3)' : 'var(--t2)', fontWeight: res < 0 ? 700 : 400 }}>
+                              {res === 0 ? <span style={{ color:'#10b981' }}>✓</span> : fiq(res)}
+                            </td>
+
+                            {/* Colonne SAL dinamiche */}
+                            {salList.map(sal => {
+                              const qtSal = v.qtPerSal[sal.id] || 0
+                              return (
+                                <td key={sal.id} style={{ ...S.td, textAlign:'right' as const, fontSize:9, fontVariantNumeric:'tabular-nums', width:56, color: qtSal > 0 ? (SC[sal.stato] || 'var(--t2)') : 'var(--t4)' }}>
+                                  {qtSal > 0 ? fiq(qtSal) : '—'}
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        )
+                      }
+                      return rows
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            )
+          )}
+        </div>
+      )}
 
       {/* ── STEP 1: FORM ── */}
       {fase === 'form' && (
