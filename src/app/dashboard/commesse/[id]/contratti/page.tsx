@@ -84,6 +84,7 @@ export default function ContrattiPage({ params: pp }: { params: Promise<{ id: st
   const [commessaInfo, setCommessaInfo]     = useState<{ codice: string; nome: string; committente?: string; importo_contratto?: number } | null>(null)
   const [loading, setLoading]               = useState(true)
   const [pdfLoading, setPdfLoading]         = useState<string | null>(null)
+  const [aziendaDoc, setAziendaDoc]         = useState<any>({})
   const [expanded, setExpanded]             = useState<string | null>(null)
   const [saving, setSaving]                 = useState(false)
   const [activeTab, setActiveTab]           = useState<Record<string, string>>({})
@@ -135,6 +136,11 @@ export default function ContrattiPage({ params: pp }: { params: Promise<{ id: st
     setFornitori(f || [])
     setImportoContratto((comm as any)?.importo_contratto || 0)
     setCommessaInfo(comm ? { codice: (comm as any).codice || '', nome: (comm as any).nome || '', committente: (comm as any).committente, importo_contratto: (comm as any).importo_contratto } : null)
+    const azId = await getAziendaId()
+    if (azId) {
+      const { data: az } = await supabase.from('aziende').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', azId).single()
+      if (az) setAziendaDoc(az as any)
+    }
 
     if (c && c.length > 0) {
       const ids = c.map((x: any) => x.id)
@@ -270,6 +276,7 @@ export default function ContrattiPage({ params: pp }: { params: Promise<{ id: st
           fornitore: { ragione_sociale: c.fornitore?.ragione_sociale || 'Fornitore non assegnato', piva: c.fornitore?.piva },
           commessa: { codice: commessaInfo?.codice || '', nome: commessaInfo?.nome || '', committente: commessaInfo?.committente, importo_contratto: commessaInfo?.importo_contratto, cig: (commessaInfo as any)?.cig || '', cup: (commessaInfo as any)?.cup || '' },
           lavoratori: lavs,
+          aziendaDoc,
         }) as any
       ).toBlob()
       const url = URL.createObjectURL(blob)

@@ -92,6 +92,7 @@ export default function ODAPage() {
   const [err, setErr] = useState('')
   const [pdfLoading, setPdfLoading] = useState<string | null>(null)
   const [cigCommessa, setCigCommessa] = useState<string>('')
+  const [aziendaDoc, setAziendaDoc] = useState<any>({})
 
   const importoNum = parseFloat(importoNetto) || 0
   const totale = importoNum * (1 + parseFloat(ivaPct) / 100)
@@ -99,12 +100,19 @@ export default function ODAPage() {
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase.from('oda').select('*, fornitore:professionisti_fornitori(id,ragione_sociale)').eq('commessa_id', commessaId).order('created_at', { ascending: false })
-    const { data: forn } = await supabase.from('professionisti_fornitori').select('id, ragione_sociale, nome, cognome').order('id', { ascending: true })
-    const { data: comm } = await supabase.from('commesse').select('cig').eq('id', commessaId).maybeSingle()
+    const [{ data }, { data: forn }, { data: comm }] = await Promise.all([
+      supabase.from('oda').select('*, fornitore:professionisti_fornitori(id,ragione_sociale)').eq('commessa_id', commessaId).order('created_at', { ascending: false }),
+      supabase.from('professionisti_fornitori').select('id, ragione_sociale, nome, cognome').order('id', { ascending: true }),
+      supabase.from('commesse').select('cig').eq('id', commessaId).maybeSingle(),
+    ])
     if ((comm as any)?.cig) setCigCommessa((comm as any).cig)
     setOda(data || [])
     setFornitori(forn || [])
+    const azId = await getAziendaId()
+    if (azId) {
+      const { data: az } = await supabase.from('aziende').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', azId).single()
+      setAziendaDoc((az as any) || {})
+    }
     setLoading(false)
   }
 
@@ -197,6 +205,7 @@ export default function ODAPage() {
         oda: o,
         commessa: { codice: (commessa as any)?.codice || '', nome: (commessa as any)?.nome || '', committente: (commessa as any)?.committente, cig: (commessa as any)?.cig || o.cig_riferimento || '', cup: (commessa as any)?.cup || '' },
         fornitore: o.fornitore,
+        aziendaDoc,
       })
       const blob = await pdfrMod.pdf(element as any).toBlob()
       const url = URL.createObjectURL(blob)

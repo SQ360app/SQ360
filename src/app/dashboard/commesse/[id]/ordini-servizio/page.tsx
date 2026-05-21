@@ -43,6 +43,7 @@ export default function OrdiniServizioPage({ params: pp }: { params: Promise<{ i
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
   const [pdfLoading, setPdfLoading] = useState<string | null>(null)
+  const [aziendaDoc, setAziendaDoc] = useState<any>({})
 
   // Form nuovo OS
   const [fData, setFData] = useState(new Date().toISOString().slice(0, 10))
@@ -68,6 +69,11 @@ export default function OrdiniServizioPage({ params: pp }: { params: Promise<{ i
     setOrdini(os || [])
     setVarianti(v || [])
     setCommessa(comm as CommessaInfo | null)
+    const azId = await getAziendaId()
+    if (azId) {
+      const { data: az } = await supabase.from('aziende').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', azId).single()
+      setAziendaDoc((az as any) || {})
+    }
     setLoading(false)
   }
 
@@ -83,6 +89,7 @@ export default function OrdiniServizioPage({ params: pp }: { params: Promise<{ i
           os: { ...os, descrizione: os.descrizione_estesa },
           commessa: { codice: commessa?.codice || '', nome: commessa?.nome || '', cig: (commessa as any)?.cig || '', cup: (commessa as any)?.cup || '' },
           variante: varLink ? { numero: varLink.numero, descrizione: varLink.descrizione } : undefined,
+          aziendaDoc,
         }) as any
       ).toBlob()
       const url = URL.createObjectURL(blob)

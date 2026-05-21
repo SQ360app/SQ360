@@ -63,6 +63,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
   const [fSearch, setFSearch] = useState('')
   const [fResults, setFResults] = useState<Fornitore[]>([])
   const [pdfLoading, setPdfLoading] = useState<string | null>(null)
+  const [aziendaDoc, setAziendaDoc] = useState<any>({})
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
@@ -74,6 +75,13 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
   }, [id])
 
   useEffect(() => { carica() }, [carica])
+  useEffect(() => {
+    getAziendaId().then(azId => {
+      if (!azId) return
+      supabase.from('aziende').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', azId).single()
+        .then(({ data }) => { if (data) setAziendaDoc(data as any) })
+    })
+  }, [])
 
   useEffect(() => {
     if (!fSearch || fSearch.length < 2) { setFResults([]); return }
@@ -178,6 +186,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
         dam: d,
         commessa: { codice: (commessa as any)?.codice || '', nome: (commessa as any)?.nome || '', committente: (commessa as any)?.committente, cig: (commessa as any)?.cig || '', cup: (commessa as any)?.cup || '' },
         fornitore: forn || undefined,
+        aziendaDoc,
       })
       const blob = await pdfrMod.pdf(element as any).toBlob()
       const url = URL.createObjectURL(blob)

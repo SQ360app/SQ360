@@ -1,4 +1,5 @@
-import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer'
+import { Document, Page, View, Text, StyleSheet, Image } from '@react-pdf/renderer'
+import type { AziendaDoc } from './OdaDocument'
 
 // ─── Tipi ────────────────────────────────────────────────────────────────────
 
@@ -11,6 +12,7 @@ export interface SalDocProps {
   }
   commessa: { codice: string; nome: string; committente?: string; importo_contratto?: number; cig?: string; cup?: string }
   voci: { codice: string; descrizione: string; um: string; quantita_periodo: number; prezzo_unitario: number; importo_periodo: number }[]
+  aziendaDoc?: AziendaDoc
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -68,7 +70,7 @@ const s = StyleSheet.create({
 
 // ─── Documento ────────────────────────────────────────────────────────────────
 
-export function SalDocument({ sal, commessa, voci }: SalDocProps) {
+export function SalDocument({ sal, commessa, voci, aziendaDoc }: SalDocProps) {
   const cumulPrec  = Math.max(0, (sal.importo_cumulativo || 0) - sal.importo_certificato)
   const totVoci    = voci.reduce((s, v) => s + v.importo_periodo, 0)
 
@@ -77,18 +79,40 @@ export function SalDocument({ sal, commessa, voci }: SalDocProps) {
       <Page size="A4" style={s.page}>
 
         {/* Header */}
-        <View style={s.header}>
-          <View>
-            <Text style={s.headerBrand}>SQ360</Text>
-            <Text style={s.headerSub}>Gestionale Edile Professionale</Text>
+        {aziendaDoc?.carta_intestata_header_url ? (
+          <>
+            <Image src={aziendaDoc.carta_intestata_header_url} style={{ width: '100%' }} />
+            {!!commessa.cig && (
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 16, padding: '4 40', backgroundColor: '#f8fafc', borderBottom: '1 solid #e5e7eb' }}>
+                <Text style={{ fontSize: 8, color: '#374151' }}>CIG: {commessa.cig}</Text>
+                {!!commessa.cup && <Text style={{ fontSize: 8, color: '#374151' }}>CUP: {commessa.cup}</Text>}
+              </View>
+            )}
+          </>
+        ) : aziendaDoc?.logo_url ? (
+          <View style={s.header}>
+            <Image src={aziendaDoc.logo_url} style={{ height: 36, maxWidth: 160 }} />
+            <View style={s.headerRight}>
+              <Text style={s.headerTitle}>STATO AVANZAMENTO LAVORI</Text>
+              <Text style={s.headerNum}>N. {sal.numero} — {sal.codice || `SAL-A-${String(sal.numero).padStart(3,'0')}`}</Text>
+              {!!commessa.cig && <Text style={{ color: '#bfdbfe', fontSize: 8, marginTop: 2 }}>CIG: {commessa.cig}</Text>}
+              {!!commessa.cig && !!commessa.cup && <Text style={{ color: '#bfdbfe', fontSize: 8, marginTop: 1 }}>CUP: {commessa.cup}</Text>}
+            </View>
           </View>
-          <View style={s.headerRight}>
-            <Text style={s.headerTitle}>STATO AVANZAMENTO LAVORI</Text>
-            <Text style={s.headerNum}>N. {sal.numero} — {sal.codice || `SAL-A-${String(sal.numero).padStart(3,'0')}`}</Text>
-            {!!commessa.cig && <Text style={{ color: '#bfdbfe', fontSize: 8, marginTop: 2 }}>CIG: {commessa.cig}</Text>}
-            {!!commessa.cig && !!commessa.cup && <Text style={{ color: '#bfdbfe', fontSize: 8, marginTop: 1 }}>CUP: {commessa.cup}</Text>}
+        ) : (
+          <View style={s.header}>
+            <View>
+              <Text style={s.headerBrand}>SQ360</Text>
+              <Text style={s.headerSub}>Gestionale Edile Professionale</Text>
+            </View>
+            <View style={s.headerRight}>
+              <Text style={s.headerTitle}>STATO AVANZAMENTO LAVORI</Text>
+              <Text style={s.headerNum}>N. {sal.numero} — {sal.codice || `SAL-A-${String(sal.numero).padStart(3,'0')}`}</Text>
+              {!!commessa.cig && <Text style={{ color: '#bfdbfe', fontSize: 8, marginTop: 2 }}>CIG: {commessa.cig}</Text>}
+              {!!commessa.cig && !!commessa.cup && <Text style={{ color: '#bfdbfe', fontSize: 8, marginTop: 1 }}>CUP: {commessa.cup}</Text>}
+            </View>
           </View>
-        </View>
+        )}
 
         <View style={s.body}>
 
@@ -196,10 +220,16 @@ export function SalDocument({ sal, commessa, voci }: SalDocProps) {
         </View>
 
         {/* Footer */}
-        <View style={s.footer} fixed>
-          <Text style={s.footerTxt}>SQ360 — SAL N.{sal.numero} · {commessa.nome}</Text>
-          <Text style={s.footerTxt} render={({ pageNumber, totalPages }) => `Pag. ${pageNumber} / ${totalPages}`} />
-        </View>
+        {aziendaDoc?.carta_intestata_footer_url ? (
+          <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }} fixed>
+            <Image src={aziendaDoc.carta_intestata_footer_url} style={{ width: '100%' }} />
+          </View>
+        ) : (
+          <View style={s.footer} fixed>
+            <Text style={s.footerTxt}>SQ360 — SAL N.{sal.numero} · {commessa.nome}</Text>
+            <Text style={s.footerTxt} render={({ pageNumber, totalPages }) => `Pag. ${pageNumber} / ${totalPages}`} />
+          </View>
+        )}
       </Page>
     </Document>
   )
