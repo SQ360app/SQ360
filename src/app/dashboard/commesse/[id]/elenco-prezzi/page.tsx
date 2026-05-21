@@ -24,6 +24,7 @@ interface EP {
   id: string; commessa_id: string; codice: string; descrizione: string
   um: string; prezzo_unitario: number; fonte: string
   prezzario_riferimento?: string; anno_prezzario?: string
+  prezzario_anno?: number; prezzario_codice_originale?: string
   approvato_da?: string; data_approvazione?: string
   variante_id?: string; note?: string
 }
@@ -64,14 +65,17 @@ export default function ElencoPrezziPage({ params: pp }: { params: Promise<{ id:
   const [modalOpen,   setModalOpen]   = useState(false)
 
   // Form nuovo prezzo
-  const [fCodice,   setFCodice]   = useState('')
-  const [fDesc,     setFDesc]     = useState('')
-  const [fUm,       setFUm]       = useState('')
-  const [fPu,       setFPu]       = useState('')
-  const [fFonte,    setFFonte]    = useState('prezzo_nuovo')
-  const [fNote,     setFNote]     = useState('')
-  const [fVariante, setFVariante] = useState('')
-  const [modalErr,  setModalErr]  = useState('')
+  const [fCodice,         setFCodice]         = useState('')
+  const [fDesc,           setFDesc]           = useState('')
+  const [fUm,             setFUm]             = useState('')
+  const [fPu,             setFPu]             = useState('')
+  const [fFonte,          setFFonte]          = useState('prezzo_nuovo')
+  const [fNote,           setFNote]           = useState('')
+  const [fVariante,       setFVariante]       = useState('')
+  const [fPrezzarioRif,   setFPrezzarioRif]   = useState('')
+  const [fPrezzarioAnno,  setFPrezzarioAnno]  = useState('')
+  const [fPrezzarioCodice,setFPrezzarioCodice]= useState('')
+  const [modalErr,        setModalErr]        = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -120,6 +124,15 @@ export default function ElencoPrezziPage({ params: pp }: { params: Promise<{ id:
 
   useEffect(() => { load() }, [load])
 
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setExpanded(null); setAnalisiExp({}); setModalOpen(false); setModalErr('')
+    }
+    window.addEventListener('keydown', handleEsc)
+    return () => window.removeEventListener('keydown', handleEsc)
+  }, [])
+
   // ── Handlers analisi ──────────────────────────────────────────────────────
 
   const aggiungiAnalisi = async (codice: string, tipo: string) => {
@@ -166,8 +179,9 @@ export default function ElencoPrezziPage({ params: pp }: { params: Promise<{ id:
   // ── Handlers EP ───────────────────────────────────────────────────────────
 
   const aggiornaCampo = async (epId: string, campo: string, val: string) => {
-    const payload: Record<string, string | number> = { [campo]: val }
+    const payload: Record<string, string | number | null> = { [campo]: val || null }
     if (campo === 'prezzo_unitario') payload[campo] = parseFloat(val) || 0
+    if (campo === 'prezzario_anno') payload[campo] = val ? parseInt(val) : null
     await supabase.from('elenco_prezzi').update(payload).eq('id', epId)
     setEp(prev => prev.map(p => p.id === epId ? { ...p, [campo]: payload[campo] } : p))
     setEditBuf(prev => { const n = { ...prev }; delete n[epId + '_' + campo]; return n })
@@ -181,10 +195,14 @@ export default function ElencoPrezziPage({ params: pp }: { params: Promise<{ id:
       codice: fCodice.trim(), descrizione: fDesc.trim(),
       um: fUm || 'nr', prezzo_unitario: parseFloat(fPu) || 0,
       fonte: fFonte, variante_id: fVariante || null, note: fNote || null,
+      prezzario_riferimento: fPrezzarioRif || null,
+      prezzario_anno: fPrezzarioAnno ? parseInt(fPrezzarioAnno) : null,
+      prezzario_codice_originale: fPrezzarioCodice || null,
     })
     if (error) { setModalErr(error.message); return }
     setModalOpen(false)
     setFCodice(''); setFDesc(''); setFUm(''); setFPu(''); setFNote(''); setFVariante('')
+    setFPrezzarioRif(''); setFPrezzarioAnno(''); setFPrezzarioCodice('')
     await load()
   }
 
@@ -318,7 +336,10 @@ export default function ElencoPrezziPage({ params: pp }: { params: Promise<{ id:
                   style={{ display: 'grid', gridTemplateColumns: '20px 100px 1fr 50px 90px 100px 90px 60px', gap: 8, padding: '8px 14px', cursor: 'pointer', background: isExp ? '#f0f9ff' : '#fff', alignItems: 'center' }}>
                   <div>{isExp ? <ChevronDown size={12} style={{ color: '#9ca3af' }} /> : <ChevronRight size={12} style={{ color: '#9ca3af' }} />}</div>
                   <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#1d4ed8', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.codice}</div>
-                  <div style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: '1.4', fontSize: 12, cursor: 'help', color: '#374151' }} title={p.descrizione}>{p.descrizione}</div>
+                  <div style={isExp
+                    ? { whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: '1.5', fontSize: 12, color: '#374151' }
+                    : { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: '1.4', fontSize: 12, cursor: 'help', color: '#374151' }}
+                    title={isExp ? undefined : p.descrizione}>{p.descrizione}</div>
                   <div style={{ fontSize: 11, color: '#6b7280' }}>{p.um}</div>
                   <div style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 600 }}>{fmt(p.prezzo_unitario)}</div>
                   <div><FonteBadge fonte={p.fonte} varNum={varLink?.numero} /></div>
@@ -341,32 +362,7 @@ export default function ElencoPrezziPage({ params: pp }: { params: Promise<{ id:
                     {/* SEZIONE 1 — Dati tariffa */}
                     <div>
                       <p style={{ fontSize: 11, fontWeight: 700, color: '#374151', margin: '0 0 10px', textTransform: 'uppercase', letterSpacing: '.04em' }}>Dati tariffa</p>
-                      <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 70px 110px', gap: 10 }}>
-                        <div>
-                          <label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 3 }}>Codice</label>
-                          <input value={editBuf[p.id + '_codice'] ?? p.codice} style={{ ...inputSt, width: '100%', fontFamily: 'monospace' }}
-                            onChange={e => setEditBuf(prev => ({ ...prev, [p.id + '_codice']: e.target.value }))}
-                            onBlur={() => aggiornaCampo(p.id, 'codice', editBuf[p.id + '_codice'] ?? p.codice)} />
-                        </div>
-                        <div>
-                          <label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 3 }}>Descrizione</label>
-                          <input value={editBuf[p.id + '_desc'] ?? p.descrizione} style={{ ...inputSt, width: '100%' }}
-                            onChange={e => setEditBuf(prev => ({ ...prev, [p.id + '_desc']: e.target.value }))}
-                            onBlur={() => aggiornaCampo(p.id, 'descrizione', editBuf[p.id + '_desc'] ?? p.descrizione)} />
-                        </div>
-                        <div>
-                          <label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 3 }}>UM</label>
-                          <input value={editBuf[p.id + '_um'] ?? p.um} style={{ ...inputSt, width: '100%' }}
-                            onChange={e => setEditBuf(prev => ({ ...prev, [p.id + '_um']: e.target.value }))}
-                            onBlur={() => aggiornaCampo(p.id, 'um', editBuf[p.id + '_um'] ?? p.um)} />
-                        </div>
-                        <div>
-                          <label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 3 }}>P.U. (dal computo)</label>
-                          <input readOnly value={fmt(p.prezzo_unitario)} style={{ ...inputSt, width: '100%', textAlign: 'right', background: '#f3f4f6', color: '#6b7280', cursor: 'default' }} />
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 1fr', gap: 10, marginTop: 10 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 80px 110px', gap: 10 }}>
                         <div>
                           <label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 3 }}>Fonte</label>
                           <select value={p.fonte} style={{ ...inputSt, width: '100%' }}
@@ -376,52 +372,33 @@ export default function ElencoPrezziPage({ params: pp }: { params: Promise<{ id:
                             <option value="variante">Da Variante</option>
                           </select>
                         </div>
-                        {p.fonte === 'prezzario' && (
-                          <>
-                            <div>
-                              <label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 3 }}>Prezzario riferimento</label>
-                              <input value={editBuf[p.id + '_pref'] ?? (p.prezzario_riferimento || '')} placeholder="es. DEI, Regione Lombardia..."
-                                style={{ ...inputSt, width: '100%' }}
-                                onChange={e => setEditBuf(prev => ({ ...prev, [p.id + '_pref']: e.target.value }))}
-                                onBlur={() => aggiornaCampo(p.id, 'prezzario_riferimento', editBuf[p.id + '_pref'] ?? (p.prezzario_riferimento || ''))} />
-                            </div>
-                            <div>
-                              <label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 3 }}>Anno</label>
-                              <input value={editBuf[p.id + '_anno'] ?? (p.anno_prezzario || '')} placeholder="2024"
-                                style={{ ...inputSt, width: '100%' }}
-                                onChange={e => setEditBuf(prev => ({ ...prev, [p.id + '_anno']: e.target.value }))}
-                                onBlur={() => aggiornaCampo(p.id, 'anno_prezzario', editBuf[p.id + '_anno'] ?? (p.anno_prezzario || ''))} />
-                            </div>
-                          </>
-                        )}
-                        {p.fonte === 'prezzo_nuovo' && (
-                          <>
-                            <div>
-                              <label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 3 }}>Approvato da</label>
-                              <input value={editBuf[p.id + '_appr'] ?? (p.approvato_da || '')} placeholder="DL, RUP, SA..."
-                                style={{ ...inputSt, width: '100%' }}
-                                onChange={e => setEditBuf(prev => ({ ...prev, [p.id + '_appr']: e.target.value }))}
-                                onBlur={() => aggiornaCampo(p.id, 'approvato_da', editBuf[p.id + '_appr'] ?? (p.approvato_da || ''))} />
-                            </div>
-                            <div>
-                              <label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 3 }}>Data approvazione</label>
-                              <input type="date" value={editBuf[p.id + '_data_appr'] ?? (p.data_approvazione || '')}
-                                style={{ ...inputSt, width: '100%' }}
-                                onChange={e => setEditBuf(prev => ({ ...prev, [p.id + '_data_appr']: e.target.value }))}
-                                onBlur={() => aggiornaCampo(p.id, 'data_approvazione', editBuf[p.id + '_data_appr'] ?? (p.data_approvazione || ''))} />
-                            </div>
-                          </>
-                        )}
-                        {p.fonte === 'variante' && (
-                          <div>
-                            <label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 3 }}>Variante collegata</label>
-                            <select value={p.variante_id || ''} style={{ ...inputSt, width: '100%' }}
-                              onChange={e => aggiornaCampo(p.id, 'variante_id', e.target.value)}>
-                              <option value="">— Nessuna —</option>
-                              {varianti.map(v => <option key={v.id} value={v.id}>Var. {v.numero} — {v.descrizione?.slice(0, 50)}</option>)}
-                            </select>
-                          </div>
-                        )}
+                        <div>
+                          <label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 3 }}>
+                            Prezzario riferimento{p.fonte !== 'prezzario' && <span style={{ color: '#d1d5db' }}> (solo fonte Prezzario)</span>}
+                          </label>
+                          <input
+                            value={editBuf[p.id + '_pref'] ?? (p.prezzario_riferimento || '')}
+                            placeholder={p.fonte === 'prezzario' ? 'es. DEI 2026, Regione Campania 2025' : '—'}
+                            disabled={p.fonte !== 'prezzario'}
+                            style={{ ...inputSt, width: '100%', opacity: p.fonte !== 'prezzario' ? 0.4 : 1 }}
+                            onChange={e => setEditBuf(prev => ({ ...prev, [p.id + '_pref']: e.target.value }))}
+                            onBlur={() => aggiornaCampo(p.id, 'prezzario_riferimento', editBuf[p.id + '_pref'] ?? (p.prezzario_riferimento || ''))} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 3 }}>Anno</label>
+                          <input
+                            type="number"
+                            value={editBuf[p.id + '_panno'] ?? (p.prezzario_anno != null ? String(p.prezzario_anno) : '')}
+                            placeholder="2026"
+                            disabled={p.fonte !== 'prezzario'}
+                            style={{ ...inputSt, width: '100%', opacity: p.fonte !== 'prezzario' ? 0.4 : 1 }}
+                            onChange={e => setEditBuf(prev => ({ ...prev, [p.id + '_panno']: e.target.value }))}
+                            onBlur={() => aggiornaCampo(p.id, 'prezzario_anno', editBuf[p.id + '_panno'] ?? (p.prezzario_anno != null ? String(p.prezzario_anno) : ''))} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 10, color: '#6b7280', display: 'block', marginBottom: 3 }}>P.U. (dal computo)</label>
+                          <input readOnly value={fmt(p.prezzo_unitario)} style={{ ...inputSt, width: '100%', textAlign: 'right', background: '#f3f4f6', color: '#6b7280', cursor: 'default' }} />
+                        </div>
                       </div>
                     </div>
 
@@ -642,6 +619,26 @@ export default function ElencoPrezziPage({ params: pp }: { params: Promise<{ id:
                   <option value="">— Seleziona —</option>
                   {varianti.map(v => <option key={v.id} value={v.id}>Var. {v.numero} — {v.descrizione}</option>)}
                 </select>
+              </div>
+            )}
+
+            {fFonte === 'prezzario' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 1fr', gap: 10, padding: '10px 12px', background: '#f0f9ff', borderRadius: 8, border: '1px solid #bae6fd' }}>
+                <div>
+                  <label style={{ fontSize: 10, color: '#0369a1', display: 'block', marginBottom: 3 }}>Prezzario riferimento</label>
+                  <input value={fPrezzarioRif} onChange={e => setFPrezzarioRif(e.target.value)}
+                    placeholder="es. DEI 2026, Regione Campania 2025" style={{ ...inputSt, width: '100%' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 10, color: '#0369a1', display: 'block', marginBottom: 3 }}>Anno</label>
+                  <input type="number" value={fPrezzarioAnno} onChange={e => setFPrezzarioAnno(e.target.value)}
+                    placeholder="2026" style={{ ...inputSt, width: '100%' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 10, color: '#0369a1', display: 'block', marginBottom: 3 }}>Codice originale prezzario</label>
+                  <input value={fPrezzarioCodice} onChange={e => setFPrezzarioCodice(e.target.value)}
+                    placeholder="es. A.01.001.a" style={{ ...inputSt, width: '100%', fontFamily: 'monospace' }} />
+                </div>
               </div>
             )}
 

@@ -281,6 +281,16 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
 
   useEffect(() => { caricaDati() }, [caricaDati])
 
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setSel(null); setEditingCell(null); setCtx(null)
+      setWbsPicker(null); setBulkWbsPicker(false); setRdaModal(null)
+    }
+    window.addEventListener('keydown', handleEsc)
+    return () => window.removeEventListener('keydown', handleEsc)
+  }, [])
+
   // ─── Assegna WBS a singola voce ──────────────────────────────────────────
 
   const assegnaWBSVoce = async (voceId: string, wbsId: string | null) => {
@@ -949,16 +959,33 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                               if (av.length === 0 && ex.length === 0) return (
                                 <button className="cmp-analisi-add-btn" onClick={e => { e.stopPropagation(); setSel(v.id) }}>→ Analisi</button>
                               )
-                              const totBase = av.reduce((s, a) => s + (a.importo_unitario || 0), 0)
+                              const avSenzaUtile = av.filter(a => a.tipo !== 'utile_impresa')
+                              const totBase = avSenzaUtile.reduce((s, a) => s + (a.importo_unitario || 0), 0)
                               const totExtra = ex.reduce((s, e) => s + (e.importo_unitario || 0), 0)
                               const tot = totBase + totExtra
                               const ok = Math.abs(tot - v.prezzo_unitario) < 0.01
+                              const diff = tot - v.prezzo_unitario
                               return (
                                 <span style={{ display: 'inline-flex', gap: 1, alignItems: 'center', marginLeft: 4, verticalAlign: 'middle' }}>
-                                  {av.map(a => { const tc = TIPI_ANALISI.find(t => t.value === a.tipo); return <span key={a.id} className="cmp-analisi-dot" style={{ background: tc?.color || '#9ca3af' }} title={tc?.label} /> })}
-                                  {ex.length > 0 && <span style={{ fontSize: 8, color: '#d97706', fontWeight: 700, marginLeft: 1 }}>+{ex.length}</span>}
+                                  {avSenzaUtile.length > 0 && (
+                                    <>
+                                      {avSenzaUtile.map(a => { const tc = TIPI_ANALISI.find(t => t.value === a.tipo); return <span key={a.id} className="cmp-analisi-dot" style={{ background: tc?.color || '#9ca3af' }} title={tc?.label} /> })}
+                                      <span style={{ fontSize: 7, color: '#9ca3af', marginLeft: 2, letterSpacing: 0 }}>BASE</span>
+                                    </>
+                                  )}
+                                  {ex.length > 0 && (
+                                    <span
+                                      style={{ fontSize: 8, color: '#d97706', fontWeight: 700, marginLeft: 2, cursor: 'pointer', textDecoration: 'underline dotted' }}
+                                      title={`${ex.length} analisi EXTRA voce-specifica — clicca per aprire`}
+                                      onClick={e => { e.stopPropagation(); setSel(v.id) }}>
+                                      +{ex.length}
+                                    </span>
+                                  )}
                                   <span style={{ fontSize: 8, fontFamily: 'monospace', color: '#374151', marginLeft: 2 }}>{fi(tot)}</span>
-                                  <span style={{ fontSize: 8 }}>{ok ? '✅' : '⚠️'}</span>
+                                  <span style={{ fontSize: 8 }}
+                                    title={ok ? 'Analisi bilanciata con il P.U.' : `Attenzione: la somma delle analisi (€ ${fi(tot)}) non coincide con il P.U. (€ ${fi(v.prezzo_unitario)}). Differenza: € ${fi(diff)}`}>
+                                    {ok ? '✅' : '⚠️'}
+                                  </span>
                                 </span>
                               )
                             })()}

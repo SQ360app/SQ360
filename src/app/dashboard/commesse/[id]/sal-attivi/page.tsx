@@ -310,6 +310,16 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
 
   useEffect(() => { caricaDati() }, [caricaDati])
 
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setSel(null); setEditingCell(null); setCtx(null)
+      setWbsPicker(null); setBulkWbsPicker(false); setRdaModal(null)
+    }
+    window.addEventListener('keydown', handleEsc)
+    return () => window.removeEventListener('keydown', handleEsc)
+  }, [])
+
   // ─── Assegna WBS a singola voce ──────────────────────────────────────────
 
   const assegnaWBSVoce = async (voceId: string, wbsId: string | null) => {
