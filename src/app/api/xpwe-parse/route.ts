@@ -176,7 +176,7 @@ export async function POST(req: NextRequest) {
         fonte: 'XPWE',
         data_import: new Date().toISOString().split('T')[0],
         note: `${file.name} · ${epList.length} tariffe · ${vcList.length} voci`,
-      })
+      } as any)
       .select('id')
       .single()
 
