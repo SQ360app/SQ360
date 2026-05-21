@@ -36,6 +36,7 @@ function NuovaCommessaModal({ onClose, onCreated }: { onClose: () => void; onCre
     tipo_contratto: 'LAVORI',
     procedura_gara: 'APERTA',
     modalita_esecuzione: 'MISURA',
+    categoria_lavoro: 'OG1',
     cig: '',
     cup: '',
     numero_contratto: '',
@@ -120,9 +121,22 @@ function NuovaCommessaModal({ onClose, onCreated }: { onClose: () => void; onCre
 
       const fineCalc = form.data_fine_contrattuale || calcFineContrattuale()
 
+      // Genera codice semantico via RPC se categoria e provincia sono valorizzate
+      let codiceFinale = form.codice
+      if (form.categoria_lavoro && form.provincia) {
+        const { data: codiceRPC } = await supabase.rpc('genera_codice_commessa', {
+          p_azienda_id: aziendaId,
+          p_categoria: form.categoria_lavoro,
+          p_provincia: form.provincia.toUpperCase().slice(0, 2),
+        })
+        if (codiceRPC) codiceFinale = codiceRPC as string
+      }
+
       const { data: c, error } = await supabase.from('commesse').insert({
         azienda_id: aziendaId,
-        codice: form.codice,
+        codice: codiceFinale,
+        categoria_lavoro: form.categoria_lavoro || null,
+        provincia_cantiere: form.provincia || null,
         nome: form.nome.trim(),
         committente: form.committente.trim(),
         committente_piva: form.committente_piva || null,
@@ -169,23 +183,42 @@ function NuovaCommessaModal({ onClose, onCreated }: { onClose: () => void; onCre
         created_by: user.id,
       }).select('id').single()
 
-      if (error) throw error
+      if (error || !c) throw error || new Error('Errore creazione commessa')
 
       // Crea automaticamente il computo_metrico collegato
       await supabase.from('computo_metrico').insert({
         azienda_id: aziendaId,
-        commessa_id: c.id,
+        commessa_id: (c as any).id,
         nome: 'Computo metrico principale',
         tipo_uso: 'CONTRATTO',
         fonte: 'MANUALE',
       })
 
-      onCreated(c.id)
+      onCreated((c as any).id)
     } catch (e: any) {
       setErr(e.message || 'Errore nella creazione')
     }
     setSaving(false)
   }
+
+  const CATEGORIE_SOA = [
+    { v: 'OG1',  l: 'OG1 — Edifici civili e industriali' },
+    { v: 'OG2',  l: 'OG2 — Restauro beni immobili' },
+    { v: 'OG3',  l: 'OG3 — Strade, autostrade, ponti' },
+    { v: 'OG4',  l: 'OG4 — Opere nel sottosuolo' },
+    { v: 'OG6',  l: 'OG6 — Acquedotti, fognature' },
+    { v: 'OG8',  l: 'OG8 — Opere fluviali' },
+    { v: 'OG11', l: 'OG11 — Impianti tecnologici' },
+    { v: 'OS3',  l: 'OS3 — Impianti idrico-sanitari' },
+    { v: 'OS28', l: 'OS28 — Impianti elettrici' },
+    { v: 'MAN',  l: 'MAN — Manutenzione' },
+    { v: 'RIS',  l: 'RIS — Risanamento e recupero' },
+  ]
+
+  const anno = new Date().getFullYear().toString().slice(-2)
+  const provinciaPreview = (form.provincia || 'XX').toUpperCase().slice(0, 2)
+  const codiceAnteprima = `${anno}-${form.categoria_lavoro || 'OG1'}-${provinciaPreview}-NNN`
+  const isSemantico = /^\d\d-[A-Z0-9]+-[A-Z]{2}-\d{3}$/.test(form.codice)
 
   const inputStyle = { width: '100%', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 10px', boxSizing: 'border-box' as const }
   const labelStyle = { fontSize: 11, color: '#6b7280', display: 'block' as const, marginBottom: 3, fontWeight: 500 as const }
@@ -223,17 +256,30 @@ function NuovaCommessaModal({ onClose, onCreated }: { onClose: () => void; onCre
           {/* STEP 0 — Identificativi */}
           {step === 0 && (
             <>
-              <div style={grid3}>
+              {/* Categoria lavoro + Provincia → genera codice semantico */}
+              <div style={grid2}>
                 <div>
-                  <label style={labelStyle}>Codice commessa *</label>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    <input value={form.codice} onChange={e => set('codice', e.target.value)} style={{ ...inputStyle, flex: 1 }} />
-                    <button onClick={() => set('codice', '26.' + new Date().getFullYear().toString().slice(-2) + '.GE.' + String(Math.floor(Math.random()*900)+100))}
-                      title="Rigenera" style={{ padding: '8px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#f9fafb', cursor: 'pointer' }}>
-                      <RefreshCw size={13} />
-                    </button>
-                  </div>
+                  <label style={labelStyle}>Categoria lavoro *</label>
+                  <select value={form.categoria_lavoro} onChange={e => set('categoria_lavoro', e.target.value)} style={inputStyle}>
+                    {CATEGORIE_SOA.map(c => <option key={c.v} value={c.v}>{c.l}</option>)}
+                  </select>
                 </div>
+                <div>
+                  <label style={labelStyle}>Provincia cantiere *</label>
+                  <input value={form.provincia} onChange={e => set('provincia', e.target.value.toUpperCase().slice(0, 2))}
+                    placeholder="es. NA" maxLength={2}
+                    style={{ ...inputStyle, textTransform: 'uppercase', letterSpacing: 4, fontFamily: 'monospace', fontWeight: 700, fontSize: 16 }} />
+                </div>
+              </div>
+
+              {/* Anteprima codice generato */}
+              <div style={{ marginBottom: 14, padding: '10px 14px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 11, color: '#1e40af' }}>Codice generato:</span>
+                <span style={{ fontFamily: 'monospace', fontSize: 15, fontWeight: 700, color: '#1d4ed8', letterSpacing: 1 }}>{codiceAnteprima}</span>
+                <span style={{ fontSize: 10, color: '#60a5fa', marginLeft: 4 }}>generato automaticamente al salvataggio</span>
+              </div>
+
+              <div style={grid2}>
                 <div>
                   <label style={labelStyle}>Stato</label>
                   <select value={form.stato} onChange={e => set('stato', e.target.value)} style={inputStyle}>
@@ -663,7 +709,10 @@ export default function CommessePage() {
                 onMouseOut={e => (e.currentTarget.style.boxShadow = 'none')}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#9ca3af', background: '#f3f4f6', padding: '1px 6px', borderRadius: 4 }}>{c.codice}</span>
+                    {/^\d\d-[A-Z0-9]+-[A-Z]{2}-\d{3}$/.test(c.codice)
+                      ? <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#1d4ed8', background: '#dbeafe', padding: '2px 8px', borderRadius: 6, letterSpacing: 0.5 }}>{c.codice}</span>
+                      : <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#9ca3af', background: '#f3f4f6', padding: '1px 6px', borderRadius: 4 }}>{c.codice}</span>
+                    }
                     <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: stato.bg, color: stato.color, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>
                       <StatoIcon size={11} /> {stato.label}
                     </span>

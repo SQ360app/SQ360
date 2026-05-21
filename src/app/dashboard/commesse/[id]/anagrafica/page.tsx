@@ -523,7 +523,10 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
           <div>
             <p style={S.headerTitle}>Anagrafica Commessa</p>
             <p style={S.headerSub}>
-              {commessa.codice} — {commessa.nome}
+              {/^\d\d-[A-Z0-9]+-[A-Z]{2}-\d{3}$/.test(commessa.codice)
+                ? <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#1d4ed8', background: '#dbeafe', padding: '1px 7px', borderRadius: 5, marginRight: 6, letterSpacing: 0.5 }}>{commessa.codice}</span>
+                : <span style={{ fontFamily: 'monospace', fontWeight: 600, marginRight: 6 }}>{commessa.codice}</span>
+              }{commessa.nome}
               &nbsp;·&nbsp;
               <span style={{ color: assObb === totObb ? 'var(--success)' : 'var(--warning)', fontWeight: 600 }}>
                 {assObb}/{totObb} figure obbligatorie
