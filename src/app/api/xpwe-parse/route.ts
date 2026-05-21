@@ -183,7 +183,7 @@ export async function POST(req: NextRequest) {
     if (errComputo || !computo) {
       throw new Error(`Errore creazione computo: ${errComputo?.message}`)
     }
-    const computoId = computo.id
+    const computoId = (computo as any).id as string
 
     // ── 6. Insert tariffe in batch ───────────────────────────────────────────
     await supabase.from('tariffe').delete().eq('commessa_id', commessaId)
@@ -206,7 +206,7 @@ export async function POST(req: NextRequest) {
         fonte:                       'XPWE',
       }))
 
-      const { error: errT } = await supabase.from('tariffe').insert(batch)
+      const { error: errT } = await supabase.from('tariffe').insert(batch as any[])
       if (errT) throw new Error(`Errore insert tariffe: ${errT.message}`)
     }
 
@@ -218,7 +218,7 @@ export async function POST(req: NextRequest) {
 
     // Mappa codice_tariffa → db_id
     const tariffeByCode: Record<string, string> = {}
-    for (const t of (tariffeDB || [])) {
+    for (const t of ((tariffeDB as any[]) || [])) {
       tariffeByCode[t.codice_tariffa] = t.id
     }
 
@@ -265,7 +265,7 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < vociInsert.length; i += BATCH) {
       const { error: errV } = await supabase
         .from('voci_computo')
-        .insert(vociInsert.slice(i, i + BATCH))
+        .insert(vociInsert.slice(i, i + BATCH) as any[])
       if (errV) throw new Error(`Errore insert voci: ${errV.message}`)
     }
 

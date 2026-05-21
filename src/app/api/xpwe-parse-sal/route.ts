@@ -95,11 +95,11 @@ export async function POST(req: NextRequest) {
     const { data: vociDB } = await supabase
       .from('voci_computo')
       .select('id,codice,descrizione,um,quantita,prezzo_unitario')
-      .eq('computo_id', computo.id)
+      .eq('computo_id', (computo as any).id)
 
     // Mappa codice → voce DB
     const vociByCode: Record<string, any> = {}
-    for (const v of (vociDB || [])) {
+    for (const v of ((vociDB as any[]) || [])) {
       vociByCode[v.codice?.trim()?.toUpperCase()] = v
     }
 
