@@ -85,7 +85,8 @@ export default function PreventivoPage() {
         setVoci(v)
         // Expand primo capitolo
         const caps = [...new Set(v.map(x => x.capitolo))]
-        if (caps[0]) setExpandedCap({ [caps[0]]: true })
+        const firstCap = caps[0]
+        if (firstCap) setExpandedCap({ [firstCap]: true })
       }
     }
 
