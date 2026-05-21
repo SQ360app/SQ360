@@ -297,14 +297,62 @@
 ### Mappa cantieri dashboard (commit c731b7b → f2c28ec)
 - ⚠️ **Implementata ma non verificata visivamente** — griglia card 3 colonne, immagini statiche `staticmap.openstreetmap.de`, geocodifica Nominatim con salvataggio coordinate nel DB
 - ⚠️ **Possibile causa mancata visualizzazione**: tabella `commesse` non ha colonne `lat`, `lng`, `indirizzo_cantiere`, `comune_cantiere`, `cap_cantiere`, `provincia` — verificare schema DB
-- ⚠️ **Alternativa**: se le colonne non esistono, il componente mostra card senza mappa (placeholder colorato con stato)
-- Rimossi tutti i filtri sulla query (nessun filtro stato, nessun filtro azienda_id) per massimizzare debug
-- `console.log('MapCommesse mounted')` e `console.log('Commesse caricate:', N)` presenti per debug
+
+### Sessione 2026-05-21 — PDF carta intestata + sicurezza interna + perf + PWA + build fixes
+
+#### Carta intestata azienda nei PDF (commit a9513f1)
+- ✅ `impostazioni/page.tsx`: nuova card "Documenti azienda" — upload logo (L1: PNG/SVG, max 2MB) + carta intestata header+footer (L2: PNG 794px), anteprima live, salva in tabella `aziende`
+- ✅ 5 componenti PDF aggiornati (OdaDocument, SalDocument, OsDocument, DamDocument, ContrattoSubDocument):
+  - Prop `aziendaDoc?: { logo_url, carta_intestata_header_url, carta_intestata_footer_url }`
+  - Priorità: carta intestata > logo > testo SQ360; CIG/CUP sempre visibili sotto header immagine
+- ✅ Callers (oda, ordini-servizio, dam, contratti): caricano `aziendaDoc` da Supabase al mount
+- ✅ Migration: `20260526_aziende_documenti.sql` — `ALTER TABLE aziende ADD COLUMN IF NOT EXISTS logo_url text, carta_intestata_header_url text, carta_intestata_footer_url text`
+- ✅ Storage bucket: `aziende-assets` (da creare su Supabase con accesso pubblico)
+
+#### Sicurezza interna alle voci — formula 3 livelli (commit e8afd6a)
+- ✅ Migration `20260527_sic_interna_voci.sql`: `sic_interna_importo numeric`, `sic_interna_percentuale numeric` su `voci_computo`; `sicurezza_interna_esclusa_ribasso boolean DEFAULT true` su `commesse`
+- ✅ XPWE parser (`xpwe-parse/route.ts`): salva `IncSIC` come `sic_interna_importo = incSic/100 × PU` e `sic_interna_percentuale` nelle voci
+- ✅ Computo: badge 🛡️ accanto al PU per voci con `sic_interna_importo > 0`, tooltip con importo e %
+- ✅ Anagrafica commessa: toggle "🔒 Non ribassabile / ✓ Soggetta a ribasso" per sicurezza interna
+- ✅ SAL (`calcolaImportoSAL`): formula 3 livelli — `quotaLavori = (PU - sicImporto) × (1 - ribasso%) × q` + `quotaSicurezza = sicImporto × q`
+- ✅ SAL pannello dettaglio voce: breakdown "Lavori: €X | 🛡️ Sicurezza: €Y" quando sicInternaEsclusa=true
+
+#### Performance (commit 01a4798)
+- ✅ `@tanstack/react-virtual` installato — virtualizzazione tabella computo
+- ✅ `computo/page.tsx`: `useVirtualizer` con padding-top/bottom su `cmp-tscroll`; overscan:15; ~1000 row entries → render solo ~40 visibili
+- ✅ ODA: limit 50 + "Carica altri ODA" (append, `.range(pagina*50, (pagina+1)*50-1)`)
+- ✅ DDT: limit 50 + "Carica altri DDT"
+- ✅ Fatture passive: limit 50 + "Carica altre fatture passive"
+- ✅ react-pdf già lazy (dynamic import in click handler); recharts non usato
+
+#### PWA installabile (commit 04a818e)
+- ✅ `public/sw.js`: service worker minimo statico committato in git — NetworkFirst navigazione, pass-through per Supabase e `/api/*`
+- ✅ `src/components/ServiceWorkerRegistration.tsx`: client component con `navigator.serviceWorker.register('/sw.js')` nel layout
+- ✅ `src/components/PWAInstallBanner.tsx`: banner fisso bottom-center — compare solo se `beforeinstallprompt` e non già standalone; pulsante Installa + ✕ (persistito in localStorage)
+- ✅ `public/manifest.json`: `display: standalone`, start_url `/dashboard`, shortcuts Commesse+Gare
+- ✅ `src/app/api/pwa-icon/[size]/route.tsx`: Edge route che genera PNG 192/512 con `ImageResponse` (logo SQ360 gradient blu)
+- ✅ `src/app/layout.tsx`: metadata PWA completo (manifest, appleWebApp, themeColor via viewport)
+- ✅ `.gitignore`: aggiornato per escludere workbox-*.js ma NON sw.js (manuale)
+
+#### Fix layout computo (commit 2bd3f00)
+- ✅ CSS `V3_CSS` in `computo/page.tsx`: `.cmp-main` aggiunto `min-height:0`; `.cmp-tscroll` aggiunto `width:100%;min-width:0;min-height:0` — stesso fix del SAL
+
+#### Fix TypeScript sistemico per build Vercel (commit 46dbb66 → e06dd6d)
+- ✅ `src/lib/supabase.ts`: `export const supabase = getSupabase() as any` — propaga `any` a tutti i 40+ file che importano il singleton; risolve TS2769 "never" su tabelle senza tipi generati
+- ✅ `xpwe-parse/route.ts`: `const db = supabase as any` — pattern pulito per tutti i `.from()` della route
+- ✅ `xpwe-parse-sal/route.ts`: `const db = supabaseClient as any`
+- ✅ `cron/durc/route.ts`: `createClient(...) as any`
+- ✅ `documenti/page.tsx`, `fornitori/page.tsx`: import `supabase` mancante aggiunto
+- ✅ `preventivo/page.tsx`: `const firstCap = caps[0]; if (firstCap) setExpandedCap({ [firstCap as string]: true })` — fix computed property key
 
 ## Prossimi task prioritari
-1. **SQL colonne SAL PDF** — eseguire su Supabase: `ALTER TABLE sal ADD COLUMN IF NOT EXISTS pdf_dl_url text; ALTER TABLE sal ADD COLUMN IF NOT EXISTS pdf_certificato_url text;`
-2. **Mappa cantieri** — verificare in console browser: "MapCommesse mounted" e "Commesse caricate: N". Se N=0 → tabella vuota o colonne `lat/lng/indirizzo` mancanti nello schema DB
-3. **SQL colonne mappa** — aggiungere a `commesse` se mancanti: `lat FLOAT`, `lng FLOAT`, `indirizzo_cantiere TEXT`, `comune_cantiere TEXT`, `cap_cantiere TEXT`
+1. **SQL migrations da eseguire su Supabase** (se non già fatto):
+   - `ALTER TABLE sal ADD COLUMN IF NOT EXISTS pdf_dl_url text, pdf_certificato_url text`
+   - `ALTER TABLE voci_computo ADD COLUMN IF NOT EXISTS sic_interna_importo numeric DEFAULT 0, sic_interna_percentuale numeric DEFAULT 0`
+   - `ALTER TABLE commesse ADD COLUMN IF NOT EXISTS sicurezza_interna_esclusa_ribasso boolean DEFAULT true`
+   - `ALTER TABLE aziende ADD COLUMN IF NOT EXISTS logo_url text, carta_intestata_header_url text, carta_intestata_footer_url text`
+2. **Storage bucket `aziende-assets`** — creare su Supabase Storage con accesso pubblico per upload logo/carta intestata
+3. **PWA verifica** — DevTools → Application → Service Workers: sw.js deve essere "activated and running"; Lighthouse PWA audit
 4. **Test flusso register→login** — test end-to-end registrazione → conferma email → primo accesso
 5. **Verifica dominio Resend** — verificare `sq360.app` su Resend → Domains per mittente ufficiale
 6. **SQL tabelle Sprint 6** — creare su Supabase: `documenti_contratto_sub`, `lavoratori_sub`, `pagamenti_sub`
@@ -352,31 +400,37 @@
 34. Mappa cantieri dashboard con card griglia + staticmap OSM + geocodifica Nominatim ⚠️ (da verificare)
 35. ~~PDF aggiuntivi SAL, Ordine di Servizio, Contratto Sub~~ ✅
 36. ~~SalGrid: griglia inserimento SAL copia meccanica del computo — colonne SAL, pannello semplificato~~ ✅
-37. Registro di contabilità (libro giornale lavori strutturato) 📋
-38. Mobile PWA migliorata (offline, push notification) 📋
-39. Export completo commessa in formato ZIP strutturato 📋
-40. Knowledge base AI edile (normativa D.Lgs. 36/2023, prezzari regionali) 📋
-41. Billing e piani tariffari (Stripe integration) 📋
-38. Mobile PWA migliorata (offline, push notification) 📋
-39. Export completo commessa in formato ZIP strutturato 📋
-40. Knowledge base AI edile (normativa D.Lgs. 36/2023, prezzari regionali) 📋
-41. Billing e piani tariffari (Stripe integration) 📋
+37. ~~Carta intestata azienda in tutti i PDF (logo + header/footer personalizzato)~~ ✅
+38. ~~Sicurezza interna alle voci — formula 3 livelli Primus-compatible nel SAL~~ ✅
+39. ~~Performance: virtualizzazione computo + paginazione ODA/DDT/fatture~~ ✅
+40. ~~PWA installabile — service worker statico + banner installazione~~ ✅
+41. Registro di contabilità (libro giornale lavori strutturato) 📋
+42. Export completo commessa in formato ZIP strutturato 📋
+43. Knowledge base AI edile (normativa D.Lgs. 36/2023, prezzari regionali) 📋
+44. Billing e piani tariffari (Stripe integration) 📋
 
 ## Note implementazione
 - `getAziendaId()` in `src/lib/supabase.ts` — helper condiviso: `auth.uid() → utenti.azienda_id`
+- `supabase` è esportato come `any` in `src/lib/supabase.ts` — nessun tipo generato Supabase, cast necessario per evitare TS2769 su tutte le tabelle
 - Auth: protezione solo client-side (dashboard/layout.tsx); middleware.ts è vuoto
 - Tutti i moduli salvano `azienda_id` negli INSERT; RLS attivo su DB garantisce isolamento completo
 - Tabella `utenti`: `id` = `auth.uid`, `azienda_id` FK, `email`, `nome`, `cognome`, `ruolo` (admin/user)
-- Tabella `aziende`: `id`, `nome`, `piva`, `cf`, `provincia`, `created_at`
+- Tabella `aziende`: `id`, `nome`, `piva`, `cf`, `provincia`, `created_at`, `logo_url`, `carta_intestata_header_url`, `carta_intestata_footer_url`, `codice_separatore`
 - Tabella `elenco_prezzi`: `codice`, `descrizione`, `um`, `prezzo_unitario`, `fonte` ('prezzario'|'prezzo_nuovo'|'variante'), `prezzario_riferimento`, `anno_prezzario`, `approvato_da`, `data_approvazione`, `variante_id`, `note`
 - Tabelle Sprint 6 subappalti (da creare se non esistono): `documenti_contratto_sub` (tipo, url, nome_file, data_scadenza, extra JSONB), `lavoratori_sub` (nome, cognome, cf, documenti), `pagamenti_sub` (data, importo_lordo, ritenuta_pct, importo_netto, tipo)
 - Pattern navigazione layout commessa: `GRUPPI` array con `id`, `color`, `bg`, `border`, `tabs[]` — gruppo attivo rilevato da `pathname.startsWith(base + '/' + t.href)`
 - Tabella `migliorie`: `gara_id`, `commessa_id`, `azienda_id`, `categoria`, `descrizione`, `costo_stimato`, `costo_effettivo`, `punteggio_tecnico_stimato`, `note`, `offerta` bool, `fase` ('gara'|'commessa'), `stato` (contrattuale|da_eseguire|in_esecuzione|completata|verificata_dl)
 - Checklist offerta gare: persistita in `localStorage('checklist-{gara_id}')` — non in DB
-- Tabella `sal`: aggiungere `pdf_dl_url text`, `pdf_certificato_url text` (ALTER TABLE già in Prossimi task)
+- Tabella `sal`: `pdf_dl_url text`, `pdf_certificato_url text` (da aggiungere se mancanti)
 - Tabella `sal_voci`: schema minimo — `sal_id`, `voce_computo_id`, `quantita_periodo`, `wbs_id`; tutti gli altri dati si leggono via JOIN su `voci_computo` (non duplicare)
+- Tabella `voci_computo`: `sic_interna_importo numeric DEFAULT 0`, `sic_interna_percentuale numeric DEFAULT 0` — quota sicurezza interna Primus
+- Tabella `commesse`: `sicurezza_interna_esclusa_ribasso boolean DEFAULT true` — formula 3 livelli SAL
 - Upload SAL: bucket `documenti`, path `{azienda_id}/sal/{commessa_id}/SAL-{numero}-DL.pdf` e `SAL-{numero}-certificato.pdf`
 - `SalGrid`: copia meccanica di `computo/page.tsx` con `cp`; usa `props.commessaId` invece di `use(paramsPromise)`; il pannello analisi originale è disabilitato con `{false && (() => {...})()}` per mantenere TypeScript-safe
+- Computo virtualizzato con `@tanstack/react-virtual` (padding-top/bottom su `cmp-tscroll`); overscan 15; ref `scrollRef` sul container scroll
+- Codice commessa semantico: `genera_codice_commessa(azienda_id, categoria, provincia)` → `[AA]-[CAT]-[PR]-[NNN]`; 11 categorie SOA; `codice_separatore` su `aziende`
+- PDF carta intestata: prop `aziendaDoc?` su tutti i 5 componenti PDF; priorità carta_intestata > logo > testo; icone PWA via `/api/pwa-icon/[size]` (Edge ImageResponse)
+- PWA: `public/sw.js` statico committato; `ServiceWorkerRegistration` componente client; `public/manifest.json` con shortcuts
 
 ## Principi UX
 - Semplicità estrema: max 3 tap per qualsiasi azione
