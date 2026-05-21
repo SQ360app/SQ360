@@ -32,6 +32,7 @@ interface VoceDB {
   quantita: number; prezzo_unitario: number; importo: number
   capitolo: string; categoria: string; note?: string
   wbs_id?: string; wbs_label?: string
+  sic_interna_importo?: number; sic_interna_percentuale?: number
 }
 interface RDADB { id: string; voci_ids?: string[]; stato?: string; tipo?: string; wbs_id?: string }
 const TIPI_ANALISI = [
@@ -260,7 +261,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
 
       const [{ data: v }, { data: rda }, { data: analisiData }, { data: extraData }] = await Promise.all([
         supabase.from('voci_computo')
-          .select('id,codice,descrizione,um,quantita,prezzo_unitario,importo,capitolo,categoria,note,wbs_id,wbs_label')
+          .select('id,codice,descrizione,um,quantita,prezzo_unitario,importo,capitolo,categoria,note,wbs_id,wbs_label,sic_interna_importo,sic_interna_percentuale')
           .eq('computo_id', computo.id).order('capitolo').order('codice'),
         supabase.from('rda').select('id,wbs_id,stato,tipo').eq('commessa_id', id),
         supabase.from('analisi_prezzi_tariffa').select('*').eq('commessa_id', id),
@@ -1028,7 +1029,16 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveEdit() } if (e.key === 'Escape') setEditingCell(null) }}
                                 onClick={e => e.stopPropagation()} />
                             ) : (
-                              <span style={{ fontSize: 10, fontFamily: 'monospace', display: 'block', textAlign: 'right' }}>{fi(v.prezzo_unitario)}</span>
+                              <span style={{ fontSize: 10, fontFamily: 'monospace', display: 'block', textAlign: 'right' }}>
+                                {fi(v.prezzo_unitario)}
+                                {(v.sic_interna_importo || 0) > 0 && (
+                                  <span
+                                    title={`Quota sicurezza interna non soggetta a ribasso se configurato nel capitolato. Importo: €${fi(v.sic_interna_importo || 0)}/um (${fi(v.sic_interna_percentuale || 0)}%)`}
+                                    style={{ display: 'inline-block', fontSize: 7, background: '#dcfce7', color: '#14532d', border: '1px solid #16a34a', borderRadius: 2, padding: '0px 3px', marginLeft: 3, cursor: 'help', verticalAlign: 'middle', fontFamily: 'sans-serif' }}>
+                                    🛡️ {fi(v.sic_interna_importo || 0)}
+                                  </span>
+                                )}
+                              </span>
                             )}
                           </td>
                           <td />

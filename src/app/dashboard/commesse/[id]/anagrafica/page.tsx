@@ -614,7 +614,37 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
                 {editDati ? <input style={inpEdit} type="number" value={commessa.oneri_sicurezza || ''} onChange={e => fc('oneri_sicurezza', parseFloat(e.target.value))} />
                 : <p style={S.value}>€ {(commessa.oneri_sicurezza || 0).toLocaleString('it-IT')}</p>}
               </div>
-              <div /> {/* spacer */}
+              <div style={{ gridColumn: 'span 2' }}>
+                <label style={S.label}>
+                  🛡️ Quota sicurezza interna alle voci
+                  <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--t3)', fontWeight: 400, cursor: 'help' }}
+                    title="Configura se la quota di sicurezza interna alle singole voci è soggetta al ribasso d'asta. Verifica il tuo capitolato speciale d'appalto. Default: Non ribassabile (più tutelante)">
+                    ⓘ
+                  </span>
+                </label>
+                {editDati ? (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                    {[
+                      { val: true,  label: '🔒 Non ribassabile', desc: 'La quota sicurezza NON subisce il ribasso d\'asta' },
+                      { val: false, label: '✓ Soggetta a ribasso', desc: 'La quota sicurezza subisce il ribasso come le lavorazioni' },
+                    ].map(opt => (
+                      <button key={String(opt.val)} onClick={() => fc('sicurezza_interna_esclusa_ribasso', opt.val)}
+                        title={opt.desc}
+                        style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 12, cursor: 'pointer', fontWeight: 600,
+                          background: (commessa.sicurezza_interna_esclusa_ribasso ?? true) === opt.val ? '#14532d' : 'var(--bg)',
+                          color:      (commessa.sicurezza_interna_esclusa_ribasso ?? true) === opt.val ? '#fff' : 'var(--t2)' }}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={S.value}>
+                    {(commessa.sicurezza_interna_esclusa_ribasso ?? true)
+                      ? '🔒 Non ribassabile (esclude dal ribasso d\'asta)'
+                      : '✓ Soggetta a ribasso'}
+                  </p>
+                )}
+              </div>
               <div>
                 <label style={S.label}><Calendar size={10} style={{ display: 'inline', marginRight: 3 }} />Inizio lavori</label>
                 {editDati ? <input style={inpEdit} type="date" value={commessa.data_inizio || ''} onChange={e => fc('data_inizio', e.target.value)} />

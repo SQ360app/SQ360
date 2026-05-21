@@ -32,6 +32,7 @@ interface VoceDB {
   quantita: number; prezzo_unitario: number; importo: number
   capitolo: string; categoria: string; note?: string
   wbs_id?: string; wbs_label?: string
+  sic_interna_importo?: number; sic_interna_percentuale?: number
 }
 interface RDADB { id: string; voci_ids?: string[]; stato?: string; tipo?: string; wbs_id?: string }
 const TIPI_ANALISI = [
@@ -228,6 +229,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
   const [qtInput, setQtInput] = useState<Record<string,number>>({})
   const [qtPerSal, setQtPerSal] = useState<Record<string,Record<string,number>>>({})
   const [qtCumul, setQtCumul] = useState<Record<string,number>>({})
+  const [sicInternaEsclusa, setSicInternaEsclusa] = useState<boolean>(true) // default: non ribassabile
 
   const [fontSize, setFontSize] = useState<number>(() => {
     if (typeof window !== 'undefined') {
@@ -255,6 +257,21 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
     setToast(msg)
     if (toastRef.current) clearTimeout(toastRef.current)
     toastRef.current = setTimeout(() => setToast(''), 2800)
+  }
+
+  // ─── Formula 3 livelli sicurezza interna (Primus-compatible) ─────────────
+
+  function calcolaImportoSAL(voce: VoceDB, quantitaSAL: number, ribassoPct = 0): number {
+    const sicImporto = voce.sic_interna_importo || 0
+    if (sicImporto <= 0 || !sicInternaEsclusa) {
+      // Formula semplice: tutto ribassato
+      return voce.prezzo_unitario * (1 - ribassoPct / 100) * quantitaSAL
+    }
+    // Formula 3 livelli: quota sicurezza non ribassata
+    const puLavori    = voce.prezzo_unitario - sicImporto
+    const quotaLavori    = puLavori    * (1 - ribassoPct / 100) * quantitaSAL
+    const quotaSicurezza = sicImporto  * quantitaSAL
+    return quotaLavori + quotaSicurezza
   }
 
   // ─── Alert riserva 15gg (DM 49/2018 art. 23) ────────────────────────────
@@ -285,18 +302,20 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
       if (!computo) { setCaricamento(false); return }
       setComputoId(computo.id)
 
-      const [{ data: v }, { data: rda }, { data: analisiData }, { data: extraData }] = await Promise.all([
+      const [{ data: v }, { data: rda }, { data: analisiData }, { data: extraData }, { data: comm }] = await Promise.all([
         supabase.from('voci_computo')
-          .select('id,codice,descrizione,um,quantita,prezzo_unitario,importo,capitolo,categoria,note,wbs_id,wbs_label')
+          .select('id,codice,descrizione,um,quantita,prezzo_unitario,importo,capitolo,categoria,note,wbs_id,wbs_label,sic_interna_importo,sic_interna_percentuale')
           .eq('computo_id', computo.id).order('capitolo').order('codice'),
         supabase.from('rda').select('id,wbs_id,stato,tipo').eq('commessa_id', id),
         supabase.from('analisi_prezzi_tariffa').select('*').eq('commessa_id', id),
         supabase.from('analisi_extra_voce').select('*').eq('commessa_id', id),
+        supabase.from('commesse').select('sicurezza_interna_esclusa_ribasso').eq('id', id).single(),
       ])
       if (v) { setVoci(v); setTotale(v.reduce((s, x) => s + (x.importo || 0), 0)) }
       if (rda) setRdaList(rda as RDADB[])
       if (analisiData) setAnalisi(analisiData as AnalisiPrezzo[])
       if (extraData) setAnalisiExtra(extraData as AnalisiExtraVoce[])
+      setSicInternaEsclusa((comm as any)?.sicurezza_interna_esclusa_ribasso ?? true)
 
       // Carica SAL e quantità certificate
       const { data: sals } = await supabase
@@ -914,7 +933,8 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
               setQtPerSal((p: any) => ({ ...p, [salSel.id]: qtInput }))
               const importoPeriodo = Object.entries(qtInput).reduce((sum, [vid, q]) => {
                 const voce = voci.find((x: any) => x.id === vid)
-                return sum + (q * (voce?.prezzo_unitario || 0))
+                if (!voce) return sum
+                return sum + calcolaImportoSAL(voce, q)
               }, 0)
               const ritenuta = importoPeriodo * 0.05
               const cumulPrev = Object.entries(qtPerSal)
@@ -1197,7 +1217,22 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
                                   <span style={{ color: (v.quantita - (qtCumul[v.id] || 0) - (qtInput[v.id] || 0)) < 0 ? '#ef4444' : '#16a34a' }}>
                                     <b>Residuo:</b> {(v.quantita - (qtCumul[v.id] || 0) - (qtInput[v.id] || 0)).toFixed(3)} {v.um}
                                   </span>
-                                  <span><b>Importo:</b> €{((qtInput[v.id] || 0) * v.prezzo_unitario).toFixed(2)}</span>
+                                  {(() => {
+                                    const q = qtInput[v.id] || 0
+                                    const importo = calcolaImportoSAL(v, q)
+                                    const sicImporto = v.sic_interna_importo || 0
+                                    const hasSic = sicImporto > 0 && sicInternaEsclusa
+                                    return (
+                                      <span>
+                                        <b>Importo:</b> €{importo.toFixed(2)}
+                                        {hasSic && q > 0 && (
+                                          <span style={{ marginLeft: 8, fontSize: 10, color: '#6b7280' }}>
+                                            Lavori: €{((v.prezzo_unitario - sicImporto) * q).toFixed(2)} | <span style={{ color: '#14532d' }}>🛡️ Sicurezza: €{(sicImporto * q).toFixed(2)}</span>
+                                          </span>
+                                        )}
+                                      </span>
+                                    )
+                                  })()}
                                 </div>
                               ) : (
                                 <span style={{ color: '#6b7280', fontSize: 11 }}>← Seleziona un SAL dalla toolbar per inserire le quantità</span>

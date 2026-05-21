@@ -243,18 +243,22 @@ export async function POST(req: NextRequest) {
         const cat      = vc.idCat   !== '0' ? (catMap[vc.idCat]        || `C${vc.idCat}`)    : null
         const capitolo = superCat || cat || 'Generale'
 
+        const sicPct    = ep?.incSic || 0
+        const sicImporto = Math.round((sicPct / 100 * prezzo) * 100) / 100
         return {
-          computo_id:      computoId,
-          codice:          (ep?.tariffa || vc.idep).slice(0, 200),
-          codice_prezzario:(ep?.tariffa || vc.idep).slice(0, 200),
-          descrizione:     ep?.descrizione || '(senza descrizione)',
-          um:              (ep?.um || 'a corpo').slice(0, 20),
+          computo_id:              computoId,
+          codice:                  (ep?.tariffa || vc.idep).slice(0, 200),
+          codice_prezzario:        (ep?.tariffa || vc.idep).slice(0, 200),
+          descrizione:             ep?.descrizione || '(senza descrizione)',
+          um:                      (ep?.um || 'a corpo').slice(0, 20),
           quantita,
-          prezzo_unitario: prezzo,
+          prezzo_unitario:         prezzo,
           importo,
-          capitolo:        capitolo.slice(0, 200),
-          categoria:       (cat || '').slice(0, 30),
-          note:            cat ? `${superCat || ''} > ${cat}` : '',
+          capitolo:                capitolo.slice(0, 200),
+          categoria:               (cat || '').slice(0, 30),
+          note:                    cat ? `${superCat || ''} > ${cat}` : '',
+          sic_interna_percentuale: sicPct,
+          sic_interna_importo:     sicImporto,
         }
       })
 
