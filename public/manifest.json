@@ -1,0 +1,50 @@
+{
+  "name": "SQ360 — Gestione Commesse Edili",
+  "short_name": "SQ360",
+  "description": "Gestionale per imprese edili: commesse, SAL, appalti, cantiere",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#07090f",
+  "theme_color": "#1e40af",
+  "orientation": "any",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/api/pwa-icon?size=192",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/api/pwa-icon?size=192",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/api/pwa-icon?size=512",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/api/pwa-icon?size=512",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Commesse",
+      "url": "/dashboard/commesse",
+      "description": "Apri la lista commesse"
+    },
+    {
+      "name": "Nuova Gara",
+      "url": "/dashboard/gare",
+      "description": "Gestione gare d'appalto"
+    }
+  ]
+}
