@@ -122,7 +122,7 @@ const V3_CSS = `
 .cmp-vcnt{color:#9ca3af;margin-left:auto;font-size:9px;white-space:nowrap}
 .cmp-tscroll{flex:1;overflow:auto}
 .cmp-tscroll::-webkit-scrollbar{width:6px;height:6px}.cmp-tscroll::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}
-table.cmp-t{width:100%;border-collapse:collapse;table-layout:fixed}
+table.cmp-t{width:100%;min-width:800px;border-collapse:collapse;table-layout:fixed}
 col.cc2{width:34px}col.cc3{width:96px}col.cc4{width:auto}
 col.cc5,col.cc6,col.cc7,col.cc8{width:52px}
 col.cc9{width:66px}col.cc10{width:68px}col.cc11{width:82px}
@@ -188,7 +188,7 @@ table.cmp-t td{padding:2px 3px;vertical-align:top;border-right:1px solid #e5e7eb
 .cmp-ctxsep{border-top:1px solid rgba(0,0,0,.08)}
 td.cmp-td-edit{cursor:cell}
 td.cmp-td-edit:hover{outline:1px dashed #9ca3af;outline-offset:-2px}
-.cmp-inp-cell{width:100%;border:1px solid #3b82f6;border-radius:2px;padding:1px 4px;font-size:10px;font-family:monospace;background:#eff6ff;outline:none;box-shadow:0 0 0 2px rgba(59,130,246,.2);color:#1e40af;text-align:right}
+.cmp-inp-cell{width:100%;min-width:0;border:1px solid #3b82f6;border-radius:2px;padding:1px 4px;font-size:10px;font-family:monospace;background:#eff6ff;outline:none;box-shadow:0 0 0 2px rgba(59,130,246,.2);color:#1e40af;text-align:right}
 `
 
 const fi = (n: number, d = 2) => n?.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? ''
@@ -969,7 +969,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
             <div className="cmp-tscroll" onClick={() => setCtx(null)}>
               <table className="cmp-t">
                 <colgroup>
-                  <col style={{ width: 30 }} /><col style={{ width: 80 }} /><col style={{ minWidth: 220 }} />
+                  <col style={{ width: 30 }} /><col style={{ width: 80 }} /><col style={{ width: 220 }} />
                   <col style={{ width: 40 }} /><col style={{ width: 40 }} /><col style={{ width: 40 }} /><col style={{ width: 40 }} />
                   <col style={{ width: 65 }} />
                   <col style={{ width: 65 }} /><col style={{ width: 65 }} />
@@ -1014,7 +1014,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
                           onContextMenu={e => { e.preventDefault(); setCtx({ x: e.clientX, y: e.clientY, id: v.id }) }}>
                           <td style={{ textAlign: 'center', fontSize: 11, fontWeight: 700 }}>{idx}</td>
                           <td style={{ fontSize: 10, color: '#1d4ed8', fontFamily: 'monospace' }}>{v.codice}</td>
-                          <td style={{ fontSize: 10, minWidth: 220, whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                          <td style={{ fontSize: 10, whiteSpace: 'normal', wordBreak: 'break-word', overflow: 'hidden' }}>
                             <span className="cmp-des-first" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>{first}</span>
                             <span
                               className={`cmp-wbadge ${hasWBS ? 'set' : 'unset'}`}
@@ -1101,7 +1101,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
                           <td style={{ padding: '2px 4px' }} onClick={e => e.stopPropagation()}>
                             {salSel ? (
                               <input type="number" step="0.001" min="0" value={qtInput[v.id] ?? ''} onChange={e => setQtInput(p => ({ ...p, [v.id]: parseFloat(e.target.value) || 0 }))}
-                                style={{ width: '100%', border: '1px solid #3b82f6', borderRadius: 3, padding: '2px 4px', fontSize: 10, background: '#eff6ff', textAlign: 'right', outline: 'none' }} />
+                                style={{ width: '100%', minWidth: 0, border: '1px solid #3b82f6', borderRadius: 3, padding: '2px 4px', fontSize: 10, background: '#eff6ff', textAlign: 'right', outline: 'none' }} />
                             ) : (
                               <span style={{ color: '#9ca3af', fontSize: 10 }}>—</span>
                             )}
