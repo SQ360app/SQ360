@@ -37,21 +37,28 @@ export default function FatturazionePage() {
   const [saving, setSaving] = useState(false)
   const [formA, setFormA] = useState({ numero: '', data: '', importo_netto: '', iva_pct: '22', sal_id: '', note: '' })
   const [formP, setFormP] = useState({ numero_fattura: '', data_fattura: '', fornitore_id: '', importo_netto: '', iva_pct: '22', oda_id: '', note: '' })
+  const [fpPagina, setFpPagina] = useState(0)
+  const [fpHasMore, setFpHasMore] = useState(false)
+  const FP_LIMIT = 50
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (pagina = 0) => {
     setLoading(true)
     const [{ data: fa }, { data: fp }, { data: f }] = await Promise.all([
       supabase.from('fatture').select('*').eq('commessa_id', id).eq('tipo', 'ATTIVA').order('created_at', { ascending: false }),
-      supabase.from('fatture_passive').select('*, fornitore:professionisti_fornitori(ragione_sociale)').eq('commessa_id', id).order('created_at', { ascending: false }),
+      supabase.from('fatture_passive').select('*, fornitore:professionisti_fornitori(ragione_sociale)')
+        .eq('commessa_id', id).order('created_at', { ascending: false })
+        .range(pagina * FP_LIMIT, (pagina + 1) * FP_LIMIT - 1),
       supabase.from('professionisti_fornitori').select('id, ragione_sociale').order('ragione_sociale'),
     ])
     setFattureAttive(fa || [])
-    setFatturePassive(fp || [])
+    const lista = fp || []
+    setFatturePassive(prev => pagina === 0 ? lista : [...prev, ...lista])
+    setFpHasMore(lista.length === FP_LIMIT)
     setFornitori(f || [])
     setLoading(false)
   }, [id])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load(0) }, [load])
 
   async function saveAttiva() {
     if (!formA.numero || !formA.importo_netto) return
@@ -305,6 +312,15 @@ export default function FatturazionePage() {
             )
           })
       }
+      {fpHasMore && tab === 'PASSIVE' && (
+        <div style={{ textAlign: 'center', padding: '12px' }}>
+          <button disabled={loading}
+            onClick={() => { const p = fpPagina + 1; setFpPagina(p); load(p) }}
+            style={{ padding: '7px 20px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--t2)', fontSize: 12, cursor: 'pointer' }}>
+            {loading ? 'Caricamento…' : 'Carica altre fatture passive'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

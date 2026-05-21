@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback, use } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { supabase, getAziendaId } from '@/lib/supabase'
 
 // ─── WBS FLAT (codice → label) ──────────────────────────────────────────────
@@ -240,6 +241,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
   const lastSelRef  = useRef<string | null>(null)
   const editingRef  = useRef<HTMLInputElement>(null)
   const dblClickRef = useRef<{ id: string; field: string; t: number } | null>(null)
+  const scrollRef   = useRef<HTMLDivElement>(null)
   const [editingCell, setEditingCell] = useState<{ voceId: string; field: 'quantita' | 'prezzo_unitario' } | null>(null)
   const [editingVal,  setEditingVal]  = useState('')
 
@@ -619,6 +621,25 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
 
   const voceIdx = (v: VoceDB) => voci.indexOf(v) + 1
 
+  // ─── Virtualizzatore tabella ──────────────────────────────────────────────
+  const virtualizer = useVirtualizer({
+    count: tableRows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: (i) => {
+      const r = tableRows[i]
+      if (r.type === 'hsc') return 28
+      if (r.type === 'hca') return 24
+      if (r.type === 'som' && sel === (r as any).v?.id) return 380
+      if (r.type === 'vo'  && sel === (r as any).v?.id) return 0  // vo panel in som
+      return 27
+    },
+    overscan: 15,
+  })
+  const vItems      = virtualizer.getVirtualItems()
+  const totalSize   = virtualizer.getTotalSize()
+  const padTop      = vItems.length > 0 ? vItems[0].start : 0
+  const padBottom   = vItems.length > 0 ? totalSize - vItems[vItems.length - 1].end : 0
+
   // ─── Importo selezione corrente ───────────────────────────────────────────
 
   const selImporto = voci.filter(v => multiSel.has(v.id)).reduce((s, v) => s + (v.importo || 0), 0)
@@ -893,7 +914,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
               </label>
             </div>
           ) : (
-            <div className="cmp-tscroll" onClick={() => setCtx(null)}>
+            <div ref={scrollRef} className="cmp-tscroll" onClick={() => setCtx(null)}>
               <table className="cmp-t">
                 <colgroup>
                   <col className="cc2" /><col className="cc3" /><col className="cc4" />
@@ -920,9 +941,11 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                   </tr>
                 </thead>
                 <tbody>
-                  {tableRows.map((row, i) => {
-                    if (row.type === 'hsc') return <tr key={`hsc_${i}`} className="cmp-hsc"><td colSpan={14}>▸ {row.lb}</td></tr>
-                    if (row.type === 'hca') return <tr key={`hca_${i}`} className="cmp-hca"><td colSpan={14}>{row.lb}</td></tr>
+                  {padTop > 0 && <tr><td colSpan={15} style={{ height: padTop, padding: 0, border: 'none' }} /></tr>}
+                  {vItems.map(vItem => {
+                    const row = tableRows[vItem.index]
+                    if (row.type === 'hsc') return <tr key={`hsc_${row.id}`} className="cmp-hsc"><td colSpan={14}>▸ {row.lb}</td></tr>
+                    if (row.type === 'hca') return <tr key={`hca_${row.id}`} className="cmp-hca"><td colSpan={14}>{row.lb}</td></tr>
 
                     if (row.type === 'vo') {
                       const v = row.v
@@ -1300,6 +1323,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                     }
                     return null
                   })}
+                  {padBottom > 0 && <tr><td colSpan={15} style={{ height: padBottom, padding: 0, border: 'none' }} /></tr>}
                 </tbody>
               </table>
             </div>

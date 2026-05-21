@@ -93,20 +93,27 @@ export default function ODAPage() {
   const [pdfLoading, setPdfLoading] = useState<string | null>(null)
   const [cigCommessa, setCigCommessa] = useState<string>('')
   const [aziendaDoc, setAziendaDoc] = useState<any>({})
+  const [odaPagina, setOdaPagina] = useState(0)
+  const [odaHasMore, setOdaHasMore] = useState(false)
+  const ODA_LIMIT = 50
 
   const importoNum = parseFloat(importoNetto) || 0
   const totale = importoNum * (1 + parseFloat(ivaPct) / 100)
   const ritenutaImporto = importoNum * parseFloat(ritenuta) / 100
 
-  async function load() {
+  async function load(pagina = 0) {
     setLoading(true)
     const [{ data }, { data: forn }, { data: comm }] = await Promise.all([
-      supabase.from('oda').select('*, fornitore:professionisti_fornitori(id,ragione_sociale)').eq('commessa_id', commessaId).order('created_at', { ascending: false }),
+      supabase.from('oda').select('*, fornitore:professionisti_fornitori(id,ragione_sociale)')
+        .eq('commessa_id', commessaId).order('created_at', { ascending: false })
+        .range(pagina * ODA_LIMIT, (pagina + 1) * ODA_LIMIT - 1),
       supabase.from('professionisti_fornitori').select('id, ragione_sociale, nome, cognome').order('id', { ascending: true }),
       supabase.from('commesse').select('cig').eq('id', commessaId).maybeSingle(),
     ])
     if ((comm as any)?.cig) setCigCommessa((comm as any).cig)
-    setOda(data || [])
+    const lista = data || []
+    setOda(prev => pagina === 0 ? lista : [...prev, ...lista])
+    setOdaHasMore(lista.length === ODA_LIMIT)
     setFornitori(forn || [])
     const azId = await getAziendaId()
     if (azId) {
@@ -116,7 +123,7 @@ export default function ODAPage() {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [commessaId])
+  useEffect(() => { load(0) }, [commessaId])
   useEffect(() => { setRitenuta(String(TIPI_ODA.find(x => x.value === tipo)?.ritenuta || 0)) }, [tipo])
 
   useEffect(() => {
@@ -326,6 +333,15 @@ export default function ODAPage() {
                 )}
               </div>
             ))}
+            {odaHasMore && (
+              <div style={{ textAlign: 'center', padding: '12px', borderTop: '1px solid #f3f4f6' }}>
+                <button disabled={loading}
+                  onClick={() => { const p = odaPagina + 1; setOdaPagina(p); load(p) }}
+                  style={{ padding: '7px 20px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff', color: '#6b7280', fontSize: 12, cursor: 'pointer' }}>
+                  {loading ? 'Caricamento…' : 'Carica altri ODA'}
+                </button>
+              </div>
+            )}
           </div>
       }
       {modalOpen && (

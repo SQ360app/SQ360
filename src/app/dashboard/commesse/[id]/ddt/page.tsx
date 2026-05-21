@@ -43,21 +43,28 @@ export default function DDTPage({ params: p }: { params: Promise<{ id: string }>
   const [aiLoading, setAiLoading] = useState(false)
   const [fSearch, setFSearch] = useState('')
   const [fResults, setFResults] = useState<Fornitore[]>([])
+  const [ddtPagina, setDdtPagina] = useState(0)
+  const [ddtHasMore, setDdtHasMore] = useState(false)
+  const DDT_LIMIT = 50
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
-  const carica = useCallback(async () => {
+  const carica = useCallback(async (pagina = 0) => {
     setLoading(true)
     const [{ data: ddt }, { data: oda }] = await Promise.all([
-      supabase.from('ddt').select('*').eq('commessa_id', id).order('created_at', { ascending: false }),
+      supabase.from('ddt').select('*').eq('commessa_id', id)
+        .order('created_at', { ascending: false })
+        .range(pagina * DDT_LIMIT, (pagina + 1) * DDT_LIMIT - 1),
       supabase.from('oda').select('id,numero,oggetto').eq('commessa_id', id).neq('stato', 'ANNULLATO'),
     ])
-    setDdtList((ddt as DDT[]) || [])
+    const lista = (ddt as DDT[]) || []
+    setDdtList(prev => pagina === 0 ? lista : [...prev, ...lista])
+    setDdtHasMore(lista.length === DDT_LIMIT)
     setOdaList((oda as ODA[]) || [])
     setLoading(false)
   }, [id])
 
-  useEffect(() => { carica() }, [carica])
+  useEffect(() => { carica(0) }, [carica])
 
   useEffect(() => {
     if (!fSearch || fSearch.length < 2) { setFResults([]); return }
@@ -219,6 +226,15 @@ export default function DDTPage({ params: p }: { params: Promise<{ id: string }>
                 })}
               </tbody>
             </table>
+            {ddtHasMore && (
+              <div style={{ textAlign: 'center', padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
+                <button disabled={loading}
+                  onClick={() => { const p = ddtPagina + 1; setDdtPagina(p); carica(p) }}
+                  style={{ padding: '7px 20px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--t2)', fontSize: 12, cursor: 'pointer' }}>
+                  {loading ? 'Caricamento…' : `Carica altri DDT`}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
