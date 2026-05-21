@@ -223,9 +223,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
   const [analisiEdit, setAnalisiEdit] = useState<Record<string, string>>({})
   const [analisiExtra, setAnalisiExtra] = useState<AnalisiExtraVoce[]>([])
   const [analisiExtraEdit, setAnalisiExtraEdit] = useState<Record<string, string>>({})
-  const [baseExpanded, setBaseExpanded] = useState<Record<string, boolean>>({})
   const [extraExpanded, setExtraExpanded] = useState<Record<string, boolean>>({})
-  const [copiaSource, setCopiaSource] = useState('')
   const [rdaModal, setRdaModal] = useState<{ rows: RdaModalRow[]; senzaAnalisi: string[]; generaFallback: boolean } | null>(null)
 
   const [fontSize, setFontSize] = useState<number>(() => {
@@ -362,7 +360,6 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     )
     const { data } = await supabase.from('analisi_prezzi_tariffa').select('*').eq('commessa_id', id)
     if (data) setAnalisi(data as AnalisiPrezzo[])
-    setCopiaSource('')
     showToast(`✓ Analisi copiata da ${codiceSource}`)
   }
 
@@ -1059,19 +1056,20 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                           {isSel && (() => {
                             const av = analisi.filter(a => a.codice_tariffa === v.codice)
                             const ex = analisiExtra.filter(e => e.voce_computo_id === v.id)
-                            const costoBase = av.reduce((s, a) => s + (a.importo_unitario || 0), 0)
-                            const costoExtra = ex.reduce((s, e) => s + (e.importo_unitario || 0), 0)
+                            const avSenzaUtile = av.filter(a => a.tipo !== 'utile_impresa')
+                            const exSenzaUtile = ex.filter(e => e.tipo !== 'utile_impresa')
+                            const costoBase = avSenzaUtile.reduce((s, a) => s + (a.importo_unitario || 0), 0)
+                            const costoExtra = exSenzaUtile.reduce((s, e) => s + (e.importo_unitario || 0), 0)
                             const costoPrevisto = costoBase + costoExtra
-                            const margineUnitario = v.prezzo_unitario - costoPrevisto
-                            const marginePerc = v.prezzo_unitario > 0 ? (margineUnitario / v.prezzo_unitario) * 100 : 0
+                            const utileCalcolato = v.prezzo_unitario - costoPrevisto
+                            const margineUnitario = utileCalcolato
+                            const marginePerc = v.prezzo_unitario > 0 ? (utileCalcolato / v.prezzo_unitario) * 100 : 0
                             const costoTotaleVoce = costoPrevisto * v.quantita
                             const ricavoVoce = v.importo
                             const margineVoce = ricavoVoce - costoTotaleVoce
                             const margColor = marginePerc >= 15 ? '#059669' : marginePerc >= 5 ? '#d97706' : marginePerc >= 0 ? '#dc2626' : '#991b1b'
-                            const codiciConAnalisi = [...new Set(analisi.filter(a => a.codice_tariffa !== v.codice).map(a => a.codice_tariffa))]
-                            const baseExp = baseExpanded[v.codice] || false
+                            const utileColor = utileCalcolato > 0 ? '#059669' : utileCalcolato < 0 ? '#dc2626' : '#6b7280'
                             const extraExp = extraExpanded[v.id] || false
-                            const tipiInBase = new Set(av.map(a => a.tipo))
                             const altreVoci = voci.filter(x => x.codice === v.codice && x.id !== v.id).length
                             return (
                               <tr>
@@ -1084,26 +1082,6 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                                       <span style={{ fontWeight: 400, fontSize: 10, color: '#92400e', marginLeft: 4 }}>P.U. € {fi(v.prezzo_unitario)}/{v.um}</span>
                                       <span style={{ fontSize: 9, color: '#78350f', marginLeft: 4, fontWeight: 400 }}>· condivisa tra tutte le voci con codice {v.codice}</span>
                                       <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-                                        {codiciConAnalisi.length > 0 && (
-                                          <>
-                                            <span style={{ fontSize: 9, color: '#78350f' }}>📋 Copia da:</span>
-                                            <select value={copiaSource} onChange={e => setCopiaSource(e.target.value)}
-                                              style={{ fontSize: 9, border: '1px solid #fcd34d', borderRadius: 3, padding: '1px 4px', background: '#fffbeb' }}>
-                                              <option value="">scegli tariffa...</option>
-                                              {codiciConAnalisi.map(c => <option key={c} value={c}>{c}</option>)}
-                                            </select>
-                                            {copiaSource && (
-                                              <button onClick={() => copiaAnalisi(copiaSource, v.codice)}
-                                                style={{ fontSize: 9, padding: '1px 7px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 700 }}>
-                                                Copia
-                                              </button>
-                                            )}
-                                          </>
-                                        )}
-                                        <button onClick={() => { setSel(null); showToast('Analisi salvata') }}
-                                          style={{ fontSize: 9, padding: '2px 8px', background: '#14532d', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 700 }}>
-                                          ✓ Fatto
-                                        </button>
                                         <button onClick={() => setSel(null)}
                                           style={{ fontSize: 9, padding: '2px 7px', background: 'rgba(0,0,0,.1)', color: '#78350f', border: '1px solid #fcd34d', borderRadius: 3, cursor: 'pointer' }}>
                                           ✕ Chiudi
@@ -1119,19 +1097,19 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                                       </div>
                                     )}
 
-                                    {/* SEZIONE BASE */}
+                                    {/* SEZIONE BASE — read-only, modifica solo in Elenco Prezzi */}
                                     <div style={{ borderBottom: '1px solid #fde68a' }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 14px', background: '#fffde7' }}>
-                                        <span style={{ fontSize: 9, fontWeight: 700, color: '#78350f', textTransform: 'uppercase' as const, letterSpacing: '.04em' }}>BASE — da tariffa {v.codice}</span>
+                                        <span style={{ fontSize: 9, fontWeight: 700, color: '#78350f', textTransform: 'uppercase' as const, letterSpacing: '.04em' }}>BASE — tariffa {v.codice}</span>
                                         {costoBase > 0 && <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#92400e', fontWeight: 700 }}>€ {fi(costoBase)}</span>}
-                                        <button onClick={() => setBaseExpanded(prev => ({ ...prev, [v.codice]: !baseExp }))}
-                                          style={{ fontSize: 9, padding: '1px 7px', background: baseExp ? '#fde68a' : '#fffbeb', border: '1px solid #fcd34d', borderRadius: 3, cursor: 'pointer', marginLeft: 'auto', color: '#78350f', fontWeight: 600 }}>
-                                          {baseExp ? '▼ Nascondi' : '✏️ Modifica'}
-                                        </button>
+                                        <a href={`/dashboard/commesse/${id}/elenco-prezzi?tariffa=${encodeURIComponent(v.codice)}`}
+                                          style={{ fontSize: 9, padding: '2px 9px', background: '#1d4ed8', color: '#fff', borderRadius: 3, fontWeight: 700, marginLeft: 'auto', textDecoration: 'none', display: 'inline-block', flexShrink: 0 }}>
+                                          ✏️ Modifica in Elenco Prezzi →
+                                        </a>
                                       </div>
-                                      {!baseExp && av.length > 0 && (
+                                      {avSenzaUtile.length > 0 ? (
                                         <div style={{ display: 'flex', gap: 8, padding: '5px 14px', flexWrap: 'wrap' as const }}>
-                                          {av.map(a => {
+                                          {avSenzaUtile.map(a => {
                                             const tc = TIPI_ANALISI.find(t => t.value === a.tipo)
                                             return (
                                               <span key={a.id} style={{ fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 4, color: '#374151' }}>
@@ -1142,68 +1120,13 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                                             )
                                           })}
                                         </div>
+                                      ) : (
+                                        <div style={{ padding: '5px 14px', fontSize: 10, color: '#9ca3af', fontStyle: 'italic' }}>Nessuna analisi base — aggiungila in Elenco Prezzi</div>
                                       )}
-                                      {!baseExp && av.length === 0 && (
-                                        <div style={{ padding: '5px 14px', fontSize: 10, color: '#9ca3af', fontStyle: 'italic' }}>Nessuna analisi base — clicca "Modifica"</div>
-                                      )}
-                                      {baseExp && (
-                                        <>
-                                          <table className="cmp-analisi-t">
-                                            <thead>
-                                              <tr>
-                                                <th style={{ width: 130 }}>Componente</th>
-                                                <th style={{ width: 90, textAlign: 'right' }}>€/um</th>
-                                                <th style={{ width: 60, textAlign: 'right' }}>%</th>
-                                                <th style={{ width: 36 }} />
-                                              </tr>
-                                            </thead>
-                                            <tbody>
-                                              {av.map(a => {
-                                                const tc = TIPI_ANALISI.find(t => t.value === a.tipo)
-                                                const keyIu = a.id + '_iu'; const keyPct = a.id + '_pct'
-                                                const iu = analisiEdit[keyIu] ?? String(a.importo_unitario)
-                                                const pctV = analisiEdit[keyPct] ?? String(a.percentuale)
-                                                return (
-                                                  <tr key={a.id}>
-                                                    <td>
-                                                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 600, color: tc?.color }}>
-                                                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: tc?.color || '#9ca3af', flexShrink: 0 }} />
-                                                        {tc?.label || a.tipo}
-                                                      </span>
-                                                    </td>
-                                                    <td style={{ textAlign: 'right' }}>
-                                                      <input className="cmp-analisi-inp" value={iu}
-                                                        title={altreVoci > 0 ? `Aggiorna tutte le voci con codice ${v.codice}` : undefined}
-                                                        onChange={e => setAnalisiEdit(prev => ({ ...prev, [keyIu]: e.target.value }))}
-                                                        onBlur={() => aggiornaAnalisi(a, 'importo_unitario', iu, v.prezzo_unitario)}
-                                                        onClick={e => e.stopPropagation()} />
-                                                    </td>
-                                                    <td style={{ textAlign: 'right' }}>
-                                                      <input className="cmp-analisi-inp" value={pctV}
-                                                        title={altreVoci > 0 ? `Aggiorna tutte le voci con codice ${v.codice}` : undefined}
-                                                        onChange={e => setAnalisiEdit(prev => ({ ...prev, [keyPct]: e.target.value }))}
-                                                        onBlur={() => aggiornaAnalisi(a, 'percentuale', pctV, v.prezzo_unitario)}
-                                                        onClick={e => e.stopPropagation()} />
-                                                    </td>
-                                                    <td style={{ textAlign: 'center' }}>
-                                                      <button onClick={() => eliminaAnalisi(a.id)} style={{ fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: 0 }}>🗑</button>
-                                                    </td>
-                                                  </tr>
-                                                )
-                                              })}
-                                            </tbody>
-                                          </table>
-                                          <div style={{ padding: '5px 14px', display: 'flex', gap: 5, flexWrap: 'wrap' as const, borderTop: av.length > 0 ? '1px solid #fde68a' : 'none' }}>
-                                            {TIPI_ANALISI.filter(t => !tipiInBase.has(t.value)).map(t => (
-                                              <button key={t.value} onClick={() => aggiungiAnalisi(v.codice, t.value)}
-                                                style={{ fontSize: 9, padding: '2px 7px', background: t.color + '18', color: t.color, border: '1px solid ' + t.color + '40', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
-                                                + {t.label}
-                                              </button>
-                                            ))}
-                                            {tipiInBase.size === TIPI_ANALISI.length && <span style={{ fontSize: 9, color: '#6b7280', fontStyle: 'italic' }}>Tutti i componenti presenti</span>}
-                                          </div>
-                                        </>
-                                      )}
+                                      <div style={{ padding: '3px 14px 6px', fontSize: 9, color: '#92400e', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        <span>ℹ️</span>
+                                        <span>L'analisi BASE si modifica in Elenco Prezzi e si propaga a tutte le voci con questa tariffa</span>
+                                      </div>
                                     </div>
 
                                     {/* SEZIONE EXTRA */}
@@ -1278,7 +1201,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                                           )}
                                           {ex.length === 0 && <div style={{ padding: '5px 14px', fontSize: 10, color: '#9ca3af', fontStyle: 'italic' }}>Nessuna maggiorazione extra — aggiungi con i bottoni sotto</div>}
                                           <div style={{ padding: '5px 14px', display: 'flex', gap: 5, flexWrap: 'wrap' as const, borderTop: ex.length > 0 ? '1px solid #6ee7b7' : 'none' }}>
-                                            {TIPI_ANALISI.map(t => (
+                                            {TIPI_ANALISI.filter(t => t.value !== 'utile_impresa').map(t => (
                                               <button key={t.value} onClick={() => aggiungiExtra(v.id, t.value)}
                                                 style={{ fontSize: 9, padding: '2px 7px', background: '#f0fdf4', color: t.color, border: '1px solid #6ee7b7', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
                                                 + {t.label}
@@ -1287,6 +1210,17 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                                           </div>
                                         </>
                                       )}
+                                    </div>
+
+                                    {/* UTILE STIMATO — calcolato automaticamente */}
+                                    <div style={{ padding: '6px 14px', background: '#f8fafc', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                      <span style={{ fontSize: 10, fontWeight: 700, color: '#374151' }}
+                                        title="Calcolato automaticamente: PU - costi totali (BASE + EXTRA)">
+                                        Utile stimato
+                                      </span>
+                                      <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: utileColor }}>
+                                        € {fi(utileCalcolato)} ({v.prezzo_unitario > 0 ? ((utileCalcolato / v.prezzo_unitario) * 100).toFixed(1) : '0.0'}%)
+                                      </span>
                                     </div>
 
                                     {/* QUADRO ECONOMICO */}

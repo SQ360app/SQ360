@@ -305,8 +305,9 @@ export default function ElencoPrezziPage({ params: pp }: { params: Promise<{ id:
             const as       = getAnalisiStatus(p.codice, p.prezzo_unitario)
             const nVoci    = (vocePerCodice[p.codice] || []).length
             const varLink  = varianti.find(v => v.id === p.variante_id)
-            const av       = analisiPerCodice[p.codice] || []
-            const tipiInBase = new Set(av.map(a => a.tipo))
+            const av           = analisiPerCodice[p.codice] || []
+            const avSenzaUtile = av.filter(a => a.tipo !== 'utile_impresa')
+            const tipiInBase   = new Set(avSenzaUtile.map(a => a.tipo))
             const analisiExpanded = analisiExp[p.codice] || false
 
             return (
@@ -474,7 +475,7 @@ export default function ElencoPrezziPage({ params: pp }: { params: Promise<{ id:
                       {/* Expanded: tabella editabile */}
                       {analisiExpanded && (
                         <>
-                          {av.length > 0 && (
+                          {avSenzaUtile.length > 0 && (
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
                               <thead>
                                 <tr>
@@ -485,7 +486,7 @@ export default function ElencoPrezziPage({ params: pp }: { params: Promise<{ id:
                                 </tr>
                               </thead>
                               <tbody>
-                                {av.map(a => {
+                                {avSenzaUtile.map(a => {
                                   const tc     = TIPI_ANALISI.find(t => t.value === a.tipo)
                                   const keyIu  = a.id + '_iu'; const keyPct = a.id + '_pct'
                                   const iu     = analisiEdit[keyIu]  ?? String(a.importo_unitario)
@@ -519,26 +520,39 @@ export default function ElencoPrezziPage({ params: pp }: { params: Promise<{ id:
                               </tbody>
                             </table>
                           )}
-                          <div style={{ padding: '6px 14px', display: 'flex', gap: 5, flexWrap: 'wrap', borderTop: av.length > 0 ? '1px solid #fde68a' : 'none' }}>
-                            {TIPI_ANALISI.filter(t => !tipiInBase.has(t.value)).map(t => (
+                          <div style={{ padding: '6px 14px', display: 'flex', gap: 5, flexWrap: 'wrap', borderTop: avSenzaUtile.length > 0 ? '1px solid #fde68a' : 'none' }}>
+                            {TIPI_ANALISI.filter(t => t.value !== 'utile_impresa' && !tipiInBase.has(t.value)).map(t => (
                               <button key={t.value} onClick={() => aggiungiAnalisi(p.codice, t.value)}
                                 style={{ fontSize: 9, padding: '2px 7px', background: t.color + '18', color: t.color, border: '1px solid ' + t.color + '40', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
                                 + {t.label}
                               </button>
                             ))}
-                            {tipiInBase.size === TIPI_ANALISI.length && <span style={{ fontSize: 9, color: '#6b7280', fontStyle: 'italic' }}>Tutti i componenti presenti</span>}
+                            {tipiInBase.size === TIPI_ANALISI.filter(t => t.value !== 'utile_impresa').length && <span style={{ fontSize: 9, color: '#6b7280', fontStyle: 'italic' }}>Tutti i componenti presenti</span>}
                           </div>
 
-                          {/* Quadro margine */}
-                          {av.length > 0 && (() => {
-                            const totAv = av.reduce((s, a) => s + (a.importo_unitario || 0), 0)
-                            const marg  = p.prezzo_unitario > 0 ? ((p.prezzo_unitario - totAv) / p.prezzo_unitario) * 100 : 0
-                            const mColor = marg >= 15 ? '#059669' : marg >= 5 ? '#d97706' : marg >= 0 ? '#dc2626' : '#991b1b'
+                          {/* Utile stimato + quadro costi */}
+                          {(() => {
+                            const totCosti = avSenzaUtile.reduce((s, a) => s + (a.importo_unitario || 0), 0)
+                            const utile    = p.prezzo_unitario - totCosti
+                            const utileP   = p.prezzo_unitario > 0 ? (utile / p.prezzo_unitario) * 100 : 0
+                            const uColor   = utile > 0 ? '#059669' : utile < 0 ? '#dc2626' : '#6b7280'
                             return (
-                              <div style={{ display: 'flex', gap: 16, padding: '6px 14px', borderTop: '1px solid #fde68a', background: '#fffde7', fontSize: 10 }}>
-                                <span style={{ color: '#6b7280' }}>Costo previsto: <strong style={{ fontFamily: 'monospace' }}>€ {fmt(totAv)}</strong></span>
-                                <span style={{ color: '#6b7280' }}>P.U. contratto: <strong style={{ fontFamily: 'monospace' }}>€ {fmt(p.prezzo_unitario)}</strong></span>
-                                <span style={{ color: mColor, fontWeight: 700 }}>Margine: € {fmt(p.prezzo_unitario - totAv)} ({marg.toFixed(1)}%)</span>
+                              <div style={{ borderTop: '1px solid #fde68a', background: '#fffde7' }}>
+                                {avSenzaUtile.length > 0 && (
+                                  <div style={{ display: 'flex', gap: 16, padding: '5px 14px', fontSize: 10 }}>
+                                    <span style={{ color: '#6b7280' }}>Costo previsto: <strong style={{ fontFamily: 'monospace' }}>€ {fmt(totCosti)}</strong></span>
+                                    <span style={{ color: '#6b7280' }}>P.U. contratto: <strong style={{ fontFamily: 'monospace' }}>€ {fmt(p.prezzo_unitario)}</strong></span>
+                                  </div>
+                                )}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 14px 6px', borderTop: avSenzaUtile.length > 0 ? '1px solid #fde68a' : 'none' }}>
+                                  <span style={{ fontSize: 10, fontWeight: 700, color: '#374151' }}
+                                    title="Calcolato automaticamente: PU - costi totali">
+                                    Utile stimato
+                                  </span>
+                                  <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: uColor }}>
+                                    € {fmt(utile)} ({utileP.toFixed(1)}%)
+                                  </span>
+                                </div>
                               </div>
                             )
                           })()}
