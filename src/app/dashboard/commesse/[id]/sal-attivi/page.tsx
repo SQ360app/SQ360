@@ -969,7 +969,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
             <div className="cmp-tscroll" onClick={() => setCtx(null)}>
               <table className="cmp-t">
                 <colgroup>
-                  <col style={{ width: 30 }} /><col style={{ width: 80 }} /><col />
+                  <col style={{ width: 30 }} /><col style={{ width: 80 }} /><col style={{ minWidth: 220 }} />
                   <col style={{ width: 40 }} /><col style={{ width: 40 }} /><col style={{ width: 40 }} /><col style={{ width: 40 }} />
                   <col style={{ width: 65 }} />
                   <col style={{ width: 65 }} /><col style={{ width: 65 }} />
@@ -1014,8 +1014,8 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
                           onContextMenu={e => { e.preventDefault(); setCtx({ x: e.clientX, y: e.clientY, id: v.id }) }}>
                           <td style={{ textAlign: 'center', fontSize: 11, fontWeight: 700 }}>{idx}</td>
                           <td style={{ fontSize: 10, color: '#1d4ed8', fontFamily: 'monospace' }}>{v.codice}</td>
-                          <td style={{ fontSize: 10, maxWidth: 0 }}>
-                            <span className="cmp-des-first" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{first}</span>
+                          <td style={{ fontSize: 10, minWidth: 220, whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                            <span className="cmp-des-first" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>{first}</span>
                             <span
                               className={`cmp-wbadge ${hasWBS ? 'set' : 'unset'}`}
                               title={hasWBS ? `WBS: ${v.wbs_id} ${v.wbs_label}` : 'Clicca per assegnare WBS'}
