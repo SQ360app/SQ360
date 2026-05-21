@@ -39,9 +39,7 @@ Thumbs.db
 # Vercel
 .vercel
 
-# PWA — generati da @ducanh2912/next-pwa al build (non commetterli)
-public/sw.js
-public/sw.js.map
+# PWA — workbox files generati automaticamente (sw.js è manuale e committato)
 public/workbox-*.js
 public/workbox-*.js.map
 public/worker-*.js

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import PWAInstallBanner from '@/components/PWAInstallBanner'
+import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration'
 
 export const metadata: Metadata = {
   title: 'SQ360 — Gestionale Edile',
@@ -12,8 +13,8 @@ export const metadata: Metadata = {
     title: 'SQ360',
   },
   icons: {
-    icon: '/api/pwa-icon?size=192',
-    apple: '/api/pwa-icon?size=192',
+    icon: '/api/pwa-icon/192',
+    apple: '/api/pwa-icon/192',
   },
 }
 
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="it">
       <body>
         {children}
+        <ServiceWorkerRegistration />
         <PWAInstallBanner />
       </body>
     </html>
