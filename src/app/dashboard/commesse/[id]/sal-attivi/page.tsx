@@ -102,7 +102,7 @@ const V3_CSS = `
 .cmp-wkpi:last-child{border-right:none}
 .cmp-wkpi-v{font-size:11px;font-weight:700;color:#14532d;display:block}
 .cmp-wkpi-l{font-size:8px;color:#6b7280;display:block}
-.cmp-main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.cmp-main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;min-height:0}
 .cmp-tbar{display:flex;align-items:center;gap:5px;padding:4px 10px;background:#fff;border-bottom:1px solid rgba(0,0,0,.1);flex-shrink:0;box-shadow:0 1px 4px rgba(0,0,0,.06)}
 .cmp-tbtn{font-size:10px;padding:3px 8px;border:none;border-radius:4px;cursor:pointer;color:#fff;font-weight:600;background:#374151}
 .cmp-tbtn.blue{background:#1d4ed8}
@@ -120,7 +120,7 @@ const V3_CSS = `
 .cmp-vtab{font-size:10px;padding:2px 8px;background:transparent;border:1px solid rgba(0,0,0,.15);border-radius:10px;cursor:pointer;color:#6b7280}
 .cmp-vtab.on{background:#14532d;color:#fff;border-color:#14532d}
 .cmp-vcnt{color:#9ca3af;margin-left:auto;font-size:9px;white-space:nowrap}
-.cmp-tscroll{flex:1;overflow:auto}
+.cmp-tscroll{flex:1;overflow:auto;min-height:0;min-width:0;width:100%}
 .cmp-tscroll::-webkit-scrollbar{width:6px;height:6px}.cmp-tscroll::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}
 table.cmp-t{width:100%;min-width:800px;border-collapse:collapse;table-layout:fixed}
 col.cc2{width:34px}col.cc3{width:96px}col.cc4{width:auto}
@@ -847,7 +847,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
         <div className="cmp-main">
 
           {/* TOOLBAR */}
-          <div className="cmp-tbar">
+          <div className="cmp-tbar" style={{ flexShrink: 0, flexWrap: 'nowrap', overflow: 'hidden' }}>
             {sbHidden && <button className="cmp-tbtn green" onClick={() => setSbHidden(false)}>▶</button>}
             <div style={{ flex: '0 1 auto', display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, overflow: 'hidden' }}>
               {wbsSel ? (
