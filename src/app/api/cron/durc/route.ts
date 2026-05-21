@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { emailDurcReport } from '@/lib/emailTemplates'
 

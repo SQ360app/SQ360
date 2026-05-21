@@ -1,13 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback, use } from 'react'
-import { createClient } from '@supabase/supabase-js'
-import { getAziendaId } from '@/lib/supabase'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { supabase, getAziendaId } from '@/lib/supabase'
 
 // ─── WBS FLAT (codice → label) ──────────────────────────────────────────────
 const WBS_FLAT: [string, string][] = [
@@ -261,6 +255,24 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
     setToast(msg)
     if (toastRef.current) clearTimeout(toastRef.current)
     toastRef.current = setTimeout(() => setToast(''), 2800)
+  }
+
+  // ─── Alert riserva 15gg (DM 49/2018 art. 23) ────────────────────────────
+
+  function alertRiserva(sal: { stato: string; data_emissione: string }) {
+    if (sal.stato !== 'ricevuto') return null
+    const emissione = new Date(sal.data_emissione)
+    const oggi = new Date()
+    oggi.setHours(0, 0, 0, 0)
+    const giorniPassati = Math.floor((oggi.getTime() - emissione.getTime()) / 86400000)
+    const rimasti = 15 - giorniPassati
+    if (rimasti > 14) return null
+    const scadenza = new Date(emissione); scadenza.setDate(scadenza.getDate() + 15)
+    const scadenzaStr = scadenza.toLocaleDateString('it-IT')
+    const tooltip = `Hai ${rimasti} giorni per iscrivere riserva ai sensi del DM 49/2018 art. 23. Scadenza: ${scadenzaStr}`
+    if (rimasti <= 3)  return { emoji: '⚠️', label: `Riserva: ${rimasti}gg`, color: '#dc2626', bg: '#fef2f2', tooltip }
+    if (rimasti <= 8)  return { emoji: '⏰', label: `Riserva: ${rimasti}gg`, color: '#d97706', bg: '#fffbeb', tooltip }
+    return                { emoji: '📋', label: `Riserva: ${rimasti}gg`, color: '#ca8a04', bg: '#fefce8', tooltip }
   }
 
   // ─── Carica dati ─────────────────────────────────────────────────────────
@@ -879,7 +891,10 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
               else setQtInput({})
             }} style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #d1fae5', background: '#f0fdf4', fontSize: 11 }}>
               <option value=''>— Seleziona SAL —</option>
-              {salList.map((s: any) => <option key={s.id} value={s.id}>SAL {s.numero} · {s.stato}</option>)}
+              {salList.map((s: any) => {
+                const ar = alertRiserva(s)
+                return <option key={s.id} value={s.id}>{`SAL ${s.numero} · ${s.stato}${ar ? ` ${ar.emoji} ${ar.label}` : ''}`}</option>
+              })}
             </select>
             <button onClick={async () => {
               const n = (salList.length ? Math.max(...salList.map((s: any) => s.numero)) : 0) + 1
@@ -924,6 +939,22 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
             }} style={{ padding: '4px 12px', background: 'rgba(52,211,153,.2)', border: '1px solid rgba(52,211,153,.3)', borderRadius: 6, color: '#34d399', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>💾 Salva SAL</button>}
             </div>
           </div>
+
+          {/* ALERT RISERVA 15GG — DM 49/2018 art. 23 */}
+          {salList.some((s: any) => alertRiserva(s)) && (
+            <div style={{ padding: '4px 10px', background: '#fffbeb', borderBottom: '1px solid #fde68a', flexShrink: 0, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+              <span style={{ fontSize: 9, color: '#92400e', fontWeight: 700 }}>DM 49/2018 art. 23</span>
+              {salList.filter((s: any) => alertRiserva(s)).map((s: any) => {
+                const ar = alertRiserva(s)!
+                return (
+                  <span key={s.id} title={ar.tooltip}
+                    style={{ fontSize: 9, padding: '1px 7px', borderRadius: 4, background: ar.bg, color: ar.color, fontWeight: 700, cursor: 'help', border: `1px solid ${ar.color}40` }}>
+                    {ar.emoji} SAL {s.numero} — {ar.label}
+                  </span>
+                )
+              })}
+            </div>
+          )}
 
           {/* IMPORT RESULT */}
           {risultatoImport && (

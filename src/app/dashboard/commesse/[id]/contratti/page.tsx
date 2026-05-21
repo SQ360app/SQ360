@@ -1,11 +1,9 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, use } from 'react'
-import { createClient } from '@supabase/supabase-js'
-import { getAziendaId } from '@/lib/supabase'
+import { supabase, getAziendaId } from '@/lib/supabase'
 import { FileText, AlertTriangle, CheckCircle2, Clock, Loader2, ChevronDown, ChevronRight, Shield, Plus, Upload } from 'lucide-react'
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtDate = (d?: string | null) => d ? new Date(d).toLocaleDateString('it-IT') : '—'
 const daysDiff = (d: string) => Math.ceil((new Date(d).getTime() - Date.now()) / 86400000)

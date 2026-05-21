@@ -1,13 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback, use } from 'react'
-import { createClient } from '@supabase/supabase-js'
-import { getAziendaId } from '@/lib/supabase'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { supabase, getAziendaId } from '@/lib/supabase'
 
 // ─── WBS FLAT (codice → label) ──────────────────────────────────────────────
 const WBS_FLAT: [string, string][] = [

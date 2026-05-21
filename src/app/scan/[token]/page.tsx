@@ -1,13 +1,8 @@
 'use client'
 
+import { supabase } from '@/lib/supabase'
+
 import { useState, useEffect, use } from 'react'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
 interface Lavoratore {
   id: string; nome: string; cognome: string
   tipo_rapporto: string; azienda_appartenenza?: string; mansione?: string

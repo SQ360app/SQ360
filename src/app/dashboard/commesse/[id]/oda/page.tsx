@@ -3,12 +3,10 @@
 import { useState, useEffect } from 'react'
 import React from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
-import { createClient } from '@supabase/supabase-js'
-import { getAziendaId } from '@/lib/supabase'
+import { supabase, getAziendaId } from '@/lib/supabase'
 import { Plus, FileText, Loader2, ChevronDown, ChevronRight, Package, Wrench, Truck, ShoppingCart, Receipt } from 'lucide-react'
 import { emailOdaCreato } from '@/lib/emailTemplates'
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 const TIPI_ODA = [
@@ -93,6 +91,7 @@ export default function ODAPage() {
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
   const [pdfLoading, setPdfLoading] = useState<string | null>(null)
+  const [cigCommessa, setCigCommessa] = useState<string>('')
 
   const importoNum = parseFloat(importoNetto) || 0
   const totale = importoNum * (1 + parseFloat(ivaPct) / 100)
@@ -102,6 +101,8 @@ export default function ODAPage() {
     setLoading(true)
     const { data } = await supabase.from('oda').select('*, fornitore:professionisti_fornitori(id,ragione_sociale)').eq('commessa_id', commessaId).order('created_at', { ascending: false })
     const { data: forn } = await supabase.from('professionisti_fornitori').select('id, ragione_sociale, nome, cognome').order('id', { ascending: true })
+    const { data: comm } = await supabase.from('commesse').select('cig').eq('id', commessaId).maybeSingle()
+    if ((comm as any)?.cig) setCigCommessa((comm as any).cig)
     setOda(data || [])
     setFornitori(forn || [])
     setLoading(false)
@@ -136,7 +137,7 @@ export default function ODAPage() {
       fornitore_id: fornitoreId, importo_netto: importoNum, iva_pct: parseFloat(ivaPct),
       ritenuta_pct: parseFloat(ritenuta), condizioni_pagamento: condPag || null,
       data_consegna_prevista: dataConsegna || null, note: note || null, stato: 'EMESSO',
-      rdo_id: rdoId || null,
+      rdo_id: rdoId || null, cig_riferimento: cigCommessa || null,
     }).select().single()
     if (error) { setErr(error.message); setSaving(false); return }
     if (tipo === 'subappalto' && odaData) {
@@ -187,13 +188,14 @@ export default function ODAPage() {
   async function downloadPdf(o: any) {
     setPdfLoading(o.id)
     try {
-      const { data: commessa } = await supabase.from('commesse').select('codice,nome,committente').eq('id', commessaId).single()
+      const { data: commessa } = await supabase.from('commesse').select('codice,nome,committente,cig').eq('id', commessaId).single()
       const [pdfrMod, docMod] = await Promise.all([
         import('@react-pdf/renderer'),
         import('@/components/pdf/OdaDocument'),
       ])
       const element = React.createElement(docMod.OdaDocument, {
         oda: o, commessa: commessa || { codice: '', nome: '' }, fornitore: o.fornitore,
+        cigRiferimento: o.cig_riferimento || commessa?.cig || '',
       })
       const blob = await pdfrMod.pdf(element as any).toBlob()
       const url = URL.createObjectURL(blob)
@@ -395,6 +397,15 @@ export default function ODAPage() {
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2" />
               </div>
             </div>
+            {cigCommessa && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">
+                <span className="text-xs text-gray-500">CIG (L. 136/2010):</span>
+                <span className="text-xs font-mono font-semibold text-gray-700 bg-gray-200 px-2 py-0.5 rounded">
+                  {cigCommessa}
+                </span>
+                <span className="text-xs text-gray-400 italic">propagato automaticamente</span>
+              </div>
+            )}
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Note</label>
               <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}

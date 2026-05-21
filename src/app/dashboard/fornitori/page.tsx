@@ -1,13 +1,6 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
 const TIPI = ['professionista', 'fornitore', 'subappaltatore', 'nolo', 'altro']
 const TIPI_COLOR: Record<string, string> = {
   professionista: '#3b82f6', fornitore: '#10b981',

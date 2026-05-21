@@ -1,13 +1,8 @@
 'use client'
 
+import { supabase } from '@/lib/supabase'
+
 import { useState, useEffect, use } from 'react'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
 const fi = (n: number, d = 2) =>
   (n ?? 0).toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d })
 

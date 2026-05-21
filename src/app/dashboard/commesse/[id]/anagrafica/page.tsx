@@ -1,17 +1,12 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, use } from 'react'
-import { createClient } from '@supabase/supabase-js'
 import {
   Search, Plus, Save, Check, ChevronDown, ChevronUp,
   X, AlertCircle, Loader2, Shield, Euro, Calendar,
   MapPin, FileText, Building2, HardHat, Edit3
 } from 'lucide-react'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { supabase, getAziendaId } from '@/lib/supabase'
 
 // ─── Tipi ─────────────────────────────────────────────────────────────────────
 

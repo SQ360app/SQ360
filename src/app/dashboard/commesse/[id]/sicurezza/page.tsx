@@ -1,14 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, use } from 'react'
-import { createClient } from '@supabase/supabase-js'
-import { getAziendaId } from '@/lib/supabase'
+import { supabase, getAziendaId } from '@/lib/supabase'
 import { emailDurcReport } from '@/lib/emailTemplates'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
 
 // ─── Tipi documento ──────────────────────────────────────────────────────────
 
