@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, use } from 'react'
+import { supabase } from '@/lib/supabase'
 const CATEGORIE = [
   { id: 'contratto', label: 'Contratto', icona: '📋' },
   { id: 'elaborati', label: 'Elaborati progettuali', icona: '📐' },
