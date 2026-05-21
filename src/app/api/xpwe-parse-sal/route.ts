@@ -80,26 +80,27 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Carica voci_computo dal DB per questa commessa ────────────────────────
-    const supabase = createClient(
+    const supabaseClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
+    const db = supabaseClient as any
 
-    const { data: computo } = await supabase
+    const { data: computo } = await db
       .from('computo_metrico').select('id').eq('commessa_id', commessa_id).single()
 
     if (!computo) {
       return NextResponse.json({ ok: false, error: 'Nessun computo importato per questa commessa.' }, { status: 400 })
     }
 
-    const { data: vociDB } = await supabase
+    const { data: vociDB } = await db
       .from('voci_computo')
       .select('id,codice,descrizione,um,quantita,prezzo_unitario')
-      .eq('computo_id', (computo as any).id)
+      .eq('computo_id', computo.id)
 
     // Mappa codice → voce DB
     const vociByCode: Record<string, any> = {}
-    for (const v of ((vociDB as any[]) || [])) {
+    for (const v of (vociDB || [])) {
       vociByCode[v.codice?.trim()?.toUpperCase()] = v
     }
 

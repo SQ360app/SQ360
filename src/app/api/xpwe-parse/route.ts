@@ -166,28 +166,31 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 5. Gestisci computo_metrico ──────────────────────────────────────────
-    // Delete + insert per evitare problemi di constraint
-    await supabase.from('computo_metrico').delete().eq('commessa_id', commessaId)
+    // Cast su supabase: tabelle non presenti nei tipi generati → never senza cast
+    const db = supabase as any
 
-    const { data: computo, error: errComputo } = await supabase
+    // Delete + insert per evitare problemi di constraint
+    await db.from('computo_metrico').delete().eq('commessa_id', commessaId)
+
+    const { data: computo, error: errComputo } = await db
       .from('computo_metrico')
       .insert({
         commessa_id: commessaId,
         fonte: 'XPWE',
         data_import: new Date().toISOString().split('T')[0],
         note: `${file.name} · ${epList.length} tariffe · ${vcList.length} voci`,
-      } as any)
+      })
       .select('id')
       .single()
 
     if (errComputo || !computo) {
       throw new Error(`Errore creazione computo: ${errComputo?.message}`)
     }
-    const computoId = (computo as any).id as string
+    const computoId = computo.id as string
 
     // ── 6. Insert tariffe in batch ───────────────────────────────────────────
-    await supabase.from('tariffe').delete().eq('commessa_id', commessaId)
-    await supabase.from('voci_computo').delete().eq('computo_id', computoId)
+    await db.from('tariffe').delete().eq('commessa_id', commessaId)
+    await db.from('voci_computo').delete().eq('computo_id', computoId)
 
     const BATCH = 50
     for (let i = 0; i < epList.length; i += BATCH) {
@@ -206,19 +209,19 @@ export async function POST(req: NextRequest) {
         fonte:                       'XPWE',
       }))
 
-      const { error: errT } = await supabase.from('tariffe').insert(batch as any[])
+      const { error: errT } = await db.from('tariffe').insert(batch)
       if (errT) throw new Error(`Errore insert tariffe: ${errT.message}`)
     }
 
     // ── 7. Leggo tariffe inserite per costruire mappa codice → id ────────────
-    const { data: tariffeDB } = await supabase
+    const { data: tariffeDB } = await db
       .from('tariffe')
       .select('id, codice_tariffa')
       .eq('commessa_id', commessaId)
 
     // Mappa codice_tariffa → db_id
     const tariffeByCode: Record<string, string> = {}
-    for (const t of ((tariffeDB as any[]) || [])) {
+    for (const t of (tariffeDB || [])) {
       tariffeByCode[t.codice_tariffa] = t.id
     }
 
@@ -263,15 +266,15 @@ export async function POST(req: NextRequest) {
       })
 
     for (let i = 0; i < vociInsert.length; i += BATCH) {
-      const { error: errV } = await supabase
+      const { error: errV } = await db
         .from('voci_computo')
-        .insert(vociInsert.slice(i, i + BATCH) as any[])
+        .insert(vociInsert.slice(i, i + BATCH))
       if (errV) throw new Error(`Errore insert voci: ${errV.message}`)
     }
 
     // ── 9. Aggiorna importo_contrattuale su commessa ─────────────────────────
     const importoTotale = vociInsert.reduce((s, v) => s + v.importo, 0)
-    await supabase.from('commesse')
+    await db.from('commesse')
       .update({ importo_contrattuale: parseFloat(importoTotale.toFixed(2)) })
       .eq('id', commessaId)
 
