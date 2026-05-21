@@ -13,7 +13,7 @@ export interface DamDocProps {
     note_dl?: string; note_interne?: string; data_emissione?: string
     motivo_rifiuto?: string
   }
-  commessa: { codice: string; nome: string; committente?: string }
+  commessa: { codice: string; nome: string; committente?: string; cig?: string; cup?: string }
   fornitore?: { ragione_sociale?: string }
 }
 
@@ -104,6 +104,8 @@ export function DamDocument({ dam, commessa, fornitore }: DamDocProps) {
           <View style={s.headerRight}>
             <Text style={s.headerTitle}>DOSSIER ACCETTAZIONE MATERIALI</Text>
             <Text style={s.headerMeta}>{dam.codice}  ·  Rev. {dam.revisione}  ·  {dataEmissione}</Text>
+            {!!commessa.cig && <Text style={{ color: '#bfdbfe', fontSize: 8, marginTop: 2 }}>CIG: {commessa.cig}</Text>}
+            {!!commessa.cig && !!commessa.cup && <Text style={{ color: '#bfdbfe', fontSize: 8, marginTop: 1 }}>CUP: {commessa.cup}</Text>}
           </View>
         </View>
 

@@ -129,7 +129,7 @@ export default function ContrattiPage({ params: pp }: { params: Promise<{ id: st
         .select('*, fornitore:professionisti_fornitori(ragione_sociale, piva)')
         .eq('commessa_id', id).order('created_at', { ascending: false }),
       supabase.from('professionisti_fornitori').select('id,ragione_sociale').order('ragione_sociale'),
-      supabase.from('commesse').select('importo_contratto,codice,nome,committente').eq('id', id).single(),
+      supabase.from('commesse').select('importo_contratto,codice,nome,committente,cig,cup').eq('id', id).single(),
     ])
     setContratti((c || []) as ContrattoSub[])
     setFornitori(f || [])
@@ -268,7 +268,7 @@ export default function ContrattiPage({ params: pp }: { params: Promise<{ id: st
         React.createElement(ContrattoSubDocument, {
           contratto: { tipo: c.tipo, oggetto: c.oggetto, importo_netto: c.importo_netto, ritenuta_pct: c.ritenuta_pct, data_stipula: c.data_stipula, data_inizio: c.data_inizio, data_fine_prevista: c.data_fine_prevista, percentuale_subappalto: c.percentuale_subappalto, cat_soa: c.cat_soa, note: c.note },
           fornitore: { ragione_sociale: c.fornitore?.ragione_sociale || 'Fornitore non assegnato', piva: c.fornitore?.piva },
-          commessa: { codice: commessaInfo?.codice || '', nome: commessaInfo?.nome || '', committente: commessaInfo?.committente, importo_contratto: commessaInfo?.importo_contratto },
+          commessa: { codice: commessaInfo?.codice || '', nome: commessaInfo?.nome || '', committente: commessaInfo?.committente, importo_contratto: commessaInfo?.importo_contratto, cig: (commessaInfo as any)?.cig || '', cup: (commessaInfo as any)?.cup || '' },
           lavoratori: lavs,
         }) as any
       ).toBlob()

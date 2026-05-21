@@ -9,7 +9,7 @@ export interface SalDocProps {
     ritenuta_garanzia: number; importo_netto: number
     stato: string; note?: string
   }
-  commessa: { codice: string; nome: string; committente?: string; importo_contratto?: number }
+  commessa: { codice: string; nome: string; committente?: string; importo_contratto?: number; cig?: string; cup?: string }
   voci: { codice: string; descrizione: string; um: string; quantita_periodo: number; prezzo_unitario: number; importo_periodo: number }[]
 }
 
@@ -85,6 +85,8 @@ export function SalDocument({ sal, commessa, voci }: SalDocProps) {
           <View style={s.headerRight}>
             <Text style={s.headerTitle}>STATO AVANZAMENTO LAVORI</Text>
             <Text style={s.headerNum}>N. {sal.numero} — {sal.codice || `SAL-A-${String(sal.numero).padStart(3,'0')}`}</Text>
+            {!!commessa.cig && <Text style={{ color: '#bfdbfe', fontSize: 8, marginTop: 2 }}>CIG: {commessa.cig}</Text>}
+            {!!commessa.cig && !!commessa.cup && <Text style={{ color: '#bfdbfe', fontSize: 8, marginTop: 1 }}>CUP: {commessa.cup}</Text>}
           </View>
         </View>
 

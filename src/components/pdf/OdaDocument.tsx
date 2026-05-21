@@ -9,9 +9,8 @@ export interface OdaDocProps {
     condizioni_pagamento?: string; data_consegna_prevista?: string
     note?: string; stato: string; rdo_id?: string
   }
-  commessa: { codice: string; nome: string; committente?: string }
+  commessa: { codice: string; nome: string; committente?: string; cig?: string; cup?: string }
   fornitore?: { ragione_sociale?: string; piva?: string }
-  cigRiferimento?: string
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -75,7 +74,7 @@ const s = StyleSheet.create({
 
 // ─── Documento ────────────────────────────────────────────────────────────────
 
-export function OdaDocument({ oda, commessa, fornitore, cigRiferimento }: OdaDocProps) {
+export function OdaDocument({ oda, commessa, fornitore }: OdaDocProps) {
   const importoNetto = oda.importo_netto || 0
   const iva = importoNetto * (oda.iva_pct || 0) / 100
   const totale = importoNetto + iva
@@ -96,7 +95,8 @@ export function OdaDocument({ oda, commessa, fornitore, cigRiferimento }: OdaDoc
           <View style={s.headerRight}>
             <Text style={s.headerTitle}>ORDINE DI ACQUISTO</Text>
             <Text style={s.headerNum}>{oda.numero}</Text>
-            {cigRiferimento ? <Text style={{ color: '#bfdbfe', fontSize: 8, marginTop: 2 }}>CIG: {cigRiferimento}</Text> : null}
+            {!!commessa.cig && <Text style={{ color: '#bfdbfe', fontSize: 8, marginTop: 2 }}>CIG: {commessa.cig}</Text>}
+            {!!commessa.cig && !!commessa.cup && <Text style={{ color: '#bfdbfe', fontSize: 8, marginTop: 1 }}>CUP: {commessa.cup}</Text>}
           </View>
         </View>
 

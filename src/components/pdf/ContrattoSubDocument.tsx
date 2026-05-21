@@ -9,7 +9,7 @@ export interface ContrattoSubDocProps {
     percentuale_subappalto?: number; cat_soa?: string; note?: string
   }
   fornitore: { ragione_sociale: string; piva?: string }
-  commessa: { codice: string; nome: string; committente?: string; importo_contratto?: number }
+  commessa: { codice: string; nome: string; committente?: string; importo_contratto?: number; cig?: string; cup?: string }
   lavoratori?: { nome: string; cognome: string; cf?: string }[]
 }
 
@@ -86,6 +86,8 @@ export function ContrattoSubDocument({ contratto, fornitore, commessa, lavorator
           <View style={s.headerRight}>
             <Text style={s.headerTitle}>CONTRATTO DI SUBAPPALTO</Text>
             <Text style={s.headerSub2}>{TIPO_LBL[contratto.tipo || ''] || contratto.tipo || 'Subappalto'} · {new Date().toLocaleDateString('it-IT')}</Text>
+            {!!commessa.cig && <Text style={{ color: '#bfdbfe', fontSize: 8, marginTop: 2 }}>CIG: {commessa.cig}</Text>}
+            {!!commessa.cig && !!commessa.cup && <Text style={{ color: '#bfdbfe', fontSize: 8, marginTop: 1 }}>CUP: {commessa.cup}</Text>}
           </View>
         </View>
 

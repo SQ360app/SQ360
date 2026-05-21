@@ -63,7 +63,7 @@ export default function OrdiniServizioPage({ params: pp }: { params: Promise<{ i
     const [{ data: os }, { data: v }, { data: comm }] = await Promise.all([
       supabase.from('ordini_servizio').select('*').eq('commessa_id', id).order('numero'),
       supabase.from('varianti').select('id,numero,descrizione').eq('commessa_id', id).order('numero'),
-      supabase.from('commesse').select('codice,nome').eq('id', id).single(),
+      supabase.from('commesse').select('codice,nome,cig,cup').eq('id', id).single(),
     ])
     setOrdini(os || [])
     setVarianti(v || [])
@@ -81,7 +81,7 @@ export default function OrdiniServizioPage({ params: pp }: { params: Promise<{ i
       const blob = await pdf(
         React.createElement(OsDocument, {
           os: { ...os, descrizione: os.descrizione_estesa },
-          commessa: { codice: commessa?.codice || '', nome: commessa?.nome || '' },
+          commessa: { codice: commessa?.codice || '', nome: commessa?.nome || '', cig: (commessa as any)?.cig || '', cup: (commessa as any)?.cup || '' },
           variante: varLink ? { numero: varLink.numero, descrizione: varLink.descrizione } : undefined,
         }) as any
       ).toBlob()

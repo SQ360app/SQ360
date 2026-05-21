@@ -188,14 +188,15 @@ export default function ODAPage() {
   async function downloadPdf(o: any) {
     setPdfLoading(o.id)
     try {
-      const { data: commessa } = await supabase.from('commesse').select('codice,nome,committente,cig').eq('id', commessaId).single()
+      const { data: commessa } = await supabase.from('commesse').select('codice,nome,committente,cig,cup').eq('id', commessaId).single()
       const [pdfrMod, docMod] = await Promise.all([
         import('@react-pdf/renderer'),
         import('@/components/pdf/OdaDocument'),
       ])
       const element = React.createElement(docMod.OdaDocument, {
-        oda: o, commessa: commessa || { codice: '', nome: '' }, fornitore: o.fornitore,
-        cigRiferimento: o.cig_riferimento || commessa?.cig || '',
+        oda: o,
+        commessa: { codice: (commessa as any)?.codice || '', nome: (commessa as any)?.nome || '', committente: (commessa as any)?.committente, cig: (commessa as any)?.cig || o.cig_riferimento || '', cup: (commessa as any)?.cup || '' },
+        fornitore: o.fornitore,
       })
       const blob = await pdfrMod.pdf(element as any).toBlob()
       const url = URL.createObjectURL(blob)

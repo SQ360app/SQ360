@@ -165,7 +165,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
     setPdfLoading(d.id)
     try {
       const [{ data: commessa }, { data: forn }] = await Promise.all([
-        supabase.from('commesse').select('codice,nome,committente').eq('id', id).single(),
+        supabase.from('commesse').select('codice,nome,committente,cig,cup').eq('id', id).single(),
         d.fornitore_id
           ? supabase.from('professionisti_fornitori').select('ragione_sociale').eq('id', d.fornitore_id).single()
           : Promise.resolve({ data: null }),
@@ -176,7 +176,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
       ])
       const element = React.createElement(docMod.DamDocument, {
         dam: d,
-        commessa: commessa || { codice: '', nome: '' },
+        commessa: { codice: (commessa as any)?.codice || '', nome: (commessa as any)?.nome || '', committente: (commessa as any)?.committente, cig: (commessa as any)?.cig || '', cup: (commessa as any)?.cup || '' },
         fornitore: forn || undefined,
       })
       const blob = await pdfrMod.pdf(element as any).toBlob()

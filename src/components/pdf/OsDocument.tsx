@@ -9,7 +9,7 @@ export interface OsDocProps {
     riserva?: boolean; testo_riserva?: string
     importo_riserva?: number; scadenza_riserva?: string; note?: string
   }
-  commessa: { codice: string; nome: string }
+  commessa: { codice: string; nome: string; cig?: string; cup?: string }
   variante?: { numero: number; descrizione: string }
 }
 
@@ -90,6 +90,8 @@ export function OsDocument({ os, commessa, variante }: OsDocProps) {
           <View style={s.headerRight}>
             <Text style={s.headerTitle}>ORDINE DI SERVIZIO</Text>
             <Text style={s.headerNum}>N. {os.numero}</Text>
+            {!!commessa.cig && <Text style={{ color: '#bfdbfe', fontSize: 8, marginTop: 2 }}>CIG: {commessa.cig}</Text>}
+            {!!commessa.cig && !!commessa.cup && <Text style={{ color: '#bfdbfe', fontSize: 8, marginTop: 1 }}>CUP: {commessa.cup}</Text>}
           </View>
         </View>
 
