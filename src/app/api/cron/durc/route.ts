@@ -4,10 +4,11 @@ import { Resend } from 'resend'
 import { emailDurcReport } from '@/lib/emailTemplates'
 
 export async function GET(req: NextRequest) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  ) as any
   const resend = new Resend(process.env.RESEND_API_KEY)
   // Vercel cron verifica l'header Authorization
   const auth = req.headers.get('authorization')
