@@ -98,6 +98,7 @@ export default function ODAPage() {
   const ODA_LIMIT = 50
   const [damId, setDamId] = useState('')
   const [richiedeSam, setRichiedeSam] = useState(false)
+  const [wbsRef, setWbsRef] = useState('')
 
   const importoNum = parseFloat(importoNetto) || 0
   const totale = importoNum * (1 + parseFloat(ivaPct) / 100)
@@ -171,6 +172,7 @@ export default function ODAPage() {
       dam_id: damId || null,
       richiede_sam: richiedeSam || false,
       is_subappalto: tipo === 'subappalto',
+      wbs_ref: wbsRef || null,
     }).select().single()
     if (error) { setErr(error.message); setSaving(false); return }
     if (tipo === 'subappalto' && odaData) {
@@ -443,6 +445,11 @@ export default function ODAPage() {
                 <span className="text-xs text-gray-400 italic">propagato automaticamente</span>
               </div>
             )}
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">WBS / Area di riferimento</label>
+              <input value={wbsRef} onChange={e => setWbsRef(e.target.value)} placeholder="es. 01.02 — Struttura"
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2" />
+            </div>
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Note</label>
               <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}

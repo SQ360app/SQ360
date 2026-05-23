@@ -1,3 +1,54 @@
+export function templateEmail(params: {
+  logoUrl?: string
+  ragioneSociale: string
+  mittente: string
+  oggetto: string
+  corpo: string
+  ctaLabel?: string
+  ctaUrl?: string
+  footer?: string
+}): string {
+  const { logoUrl, ragioneSociale, mittente, oggetto, corpo, ctaLabel, ctaUrl, footer } = params
+  return `<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  body{margin:0;padding:0;background:#f8fafc;font-family:'Segoe UI',Arial,sans-serif;color:#1e293b}
+  .wrap{max-width:560px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+  .hdr{background:#1d4ed8;padding:20px 28px;display:flex;align-items:center;gap:12px}
+  .hdr-title{color:#fff;font-size:16px;font-weight:700;margin:0}
+  .hdr-sub{color:#bfdbfe;font-size:12px;margin:4px 0 0}
+  .body{padding:28px}
+  .kv{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px}
+  .kv:last-child{border-bottom:none}
+  .kv-lbl{color:#64748b}
+  .kv-val{font-weight:600;color:#1e293b}
+  .cta{display:inline-block;padding:11px 24px;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;margin-top:16px}
+  .footer{background:#f8fafc;padding:14px 28px;font-size:11px;color:#94a3b8;border-top:1px solid #f1f5f9}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr">
+    ${logoUrl ? `<img src="${logoUrl}" alt="Logo" style="height:38px;width:auto;object-fit:contain;border-radius:4px;flex-shrink:0" />` : ''}
+    <div>
+      <p class="hdr-title">${ragioneSociale}</p>
+      <p class="hdr-sub">${mittente}</p>
+    </div>
+  </div>
+  <div class="body">
+    <h2 style="font-size:15px;font-weight:700;color:#1e293b;margin:0 0 16px">${oggetto}</h2>
+    ${corpo}
+    ${ctaLabel && ctaUrl ? `<div style="margin-top:20px"><a href="${ctaUrl}" class="cta" style="background:#1d4ed8;color:#fff">${ctaLabel}</a></div>` : ''}
+  </div>
+  <div class="footer">${footer ?? 'Questo messaggio è stato inviato da ' + ragioneSociale + ' tramite SQ360.'}</div>
+</div>
+</body>
+</html>`
+}
+
 const base = (content: string) => `
 <!DOCTYPE html>
 <html lang="it">

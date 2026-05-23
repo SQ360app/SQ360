@@ -126,6 +126,11 @@ export default function ImpostazioniPage() {
   const headerRef = useRef<HTMLInputElement>(null)
   const footerRef = useRef<HTMLInputElement>(null)
 
+  const [emailAcquisti,        setEmailAcquisti]        = useState('')
+  const [emailCantiere,        setEmailCantiere]        = useState('')
+  const [emailAmministrazione, setEmailAmministrazione] = useState('')
+  const [emailSaved,           setEmailSaved]           = useState(false)
+
   const [sedi,         setSedi]         = useState<Sede[]>([])
   const [nuovaSede,    setNuovaSede]    = useState<Partial<Sede> | null>(null)
   const [salvandoSede, setSalvandoSede] = useState(false)
@@ -143,6 +148,9 @@ export default function ImpostazioniPage() {
       }
       const { data: az } = await (supabase as any).from('azienda').select('*').eq('id', id).maybeSingle()
       if (az) {
+        if (az.email_acquisti)        setEmailAcquisti(az.email_acquisti)
+        if (az.email_cantiere)        setEmailCantiere(az.email_cantiere)
+        if (az.email_amministrazione) setEmailAmministrazione(az.email_amministrazione)
         setAzienda({
           ragione_sociale: az.ragione_sociale || '',
           piva:            az.partita_iva || '',
@@ -238,6 +246,17 @@ export default function ImpostazioniPage() {
     if (error) { alert('Errore salvataggio: ' + error.message); return }
     setSavedOk(true)
     setTimeout(() => setSavedOk(false), 3000)
+  }
+
+  async function saveEmailConfig() {
+    if (!aziendaId) return
+    await (supabase as any).from('azienda').update({
+      email_acquisti:        emailAcquisti        || null,
+      email_cantiere:        emailCantiere        || null,
+      email_amministrazione: emailAmministrazione || null,
+    }).eq('id', aziendaId)
+    setEmailSaved(true)
+    setTimeout(() => setEmailSaved(false), 3000)
   }
 
   function toggleAttivo(uid: string) {
@@ -712,6 +731,36 @@ export default function ImpostazioniPage() {
                   </div>
                 </div>
               )}
+            </div>
+            {/* ── Configurazione Email ── */}
+            <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12, padding: '24px 28px' }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--t1)', margin: '0 0 4px' }}>📧 Configurazione Email</h3>
+              <p style={{ fontSize: 12, color: 'var(--t3)', margin: '0 0 6px', lineHeight: 1.6 }}>
+                Indirizzi email per area aziendale — usati come CC automatico nelle email inviate da SQ360.
+              </p>
+              <div style={{ padding: '10px 14px', background: '#fef3c720', border: '1px solid #fcd34d55', borderRadius: 8, fontSize: 11, color: '#92400e', marginBottom: 18 }}>
+                ⚠️ Per inviare come mittente personalizzato, verifica il dominio su <strong>Resend → Domains</strong>. Fino ad allora le email partono da <code>noreply@sq360.app</code>.
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {([
+                  { key: 'acquisti',        label: '🛒 Email Ufficio Acquisti',        value: emailAcquisti,        set: setEmailAcquisti,        placeholder: 'acquisti@azienda.it' },
+                  { key: 'cantiere',        label: '🏗️ Email Ufficio Cantiere',        value: emailCantiere,        set: setEmailCantiere,        placeholder: 'cantiere@azienda.it' },
+                  { key: 'amministrazione', label: '💼 Email Amministrazione',         value: emailAmministrazione, set: setEmailAmministrazione, placeholder: 'amministrazione@azienda.it' },
+                ] as { key: string; label: string; value: string; set: (v: string) => void; placeholder: string }[]).map(f => (
+                  <div key={f.key}>
+                    <label style={{ display: 'block', fontSize: 11, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, fontWeight: 600 }}>{f.label}</label>
+                    <input type="email" value={f.value} onChange={e => f.set(e.target.value)} placeholder={f.placeholder}
+                      style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', color: 'var(--t1)', fontSize: 13 }} />
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 18, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10 }}>
+                {emailSaved && <span style={{ fontSize: 12, color: '#10b981', display: 'flex', alignItems: 'center', gap: 4 }}><CheckCircle size={13} /> Salvato</span>}
+                <button onClick={saveEmailConfig}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--accent)', border: 'none', borderRadius: 8, padding: '10px 20px', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  <Save size={14} /> Salva email
+                </button>
+              </div>
             </div>
           </div>
         )}

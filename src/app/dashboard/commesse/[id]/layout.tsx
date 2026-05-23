@@ -31,6 +31,7 @@ const GRUPPI = [
       { href: 'rdo', label: 'RDO' },
       { href: 'dam', label: 'SAM' },
       { href: 'oda', label: 'ODA' },
+      { href: 'comunicazioni', label: '📧 Email' },
     ],
   },
   {

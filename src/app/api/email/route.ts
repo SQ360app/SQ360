@@ -4,15 +4,17 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function POST(req: NextRequest) {
   const resend = new Resend(process.env.RESEND_API_KEY)
   try {
-    const { to, subject, html } = await req.json()
+    const { to, subject, html, from: fromAddr, replyTo, cc } = await req.json()
     if (!to || !subject || !html) {
       return NextResponse.json({ ok: false, error: 'to, subject e html sono obbligatori' }, { status: 400 })
     }
     const { data, error } = await resend.emails.send({
-      from: 'SQ360 <noreply@sq360.app>',
+      from: fromAddr || 'SQ360 <noreply@sq360.app>',
       to: Array.isArray(to) ? to : [to],
       subject,
       html,
+      ...(replyTo ? { reply_to: replyTo } : {}),
+      ...(cc && (Array.isArray(cc) ? cc.length > 0 : true) ? { cc: Array.isArray(cc) ? cc : [cc] } : {}),
     })
     if (error) return NextResponse.json({ ok: false, error }, { status: 400 })
     return NextResponse.json({ ok: true, id: data?.id })

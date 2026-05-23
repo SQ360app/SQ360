@@ -3,6 +3,9 @@
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { supabase, getAziendaId } from '@/lib/supabase'
 import { FlowThread } from '@/components/FlowThread'
+import { EmailPreviewModal } from '@/components/EmailPreviewModal'
+import { saveEmailLog } from '@/lib/emailLog'
+import { templateEmail } from '@/lib/emailTemplates'
 
 const fi = (n: number, d = 2) => n?.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? '—'
 
@@ -39,6 +42,7 @@ interface RDO {
   email_inviata?: boolean
   email_inviata_at?: string
   email_destinatario?: string
+  wbs_ref?: string
 }
 
 interface RDA {
@@ -277,8 +281,7 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
   const [commessa, setCommessa] = useState<{sam_obbligatoria:boolean;tipo_committente:string;importo_contrattuale:number}|null>(null)
   const [prossimoPasso, setProssimoPasso] = useState<RDO | null>(null)
   const [inviaRdo, setInviaRdo] = useState<RDO | null>(null)
-  const [inviaEmail, setInviaEmail] = useState('')
-  const [sendingEmail, setSendingEmail] = useState(false)
+  const [emailCompose, setEmailCompose] = useState<RDO | null>(null)
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
@@ -373,6 +376,7 @@ ${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;
         tipo_affidamento: editRdo.tipo_affidamento || null,
         pct_manodopera: editRdo.pct_manodopera != null ? editRdo.pct_manodopera : null,
         richiede_sam: editRdo.richiede_sam ?? defaultSam,
+        wbs_ref: editRdo.wbs_ref || null,
       }
       if (editRdo.id) {
         await supabase.from('rdo').update(payload).eq('id', editRdo.id)
@@ -392,18 +396,43 @@ ${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;
     showToast('RDO aggiornata'); carica()
   }
 
-  const inviaEmailRdo = async (r: RDO, email: string) => {
-    if (!email || !r.token_offerta) return
-    setSendingEmail(true)
-    try {
-      const portalUrl = `${window.location.origin}/offerta/${r.token_offerta}`
-      const subject = `Richiesta d'offerta ${r.codice}${r.oggetto ? ' — ' + r.oggetto : ''}`
-      const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto"><div style="background:#1e3a5f;padding:20px;text-align:center"><span style="font-size:22px;font-weight:800;color:#fff">SQ360</span></div><div style="padding:24px;background:#fff;border:1px solid #e5e7eb"><h2 style="color:#1e3a5f;font-size:16px;margin-bottom:8px">Richiesta d'Offerta: <b>${r.codice}</b></h2><p style="color:#374151;font-size:13px">Gentile <b>${r.fornitore}</b>,</p><p style="color:#374151;font-size:13px">Siete invitati a compilare la vostra offerta tramite il portale sicuro:</p>${r.oggetto ? `<p style="padding:10px 14px;background:#f0f9ff;border-left:4px solid #3b82f6;color:#1e40af;font-size:13px;margin:12px 0"><b>${r.oggetto}</b></p>` : ''}${r.data_scadenza ? `<p style="color:#ef4444;font-size:12px">⏰ Scadenza: <strong>${new Date(r.data_scadenza).toLocaleDateString('it-IT')}</strong></p>` : ''}<div style="text-align:center;margin:24px 0"><a href="${portalUrl}" style="background:#3b82f6;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:700">📤 Compila la tua offerta →</a></div><p style="color:#9ca3af;font-size:11px;text-align:center">Link diretto: ${portalUrl}</p>${r.note ? `<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0"><p style="color:#6b7280;font-size:12px"><b>Note:</b> ${r.note}</p>` : ''}</div><p style="text-align:center;color:#9ca3af;font-size:10px;padding:12px">Messaggio generato da SQ360 — gestionale edile</p></div>`
-      await fetch('/api/email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: email, subject, html }) })
-      await supabase.from('rdo').update({ email_inviata: true, email_inviata_at: new Date().toISOString(), email_destinatario: email }).eq('id', r.id)
-      showToast('✓ Email inviata a ' + email)
-      carica(); setInviaRdo(null)
-    } finally { setSendingEmail(false) }
+  const buildRdoHtml = (r: RDO) => {
+    const portalUrl = r.token_offerta ? `${window.location.origin}/offerta/${r.token_offerta}` : null
+    const corpo = `
+      <p style="color:#374151;font-size:13px">Gentile <b>${r.fornitore}</b>,</p>
+      <p style="color:#374151;font-size:13px">siete invitati a compilare la vostra offerta per la seguente richiesta:</p>
+      ${r.oggetto ? `<p style="padding:10px 14px;background:#f0f9ff;border-left:4px solid #3b82f6;color:#1e40af;font-size:13px;margin:12px 0"><b>${r.oggetto}</b></p>` : ''}
+      ${r.data_scadenza ? `<p style="color:#ef4444;font-size:12px;margin:6px 0">⏰ Scadenza: <strong>${new Date(r.data_scadenza).toLocaleDateString('it-IT')}</strong></p>` : ''}
+      ${r.note ? `<p style="color:#6b7280;font-size:12px;margin:10px 0">Note: ${r.note}</p>` : ''}
+      ${portalUrl ? `<div style="text-align:center;margin:20px 0"><a href="${portalUrl}" style="background:#3b82f6;color:#fff;padding:13px 26px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">📤 Compila la tua offerta →</a></div><p style="color:#9ca3af;font-size:10px;text-align:center;word-break:break-all">${portalUrl}</p>` : ''}
+    `
+    return templateEmail({
+      ragioneSociale: 'SQ360 — Gestionale Edile',
+      mittente: 'Ufficio Acquisti',
+      oggetto: `Richiesta d'Offerta ${r.codice}${r.oggetto ? ' — ' + r.oggetto : ''}`,
+      corpo,
+    })
+  }
+
+  const inviaEmailRdo = async (r: RDO, params: { from: string; to: string[]; cc: string[]; subject: string; html: string }) => {
+    const res = await fetch('/api/email', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: params.to, subject: params.subject, html: params.html, from: params.from, cc: params.cc.length ? params.cc : undefined }),
+    })
+    const result = await res.json()
+    await supabase.from('rdo').update({ email_inviata: true, email_inviata_at: new Date().toISOString(), email_destinatario: params.to[0] }).eq('id', r.id)
+    const aziendaId = await getAziendaId()
+    if (aziendaId) {
+      saveEmailLog({
+        azienda_id: aziendaId, commessa_id: id, tipo_doc: 'rdo',
+        doc_id: r.id, doc_codice: r.codice, mittente: params.from,
+        destinatari: params.to, cc: params.cc, oggetto: params.subject, html: params.html,
+        resend_id: result?.id,
+      })
+    }
+    showToast('✓ Email inviata a ' + params.to.join(', '))
+    carica()
+    setEmailCompose(null)
   }
 
   const aggiudicaGruppo = async (vincitrice: RDO, gruppoId: string) => {
@@ -659,7 +688,7 @@ ${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;
                         </button>
                         <button style={{...styleBtn('#475569'),fontSize:11,marginLeft:4}} onClick={() => generaPdf(r)}>📄 PDF</button>
                         {r.stato === 'inviata' && (
-                          <button style={{...styleBtn('#7c3aed'),fontSize:11,marginLeft:4}} onClick={() => { setInviaRdo(r); setInviaEmail(r.email_fornitore || '') }}>📤 Invia</button>
+                          <button style={{...styleBtn('#7c3aed'),fontSize:11,marginLeft:4}} onClick={() => setInviaRdo(r)}>📤 Invia</button>
                         )}
                         {r.stato === 'inviata' && (
                           <button style={{...styleBtn('#6366f1'),fontSize:11,marginLeft:4}} onClick={() => setPdfRdo(r)}>📎 Preventivo</button>
@@ -799,6 +828,10 @@ ${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;
                 </button>
               </div>
               <div>
+                <label style={styleLbl}>WBS / Area di riferimento</label>
+                <input style={styleInp} value={editRdo.wbs_ref || ''} onChange={e => setEditRdo({ ...editRdo, wbs_ref: e.target.value })} placeholder="es. 01.02 — Struttura" />
+              </div>
+              <div>
                 <label style={styleLbl}>Note</label>
                 <textarea style={{ ...styleInp, resize:'vertical', minHeight:60 }} value={editRdo.note || ''} onChange={e => setEditRdo({ ...editRdo, note: e.target.value })} />
               </div>
@@ -894,20 +927,13 @@ ${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;
 
                 {/* Email */}
                 <div style={{ borderTop:'1px solid var(--border)', paddingTop:14 }}>
-                  <label style={styleLbl}>Invia link via email</label>
-                  <div style={{ display:'flex', gap:8 }}>
-                    <input type="email" style={{ ...styleInp, flex:1 }}
-                      value={inviaEmail}
-                      onChange={e => setInviaEmail(e.target.value)}
-                      placeholder="email@fornitore.it" />
-                    <button style={styleBtn(inviaEmail ? '#10b981' : '#6b7280')}
-                      onClick={() => inviaEmailRdo(inviaRdo, inviaEmail)}
-                      disabled={!inviaEmail || sendingEmail}>
-                      {sendingEmail ? '⏳' : '📧 Invia'}
-                    </button>
-                  </div>
+                  <label style={styleLbl}>Invia per email</label>
+                  <button style={{ ...styleBtn('#10b981'), width:'100%' }}
+                    onClick={() => { setInviaRdo(null); setEmailCompose(inviaRdo) }}>
+                    📧 Componi email →
+                  </button>
                   {inviaRdo.email_inviata && (
-                    <p style={{ fontSize:11, color:'#10b981', marginTop:6 }}>
+                    <p style={{ fontSize:11, color:'#10b981', marginTop:8 }}>
                       ✓ Email già inviata a <b>{inviaRdo.email_destinatario}</b>
                       {inviaRdo.email_inviata_at && ` il ${new Date(inviaRdo.email_inviata_at).toLocaleString('it-IT')}`}
                     </p>
@@ -921,6 +947,16 @@ ${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;
             )}
           </div>
         </div>
+      )}
+
+      {emailCompose && (
+        <EmailPreviewModal
+          defaultTo={[emailCompose.email_fornitore || '']}
+          defaultSubject={`Richiesta d'offerta ${emailCompose.codice}${emailCompose.oggetto ? ' — ' + emailCompose.oggetto : ''}`}
+          html={buildRdoHtml(emailCompose)}
+          onSend={params => inviaEmailRdo(emailCompose, params)}
+          onClose={() => setEmailCompose(null)}
+        />
       )}
 
       {toast && (
