@@ -296,6 +296,17 @@ export default function MappaCantieri() {
                   console.log('[Sedi geocoding] ok →', s.lat, s.lng)
                 } else {
                   console.warn('[Sedi geocoding] nessun risultato per:', q)
+                  try {
+                    const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&lang=it&limit=1&bbox=6.6,36.6,18.5,47.1`
+                    const photonRes = await fetch(photonUrl, { headers: { 'User-Agent': 'SQ360/1.0 info.sq360@gmail.com' } })
+                    const photonData = await photonRes.json()
+                    if (photonData.features?.length > 0) {
+                      s.lat = photonData.features[0].geometry.coordinates[1]
+                      s.lng = photonData.features[0].geometry.coordinates[0]
+                      ;(supabase as any).from('azienda_sedi').update({ lat: s.lat, lng: s.lng }).eq('id', s.id).then()
+                      console.log('[Sedi geocoding Photon] ok →', s.lat, s.lng)
+                    }
+                  } catch (pe) { console.warn('[Sedi geocoding Photon] errore:', pe) }
                 }
               } catch (e) { console.warn('[Sedi geocoding] errore:', e) }
             }
@@ -386,7 +397,7 @@ export default function MappaCantieri() {
                 <div style="font-weight:700;font-size:13px;color:#1e3a5f;margin-bottom:6px">🏢 ${nomeAz}</div>
                 ${sedeLegale ? `<div style="color:#374151;margin-bottom:2px">📍 ${sedeLegale}</div>` : ''}
                 ${prov ? `<div style="color:#6b7280;font-size:11px">${prov}</div>` : ''}
-                ${az.piva ? `<div style="color:#6b7280;font-size:10px;margin-top:4px;font-family:monospace">P.IVA ${az.piva}</div>` : ''}
+                ${az.partita_iva ? `<div style="color:#6b7280;font-size:10px;margin-top:4px;font-family:monospace">P.IVA ${az.partita_iva}</div>` : ''}
               </div>`)
 
           sedeMarker.current = new mapboxgl.Marker({ element: el })
@@ -511,10 +522,12 @@ export default function MappaCantieri() {
       setCount(conCoord.length)
       setLoading(false)
 
-      if (conCoord.length > 0) {
+      {
         const b = new mapboxgl.LngLatBounds()
         conCoord.forEach(c => b.extend([Number(c.lng), Number(c.lat)]))
-        map.fitBounds(b, { padding: 80, maxZoom: 13 })
+        sediMarkersRef.current.forEach(m => { const ll = m.getLngLat(); b.extend([ll.lng, ll.lat]) })
+        if (sedeMarker.current) { const ll = sedeMarker.current.getLngLat(); b.extend([ll.lng, ll.lat]) }
+        if (!b.isEmpty()) map.fitBounds(b, { padding: 80, maxZoom: 12 })
       }
 
       // Click cluster → zoom
@@ -572,7 +585,9 @@ export default function MappaCantieri() {
 
           const b2 = new mapboxgl.LngLatBounds()
           allDataRef.current.filter(x => x.lat != null).forEach(x => b2.extend([Number(x.lng), Number(x.lat)]))
-          if (!b2.isEmpty()) map.fitBounds(b2, { padding: 80, maxZoom: 13 })
+          sediMarkersRef.current.forEach(m => { const ll = m.getLngLat(); b2.extend([ll.lng, ll.lat]) })
+          if (sedeMarker.current) { const ll = sedeMarker.current.getLngLat(); b2.extend([ll.lng, ll.lat]) }
+          if (!b2.isEmpty()) map.fitBounds(b2, { padding: 80, maxZoom: 12 })
         }
 
         if (geocodedCount > 0) {

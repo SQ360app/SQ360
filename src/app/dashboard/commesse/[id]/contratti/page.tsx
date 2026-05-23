@@ -138,7 +138,7 @@ export default function ContrattiPage({ params: pp }: { params: Promise<{ id: st
     setCommessaInfo(comm ? { codice: (comm as any).codice || '', nome: (comm as any).nome || '', committente: (comm as any).committente, importo_contratto: (comm as any).importo_contratto } : null)
     const azId = await getAziendaId()
     if (azId) {
-      const { data: az } = await supabase.from('aziende').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', azId).single()
+      const { data: az } = await (supabase as any).from('azienda').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', azId).single()
       if (az) setAziendaDoc(az as any)
     }
 

@@ -78,7 +78,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
   useEffect(() => {
     getAziendaId().then(azId => {
       if (!azId) return
-      supabase.from('aziende').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', azId).single()
+      ;(supabase as any).from('azienda').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', azId).single()
         .then(({ data }) => { if (data) setAziendaDoc(data as any) })
     })
   }, [])

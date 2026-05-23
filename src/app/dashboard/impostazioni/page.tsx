@@ -134,7 +134,7 @@ export default function ImpostazioniPage() {
     getAziendaId().then(async id => {
       if (!id) return
       setAziendaId(id)
-      const { data } = await supabase.from('aziende').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', id).single()
+      const { data } = await (supabase as any).from('azienda').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', id).single()
       if (data) {
         const d = data as any
         if (d.logo_url)                     { setLogoUrl(d.logo_url);     setLogoPreview(d.logo_url) }
@@ -190,7 +190,7 @@ export default function ImpostazioniPage() {
 
   async function saveDocumenti() {
     if (!aziendaId) return
-    await supabase.from('aziende').update({
+    await (supabase as any).from('azienda').update({
       logo_url:                   logoUrl   || null,
       carta_intestata_header_url: headerUrl || null,
       carta_intestata_footer_url: footerUrl || null,

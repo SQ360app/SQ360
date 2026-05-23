@@ -111,7 +111,7 @@ export default function RegisterPage() {
     if (!aziendaId) {
       // 2. Crea azienda
       const { data: newAzienda, error: aziendaErr } = await supabase
-        .from('aziende')
+        .from('azienda')
         .insert({
           nome:      azienda.nome.trim(),
           piva:      azienda.piva.replace(/\s/g, ''),
