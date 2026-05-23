@@ -144,19 +144,19 @@ export default function ImpostazioniPage() {
       const { data: az } = await (supabase as any).from('azienda').select('*').eq('id', id).maybeSingle()
       if (az) {
         setAzienda({
-          ragione_sociale: az.ragione_sociale || az.nome || '',
-          piva:            az.piva || '',
-          cf:              az.codice_fiscale || az.cf || '',
+          ragione_sociale: az.ragione_sociale || '',
+          piva:            az.partita_iva || '',
+          cf:              az.codice_fiscale || '',
           indirizzo_sede:  az.sede_legale || '',
-          cap_sede:        az.cap || '',
-          comune_sede:     az.comune || '',
-          provincia_sede:  az.provincia || '',
+          cap_sede:        '',
+          comune_sede:     '',
+          provincia_sede:  '',
           pec:             az.pec || '',
           email:           az.email || '',
-          tel:             az.telefono || az.tel || '',
+          tel:             az.telefono || '',
           rea:             az.rea || '',
           soa_categorie:   az.soa_categorie || '',
-          patente_crediti: az.patente_crediti != null ? String(az.patente_crediti) : '',
+          patente_crediti: az.patente_punteggio != null ? String(az.patente_punteggio) : '',
         })
       }
       const { data: sediData } = await (supabase as any)
@@ -224,17 +224,16 @@ export default function ImpostazioniPage() {
         : azienda.cap_sede || azienda.comune_sede,
     ].filter(Boolean).join(', ')
     const { error } = await (supabase as any).from('azienda').update({
-      ragione_sociale: azienda.ragione_sociale || null,
-      piva:            azienda.piva || null,
-      codice_fiscale:  azienda.cf || null,
-      sede_legale:     sedeLegale || null,
-      provincia:       azienda.provincia_sede || null,
-      pec:             azienda.pec || null,
-      email:           azienda.email || null,
-      telefono:        azienda.tel || null,
-      rea:             azienda.rea || null,
-      soa_categorie:   azienda.soa_categorie || null,
-      patente_crediti: azienda.patente_crediti || null,
+      ragione_sociale:   azienda.ragione_sociale || null,
+      partita_iva:       azienda.piva || null,
+      codice_fiscale:    azienda.cf || null,
+      sede_legale:       sedeLegale || null,
+      pec:               azienda.pec || null,
+      email:             azienda.email || null,
+      telefono:          azienda.tel || null,
+      rea:               azienda.rea || null,
+      soa_categorie:     azienda.soa_categorie || null,
+      patente_punteggio: azienda.patente_crediti || null,
     }).eq('id', aziendaId)
     if (error) { alert('Errore salvataggio: ' + error.message); return }
     setSavedOk(true)
