@@ -638,6 +638,17 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
 
   const selImporto = voci.filter(v => multiSel.has(v.id)).reduce((s, v) => s + (v.importo || 0), 0)
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!((e.ctrlKey || e.metaKey) && e.key === 'a')) return
+      e.preventDefault()
+      const visIds = tableRows.filter(r => r.type === 'vo').map(r => (r as { type: 'vo'; v: VoceDB }).v.id)
+      setMultiSel(new Set(visIds))
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [tableRows])
+
   // ─── Click handler Primus-style ───────────────────────────────────────────
 
   const handleRowClick = (e: React.MouseEvent, voceId: string) => {
@@ -663,7 +674,11 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
       setMultiSel(prev => prev.size === 1 && prev.has(voceId) ? new Set() : new Set([voceId]))
     }
     lastSelRef.current = voceId
-    setSel(voceId)
+  }
+
+  const toggleSelezione = (id: string) => {
+    setMultiSel(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
+    lastSelRef.current = id
   }
 
   // ─── Editing inline ──────────────────────────────────────────────────────
@@ -870,17 +885,15 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
             </div>
           )}
 
-          {/* MULTI-SELECT BAR */}
-          {multiSel.size > 0 && (
-            <div className="cmp-mbar">
-              <span className="cmp-mbar-n">{multiSel.size}</span>
-              <span className="cmp-mbar-l"> voci sel. — {fi(selImporto, 0)} €</span>
-              <button className="cmp-mbtn cmp-mbtn-wbs" onClick={() => setBulkWbsPicker(true)}>📐 WBS</button>
-              <button className="cmp-mbtn cmp-mbtn-rda" onClick={generaRDA}>⚡ RDA</button>
-              <button onClick={eliminaBulk} style={{ fontSize: 10, padding: '3px 9px', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 700, background: '#dc2626', color: '#fff' }}>🗑 Elimina</button>
-              <button className="cmp-mbtn cmp-mbtn-clr" onClick={() => { setMultiSel(new Set()); lastSelRef.current = null }}>✕</button>
-            </div>
-          )}
+          {/* MULTI-SELECT BAR — sempre in DOM, height:0 quando vuota */}
+          <div className="cmp-mbar" style={{ height: multiSel.size > 0 ? 'auto' : 0, overflow: 'hidden', padding: multiSel.size > 0 ? '5px 12px' : 0, borderBottom: multiSel.size > 0 ? '2px solid #3b82f6' : 'none' }}>
+            <span className="cmp-mbar-n">{multiSel.size}</span>
+            <span className="cmp-mbar-l"> voci sel. — {fi(selImporto, 0)} €</span>
+            <button className="cmp-mbtn cmp-mbtn-wbs" onClick={() => setBulkWbsPicker(true)}>📐 WBS</button>
+            <button className="cmp-mbtn cmp-mbtn-rda" onClick={generaRDA}>⚡ RDA</button>
+            <button onClick={eliminaBulk} style={{ fontSize: 10, padding: '3px 9px', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 700, background: '#dc2626', color: '#fff' }}>🗑 Elimina</button>
+            <button className="cmp-mbtn cmp-mbtn-clr" onClick={() => { setMultiSel(new Set()); lastSelRef.current = null }}>✕</button>
+          </div>
 
           {/* VISTA BAR */}
           <div className="cmp-vbar">
@@ -944,7 +957,13 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                 </colgroup>
                 <thead>
                   <tr>
-                    <th rowSpan={2}>Nr</th>
+                    <th rowSpan={2} style={{ width: 40 }}>
+                      <input type="checkbox" style={{ display: 'block', margin: '0 auto 2px' }}
+                        checked={tableRows.filter(r => r.type === 'vo').length > 0 && tableRows.filter(r => r.type === 'vo').every(r => multiSel.has((r as any).v.id))}
+                        onChange={e => { const ids = tableRows.filter(r => r.type === 'vo').map(r => (r as any).v.id); setMultiSel(e.target.checked ? new Set(ids) : new Set()) }}
+                        onClick={ev => ev.stopPropagation()} />
+                      Nr
+                    </th>
                     <th rowSpan={2}>Tariffa</th>
                     <th rowSpan={2} className="thl">DESIGNAZIONE dei LAVORI / WBS</th>
                     <th colSpan={4}>DIMENSIONI</th>
@@ -975,8 +994,12 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                         <tr key={v.id} className={`cmp-rvo${isMSel ? ' msel' : isSel ? ' sel' : ''}`}
                           onClick={e => handleRowClick(e, v.id)}
                           onContextMenu={e => { e.preventDefault(); setCtx({ x: e.clientX, y: e.clientY, id: v.id }) }}>
-                          <td style={{ textAlign: 'center', fontSize: 11, fontWeight: 700 }}>{idx}</td>
-                          <td style={{ fontSize: 10, color: '#1d4ed8', fontFamily: 'monospace' }}>{v.codice}</td>
+                          <td style={{ textAlign: 'center', fontSize: 11, fontWeight: 700 }}>
+                            <input type="checkbox" checked={isMSel} onChange={() => toggleSelezione(v.id)} onClick={e => e.stopPropagation()} style={{ display: 'block', margin: '0 auto 1px' }} />
+                            {idx}
+                          </td>
+                          <td className="tariffa-link" style={{ fontSize: 10, color: '#1d4ed8', fontFamily: 'monospace', cursor: 'pointer' }}
+                            onClick={e => { e.stopPropagation(); setSel(v.id) }}>{v.codice}</td>
                           <td style={{ fontSize: 10, maxWidth: 0 }}>
                             <span className="cmp-des-first" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{first}</span>
                             <span
