@@ -120,10 +120,37 @@ async function photonFetch(q: string): Promise<NominatimResult[]> {
   } catch { return [] }
 }
 
+// Mappa province italiane nome completo → sigla (per risultati Photon)
+const PROVINCE_MAP: Record<string, string> = {
+  'agrigento':'AG','alessandria':'AL','ancona':'AN','aosta':'AO','arezzo':'AR',
+  'ascoli piceno':'AP','asti':'AT','avellino':'AV','bari':'BA','barletta-andria-trani':'BT',
+  'belluno':'BL','benevento':'BN','bergamo':'BG','biella':'BI','bologna':'BO',
+  'bolzano':'BZ','brescia':'BS','brindisi':'BR','cagliari':'CA','caltanissetta':'CL',
+  'campobasso':'CB','carbonia-iglesias':'CI','caserta':'CE','catania':'CT','catanzaro':'CZ',
+  'chieti':'CH','como':'CO','cosenza':'CS','cremona':'CR','crotone':'KR','cuneo':'CN',
+  'enna':'EN','fermo':'FM','ferrara':'FE','firenze':'FI','foggia':'FG',
+  'forlì-cesena':'FC','frosinone':'FR','genova':'GE','gorizia':'GO','grosseto':'GR',
+  'imperia':'IM','isernia':'IS','la spezia':'SP','l\'aquila':'AQ','latina':'LT',
+  'lecce':'LE','lecco':'LC','livorno':'LI','lodi':'LO','lucca':'LU',
+  'macerata':'MC','mantova':'MN','massa-carrara':'MS','matera':'MT','medio campidano':'VS',
+  'messina':'ME','milano':'MI','modena':'MO','monza e della brianza':'MB','napoli':'NA',
+  'novara':'NO','nuoro':'NU','ogliastra':'OG','olbia-tempio':'OT','oristano':'OR',
+  'padova':'PD','palermo':'PA','parma':'PR','pavia':'PV','perugia':'PG',
+  'pesaro e urbino':'PU','pescara':'PE','piacenza':'PC','pisa':'PI','pistoia':'PT',
+  'pordenone':'PN','potenza':'PZ','prato':'PO','ragusa':'RG','ravenna':'RA',
+  'reggio calabria':'RC','reggio emilia':'RE','rieti':'RI','rimini':'RN','roma':'RM',
+  'rovigo':'RO','salerno':'SA','sassari':'SS','savona':'SV','siena':'SI',
+  'siracusa':'SR','sondrio':'SO','taranto':'TA','teramo':'TE','terni':'TR',
+  'torino':'TO','tortolì':'OG','trapani':'TP','trento':'TN','treviso':'TV',
+  'trieste':'TS','udine':'UD','varese':'VA','venezia':'VE','verbano-cusio-ossola':'VB',
+  'vercelli':'VC','verona':'VR','vibo valentia':'VV','vicenza':'VI','viterbo':'VT',
+}
+
 function getProvince(a: Record<string, string>): string {
   const iso = a['ISO3166-2-lvl6']
   if (iso) return iso.split('-').pop()?.toUpperCase() || ''
-  return (a.county || '').substring(0, 2).toUpperCase()
+  const county = (a.county || '').toLowerCase().replace(/^provincia (di|del|della|dell\'|dei|degli|delle) /i, '')
+  return PROVINCE_MAP[county] || (a.county || '').substring(0, 2).toUpperCase()
 }
 
 // ─── Componente ────────────────────────────────────────────────────────────────
@@ -249,9 +276,11 @@ export function AddressAutocomplete({
     const a      = r.address
     // Usa solo il nome via (senza civico API) — il civico viene inserito manualmente
     const road   = a.road || value
-    const comune = a.city || a.town || a.village || a.municipality || ''
+    const comune = a.city || a.town || a.village || a.municipality || a.county || ''
+    // Fallback postcode: estrai CAP italiano (5 cifre) dal display_name
+    const capFallback = a.postcode ? '' : (r.display_name.match(/\b(\d{5})\b/)?.[1] || '')
     const parsed: Omit<ParsedAddress, 'indirizzo'> = {
-      cap:      a.postcode || '',
+      cap:      a.postcode || capFallback,
       comune,
       provincia: getProvince(a),
       lat:      parseFloat(r.lat),
