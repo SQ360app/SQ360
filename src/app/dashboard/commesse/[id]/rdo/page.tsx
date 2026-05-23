@@ -391,9 +391,11 @@ ${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;
         await supabase.from('rdo').update({ ...payload, codice: editRdo.codice || '' }).eq('id', editRdo.id)
         showToast('RDO aggiornata')
       } else {
-        const { count } = await supabase.from('rdo').select('*', { count: 'exact', head: true }).eq('commessa_id', id).eq('azienda_id', aziendaId)
         const anno = new Date().getFullYear().toString().slice(2)
-        const codice = `RDO-${anno}-${String((count || 0) + 1).padStart(3, '0')}`
+        const { data: rdoCodici } = await supabase.from('rdo').select('codice').eq('commessa_id', id).eq('azienda_id', aziendaId).like('codice', `RDO-${anno}-%`)
+        let maxNum = 0
+        rdoCodici?.forEach((r: any) => { const n = parseInt(r.codice?.split('-')?.[2] || '0'); if (!isNaN(n) && n > maxNum) maxNum = n })
+        const codice = `RDO-${anno}-${String(maxNum + 1).padStart(3, '0')}`
         await supabase.from('rdo').insert({ ...payload, codice })
         showToast('RDO creata')
       }

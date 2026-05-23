@@ -209,9 +209,11 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
         await supabase.from('rda').update(payload).eq('id', editRda.id)
         showToast('RDA aggiornata')
       } else {
-        const { count } = await supabase.from('rda').select('*', { count: 'exact', head: true }).eq('commessa_id', id).eq('azienda_id', aziendaId)
         const anno = new Date().getFullYear().toString().slice(2)
-        const codice = `RDA-${anno}-${String((count || 0) + 1).padStart(3, '0')}`
+        const { data: rdaCodici } = await supabase.from('rda').select('codice').eq('commessa_id', id).eq('azienda_id', aziendaId).like('codice', `RDA-${anno}-%`)
+        let maxNum = 0
+        rdaCodici?.forEach((r: any) => { const n = parseInt(r.codice?.split('-')?.[2] || '0'); if (!isNaN(n) && n > maxNum) maxNum = n })
+        const codice = `RDA-${anno}-${String(maxNum + 1).padStart(3, '0')}`
         await supabase.from('rda').insert({ ...payload, codice })
         showToast('RDA creata')
       }

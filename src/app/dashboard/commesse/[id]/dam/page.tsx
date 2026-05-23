@@ -197,9 +197,11 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
         await supabase.from('dam').update(payload).eq('id', editDam.id)
         showToast('DAM aggiornata')
       } else {
-        const { count } = await supabase.from('dam').select('*', { count: 'exact', head: true }).eq('commessa_id', id).eq('azienda_id', aziendaId)
         const anno = new Date().getFullYear().toString().slice(2)
-        const codice = `DAM-${anno}-${String((count || 0) + 1).padStart(3, '0')}`
+        const { data: damCodici } = await supabase.from('dam').select('codice').eq('commessa_id', id).eq('azienda_id', aziendaId).like('codice', `DAM-${anno}-%`)
+        let maxNum = 0
+        damCodici?.forEach((r: any) => { const n = parseInt(r.codice?.split('-')?.[2] || '0'); if (!isNaN(n) && n > maxNum) maxNum = n })
+        const codice = `DAM-${anno}-${String(maxNum + 1).padStart(3, '0')}`
         await supabase.from('dam').insert({ ...payload, codice })
         showToast('DAM creata')
       }
