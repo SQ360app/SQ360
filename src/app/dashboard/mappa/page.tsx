@@ -162,9 +162,10 @@ export default function MappaCantieri() {
         return
       }
 
-      const { data, error: dbErr } = await (supabase as any)
+      // Query 1: KPI dalla view (avanzamento, residuo, ecc.)
+      const { data: kpiData, error: dbErr } = await (supabase as any)
         .from('v_commesse_kpi')
-        .select('id,codice,nome,stato,importo_contratto,avanzamento_pct,residuo,giorni_rimanenti,in_ritardo,lat,lng,indirizzo_cantiere,comune_cantiere,provincia')
+        .select('id,codice,nome,stato,importo_contratto,avanzamento_pct,residuo,giorni_rimanenti,in_ritardo,lat,lng')
         .eq('azienda_id', aziendaId)
 
       if (dbErr) {
@@ -173,7 +174,33 @@ export default function MappaCantieri() {
         return
       }
 
-      const allData: CommessaKPI[] = data || []
+      console.log('[Mappa] KPI da view:', kpiData?.length, 'commesse')
+      console.log('[Mappa] Primo record KPI:', kpiData?.[0])
+
+      // Query 2: Indirizzi e coordinate direttamente da commesse
+      // (non dipende dallo stato della migration su v_commesse_kpi)
+      const { data: addrData, error: addrErr } = await (supabase as any)
+        .from('commesse')
+        .select('id,indirizzo_cantiere,comune_cantiere,cap_cantiere,provincia,lat,lng')
+        .eq('azienda_id', aziendaId)
+
+      console.log('[Mappa] Indirizzi da commesse:', addrData?.length, 'righe', addrErr?.message)
+      console.log('[Mappa] Primo record indirizzo:', addrData?.[0])
+
+      // Merge: lat/lng preferisce commesse (più aggiornato), indirizzo solo da commesse
+      const addrMap = new Map<string, any>((addrData || []).map((r: any) => [r.id, r]))
+
+      const allData: CommessaKPI[] = (kpiData || []).map((c: any) => {
+        const addr = addrMap.get(c.id) || {}
+        return {
+          ...c,
+          lat:                c.lat  ?? addr.lat  ?? null,
+          lng:                c.lng  ?? addr.lng  ?? null,
+          indirizzo_cantiere: addr.indirizzo_cantiere || null,
+          comune_cantiere:    addr.comune_cantiere    || null,
+          provincia:          addr.provincia           || null,
+        }
+      })
 
       // Commesse già geocodificate
       const conCoord = allData.filter(
@@ -185,6 +212,10 @@ export default function MappaCantieri() {
         c => (c.lat == null || c.lng == null) &&
              (c.indirizzo_cantiere || c.comune_cantiere)
       )
+
+      console.log('[Mappa] Con coordinate:', conCoord.length)
+      console.log('[Mappa] Senza coord ma con indirizzo:', senzaCoord.length)
+      if (senzaCoord.length > 0) console.log('[Mappa] Da geocodificare:', senzaCoord.map(c => ({ nome: c.nome, comune: c.comune_cantiere, provincia: c.provincia })))
 
       const bounds = new mapboxgl.LngLatBounds()
       let boundsHasPoints = false
@@ -217,7 +248,9 @@ export default function MappaCantieri() {
 
           setGeocodingInfo(`Geocodifica cantieri… ${i + 1}/${senzaCoord.length}`)
 
+          console.log(`[Mappa] Geocodifica ${i + 1}/${senzaCoord.length}:`, c.nome, '|', [c.indirizzo_cantiere, c.comune_cantiere, c.provincia].filter(Boolean).join(', '))
           const coords = await geocode(c)
+          console.log(`[Mappa] Risultato geocoding "${c.nome}":`, coords)
           if (!coords) continue
 
           // Salva coordinate su Supabase (fire-and-forget, non blocca la UI)
