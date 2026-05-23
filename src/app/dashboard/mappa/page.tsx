@@ -220,8 +220,10 @@ export default function MappaCantieri() {
       if (!aziendaId) { setError('Profilo utente non trovato'); setLoading(false); return }
 
       // ── Sede impresa ──────────────────────────────────────────────────────
-      const { data: az } = await (supabase as any)
+      const { data: az, error: azErr } = await (supabase as any)
         .from('aziende').select('*').eq('id', aziendaId).single()
+
+      console.log('[Sede]', az, '— error:', azErr?.message)
 
       if (az) {
         const nomeAz    = az.nome || az.ragione_sociale || 'Sede impresa'
@@ -231,6 +233,8 @@ export default function MappaCantieri() {
         let sedeLat = az.sede_lat ?? az.lat ?? null
         let sedeLng = az.sede_lng ?? az.lng ?? null
 
+        console.log('[Sede] campi risolti →', { nomeAz, indirizzo, citta, prov, sedeLat, sedeLng })
+
         if ((!sedeLat || !sedeLng) && (indirizzo || citta || prov)) {
           const q = [indirizzo, citta, prov, 'Italia'].filter(Boolean).join(', ')
           try {
@@ -239,6 +243,7 @@ export default function MappaCantieri() {
               { headers: { 'Accept-Language': 'it' } }
             )
             const j = await r.json()
+            console.log('[Sede geocoding]', q, j[0] ?? null)
             if (j[0]) { sedeLat = parseFloat(j[0].lat); sedeLng = parseFloat(j[0].lon) }
           } catch { /* non bloccante */ }
         }
@@ -251,9 +256,12 @@ export default function MappaCantieri() {
               { headers: { 'Accept-Language': 'it' } }
             )
             const j2 = await r2.json()
+            console.log('[Sede geocoding fallback]', q2, j2[0] ?? null)
             if (j2[0]) { sedeLat = parseFloat(j2[0].lat); sedeLng = parseFloat(j2[0].lon) }
           } catch { /* non bloccante */ }
         }
+
+        console.log('[Sede] coordinate finali →', { sedeLat, sedeLng })
 
         if (sedeLat && sedeLng) {
           const el = document.createElement('div')
