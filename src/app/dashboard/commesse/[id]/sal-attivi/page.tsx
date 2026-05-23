@@ -1042,7 +1042,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
                   <col style={{ width: 40 }} /><col style={{ width: 40 }} /><col style={{ width: 40 }} /><col style={{ width: 40 }} />
                   <col style={{ width: 65 }} />
                   <col style={{ width: 65 }} /><col style={{ width: 65 }} />
-                  {salList.filter((s: any) => s.id !== salSel?.id).map((s: any) => <col key={s.id} style={{ width: 60 }} />)}
+                  {salList.map((s: any) => <col key={s.id} style={{ width: 60 }} />)}
                   <col style={{ width: 60 }} /><col style={{ width: 75 }} /><col style={{ width: 65 }} />
                 </colgroup>
                 <thead>
@@ -1053,12 +1053,12 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
                     <th colSpan={4}>DIMENSIONI</th>
                     <th rowSpan={2}>Quantità</th>
                     <th colSpan={2}>IMPORTI</th>
-                    <th colSpan={salList.filter((s: any) => s.id !== salSel?.id).length + 3} style={{ background: '#1e3a5f', color: '#93c5fd' }}>SAL PERIODO</th>
+                    <th colSpan={salList.length + 3} style={{ background: '#1e3a5f', color: '#93c5fd' }}>SAL PERIODO</th>
                   </tr>
                   <tr>
                     {['par.ug.', 'lung.', 'larg.', 'H/peso'].map(t => <th key={t} className="th2">{t}</th>)}
                     {['unit.[1]', 'TOTALE'].map(t => <th key={t} className="th2">{t}</th>)}
-                    {salList.filter((s: any) => s.id !== salSel?.id).map((s: any) => (
+                    {salList.map((s: any) => (
                       <th key={s.id} style={{ background: '#1e3a5f', color: '#93c5fd', fontSize: 9 }}>N.{s.numero}</th>
                     ))}
                     <th style={{ background: '#1e3a5f', color: '#93c5fd', fontSize: 9 }}>Cumul.</th>
@@ -1163,7 +1163,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
                             )}
                           </td>
                           <td />
-                          {salList.filter((s: any) => s.id !== salSel?.id).map((s: any) => (
+                          {salList.map((s: any) => (
                             <td key={s.id} style={{ textAlign: 'right', fontSize: 10, color: '#6b7280', fontFamily: 'monospace' }}>{qtPerSal[s.id]?.[v.id] || '—'}</td>
                           ))}
                           <td style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 10 }}>{(qtCumul[v.id] || 0).toFixed(3)}</td>
