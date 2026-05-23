@@ -116,10 +116,10 @@ const V3_CSS = `
 .cmp-vtab{font-size:10px;padding:2px 8px;background:transparent;border:1px solid rgba(0,0,0,.15);border-radius:10px;cursor:pointer;color:#6b7280}
 .cmp-vtab.on{background:#14532d;color:#fff;border-color:#14532d}
 .cmp-vcnt{color:#9ca3af;margin-left:auto;font-size:9px;white-space:nowrap}
-.cmp-tscroll{flex:1;overflow:auto;width:100%;min-width:0;min-height:0}
+.cmp-tscroll{flex:1 1 0%;overflow:auto;width:100%;min-width:0;min-height:0}
 .cmp-tscroll::-webkit-scrollbar{width:6px;height:6px}.cmp-tscroll::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}
-table.cmp-t{width:100%;border-collapse:collapse;table-layout:fixed}
-col.cc2{width:34px}col.cc3{width:96px}col.cc4{width:auto}
+table.cmp-t{width:100%;min-width:860px;border-collapse:collapse;table-layout:fixed}
+col.cc2{width:34px}col.cc3{width:96px}col.cc4{width:220px;min-width:220px}
 col.cc5,col.cc6,col.cc7,col.cc8{width:52px}
 col.cc9{width:66px}col.cc10{width:68px}col.cc11{width:82px}
 col.cc12,col.cc13,col.cc14{width:36px}col.cc15{width:44px}
@@ -608,12 +608,15 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     | { type: 'mi'; v: VoceDB }
     | { type: 'som'; v: VoceDB }
 
+  const isFiltered = !!(catFilter.c || catFilter.sc || wbsSel)
   const tableRows: Row[] = (() => {
     const rows: Row[] = []
     let lastSC = '', lastC = ''
     for (const v of vociFiltrate) {
-      if (v.capitolo !== lastSC) { rows.push({ type: 'hsc', id: v.capitolo, lb: v.capitolo }); lastSC = v.capitolo; lastC = '' }
-      if (v.categoria && v.categoria !== v.capitolo && v.categoria !== lastC) { rows.push({ type: 'hca', id: v.categoria, lb: v.categoria }); lastC = v.categoria }
+      if (!isFiltered) {
+        if (v.capitolo !== lastSC) { rows.push({ type: 'hsc', id: v.capitolo, lb: v.capitolo }); lastSC = v.capitolo; lastC = '' }
+        if (v.categoria && v.categoria !== v.capitolo && v.categoria !== lastC) { rows.push({ type: 'hca', id: v.categoria, lb: v.categoria }); lastC = v.categoria }
+      }
       rows.push({ type: 'vo', v }); rows.push({ type: 'mi', v }); rows.push({ type: 'som', v })
     }
     return rows
@@ -748,7 +751,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     <>
       <style dangerouslySetInnerHTML={{ __html: V3_CSS }} />
       <style>{`table.cmp-t tbody td { font-size: ${fontSize}px !important; }`}</style>
-      <div className="cmp-root" style={{ height: 'calc(100vh - 145px)' }}>
+      <div className="cmp-root" style={{ height: '100%' }}>
 
         {/* SIDEBAR */}
         {!sbHidden && (
@@ -897,6 +900,21 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
             )}
             <span className="cmp-vcnt">{vociFiltrate.length} voci{multiSel.size > 0 ? ` · ${multiSel.size} sel.` : ''}</span>
           </div>
+
+          {/* BREADCRUMB FILTRO */}
+          {isFiltered && voci.length > 0 && (
+            <div style={{ padding: '3px 10px', background: '#eff6ff', borderBottom: '1px solid #bfdbfe', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, fontSize: 10 }}>
+              <span style={{ color: '#1d4ed8', fontWeight: 700 }}>
+                📁 {wbsSel ? `WBS ${wbsSel} — ${WBS_MAP[wbsSel] || ''}` : catFilter.c || catFilter.sc}
+              </span>
+              <span style={{ color: '#6b7280' }}>•</span>
+              <span style={{ color: '#374151' }}>{vociFiltrate.length} voci</span>
+              <span style={{ color: '#6b7280' }}>•</span>
+              <span style={{ color: '#1d4ed8', fontWeight: 600 }}>Totale: {fi(vociFiltrate.reduce((s, v) => s + v.importo, 0))} €</span>
+              <button onClick={() => { setWbsSel(null); setCatFilter({ sc: null, c: null }) }}
+                style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 13 }}>✕</button>
+            </div>
+          )}
 
           {/* TABELLA */}
           {caricamento ? (

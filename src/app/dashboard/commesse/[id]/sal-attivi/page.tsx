@@ -115,10 +115,10 @@ const V3_CSS = `
 .cmp-vtab{font-size:10px;padding:2px 8px;background:transparent;border:1px solid rgba(0,0,0,.15);border-radius:10px;cursor:pointer;color:#6b7280}
 .cmp-vtab.on{background:#14532d;color:#fff;border-color:#14532d}
 .cmp-vcnt{color:#9ca3af;margin-left:auto;font-size:9px;white-space:nowrap}
-.cmp-tscroll{flex:1;overflow:auto;min-height:0;min-width:0;width:100%}
+.cmp-tscroll{flex:1 1 0%;overflow:auto;min-height:0;min-width:0;width:100%}
 .cmp-tscroll::-webkit-scrollbar{width:6px;height:6px}.cmp-tscroll::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}
-table.cmp-t{width:100%;min-width:800px;border-collapse:collapse;table-layout:fixed}
-col.cc2{width:34px}col.cc3{width:96px}col.cc4{width:auto}
+table.cmp-t{width:100%;min-width:860px;border-collapse:collapse;table-layout:fixed}
+col.cc2{width:34px}col.cc3{width:96px}col.cc4{width:220px;min-width:220px}
 col.cc5,col.cc6,col.cc7,col.cc8{width:52px}
 col.cc9{width:66px}col.cc10{width:68px}col.cc11{width:82px}
 col.cc12,col.cc13,col.cc14{width:36px}col.cc15{width:44px}
@@ -793,7 +793,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
     <>
       <style dangerouslySetInnerHTML={{ __html: V3_CSS }} />
       <style>{`table.cmp-t tbody td { font-size: ${fontSize}px !important; }`}</style>
-      <div className="cmp-root" style={{ height: 'calc(100vh - 145px)' }}>
+      <div className="cmp-root" style={{ height: '100%' }}>
 
         {/* SIDEBAR */}
         {!sbHidden && (

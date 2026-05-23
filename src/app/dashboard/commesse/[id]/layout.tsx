@@ -115,7 +115,7 @@ export default function CommessaLayout({ children }: { children: React.ReactNode
   const statoColor = commessa ? (STATI_COLOR[commessa.stato] || '#6b7280') : '#6b7280'
 
   return (
-    <div style={{ minHeight: 0, background: '#f9fafb' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#f9fafb' }}>
 
       {/* Header */}
       <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', position: 'sticky', top: 0, zIndex: 40 }}>
@@ -201,7 +201,7 @@ export default function CommessaLayout({ children }: { children: React.ReactNode
       </div>
 
       {/* Contenuto tab */}
-      <div style={{ padding: '20px 20px' }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
         {children}
       </div>
 
