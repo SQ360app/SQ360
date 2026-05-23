@@ -581,6 +581,10 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     return () => document.removeEventListener('click', h)
   }, [])
 
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0
+  }, [catFilter, wbsSel])
+
   // ─── WBS Tree sidebar ────────────────────────────────────────────────────
 
   const renderWBSNode = (code: string, lvl: number): React.ReactNode => {
@@ -829,6 +833,16 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                 </>
               )}
             </div>
+            {/* Font size + XPWE import — footer sidebar */}
+            <div style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 8px', background:'#f0fdf4', borderTop:'1px solid #bbf7d0', flexShrink:0 }}>
+              <button className="cmp-tbtn" style={{ fontSize:10, padding:'2px 6px', opacity: fontSize<=9 ? 0.4 : 1 }} onClick={() => changeFontSize(-1)} disabled={fontSize<=9} title="Riduci testo">A-</button>
+              <span style={{ fontSize:9, color:'#065f46', minWidth:24, textAlign:'center' }}>{fontSize}px</span>
+              <button className="cmp-tbtn" style={{ fontSize:11, padding:'2px 6px', opacity: fontSize>=13 ? 0.4 : 1 }} onClick={() => changeFontSize(1)} disabled={fontSize>=13} title="Aumenta testo">A+</button>
+              <label style={{ marginLeft:'auto', fontSize:9, padding:'2px 6px', borderRadius:3, cursor:'pointer', background:'#1d4ed8', color:'#fff', fontWeight:600, display:'flex', alignItems:'center', gap:3 }}>
+                {importando ? '⏳' : '📥 XPWE'}
+                <input type="file" accept=".xpwe,.pwe,.xml" style={{ display:'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) importaFile(f) }} />
+              </label>
+            </div>
             <div className="cmp-sfoot">
               <div className="cmp-sft"><span>Totale computo</span><span>{fi(totale)} €</span></div>
               {(wbsSel || catFilter.sc) ? (
@@ -864,13 +878,6 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                   <button style={{ fontSize: 9, padding: '1px 6px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }} onClick={() => setCatFilter({ sc: null, c: null })}>✕</button></>
               ) : <span style={{ fontSize: 10, color: '#9ca3af' }}>Tutto il computo · click riga per selezionare · Ctrl+click multipla · Shift+click range</span>}
             </div>
-            <button className="cmp-tbtn" style={{ fontSize: 11, padding: '3px 8px', opacity: fontSize <= 9 ? 0.4 : 1 }} onClick={() => changeFontSize(-1)} disabled={fontSize <= 9} title="Riduci testo">A-</button>
-            <span style={{ fontSize: 10, color: '#6b7280', minWidth: 26, textAlign: 'center' }}>{fontSize}px</span>
-            <button className="cmp-tbtn" style={{ fontSize: 12, padding: '3px 8px', opacity: fontSize >= 13 ? 0.4 : 1 }} onClick={() => changeFontSize(1)} disabled={fontSize >= 13} title="Aumenta testo">A+</button>
-            <label style={{ fontSize: 10, padding: '3px 8px', borderRadius: 4, cursor: 'pointer', background: '#1d4ed8', color: '#fff', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-              {importando ? '⏳ Import...' : '📥 Importa XPWE'}
-              <input type="file" accept=".xpwe,.pwe,.xml" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) importaFile(f) }} />
-            </label>
           </div>
 
           {/* IMPORT RESULT */}
