@@ -1035,7 +1035,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
             <div className="cmp-tscroll" onClick={() => setCtx(null)}>
               <table className="cmp-t">
                 <colgroup>
-                  <col style={{ width: 30 }} /><col style={{ width: 80 }} /><col style={{ width: 220 }} />
+                  <col style={{ width: 30 }} /><col style={{ width: 80 }} /><col style={{ width: 'auto' }} />
                   <col style={{ width: 40 }} /><col style={{ width: 40 }} /><col style={{ width: 40 }} /><col style={{ width: 40 }} />
                   <col style={{ width: 65 }} />
                   <col style={{ width: 65 }} /><col style={{ width: 65 }} />
