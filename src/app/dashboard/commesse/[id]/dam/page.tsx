@@ -257,7 +257,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
     const aziendaId = await getAziendaId()
     const { error } = await supabase.from('dam').insert({
       commessa_id: dam.commessa_id, azienda_id: aziendaId || null,
-      codice: dam.codice, materiale: dam.materiale, descrizione: dam.descrizione,
+      codice: `${dam.codice}-R${(dam.revisione || 0) + 1}`, materiale: dam.materiale, descrizione: dam.descrizione,
       quantita: dam.quantita, um: dam.um, marca_modello: dam.marca_modello,
       norma_riferimento: dam.norma_riferimento, classe_prestazionale: dam.classe_prestazionale,
       cam_compliant: dam.cam_compliant, dl_nome: dam.dl_nome, dl_email: dam.dl_email,

@@ -301,7 +301,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
     const aziendaId = await getAziendaId()
     const { error } = await supabase.from('rda').insert({
       commessa_id: rda.commessa_id, azienda_id: aziendaId || null,
-      codice: rda.codice, tipo: rda.tipo, oggetto: rda.oggetto,
+      codice: `${rda.codice}-R${(rda.revisione || 0) + 1}`, tipo: rda.tipo, oggetto: rda.oggetto,
       qta_stimata: rda.qta_stimata, um: rda.um,
       data_necessita: rda.data_necessita, stato: 'bozza',
       fornitore_sugg: rda.fornitore_sugg, note: rda.note,

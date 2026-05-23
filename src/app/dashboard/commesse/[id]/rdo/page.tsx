@@ -489,7 +489,7 @@ ${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;
     const { error } = await supabase.from('rdo').insert({
       commessa_id: rdo.commessa_id, azienda_id: aziendaId || null,
       rda_id: rdo.rda_id, rdo_gruppo_id: rdo.rdo_gruppo_id,
-      codice: rdo.codice, fornitore: rdo.fornitore,
+      codice: `${rdo.codice}-R${(rdo.revisione || 0) + 1}`, fornitore: rdo.fornitore,
       email_fornitore: rdo.email_fornitore, oggetto: rdo.oggetto,
       data_scadenza: rdo.data_scadenza, note: rdo.note,
       tipo_affidamento: rdo.tipo_affidamento, pct_manodopera: rdo.pct_manodopera,
