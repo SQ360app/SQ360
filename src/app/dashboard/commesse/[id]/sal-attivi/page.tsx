@@ -902,13 +902,16 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
             <button className="cmp-tbtn" style={{ fontSize: 11, padding: '3px 8px', opacity: fontSize <= 9 ? 0.4 : 1 }} onClick={() => changeFontSize(-1)} disabled={fontSize <= 9} title="Riduci testo">A-</button>
             <span style={{ fontSize: 10, color: '#6b7280', minWidth: 26, textAlign: 'center' }}>{fontSize}px</span>
             <button className="cmp-tbtn" style={{ fontSize: 12, padding: '3px 8px', opacity: fontSize >= 13 ? 0.4 : 1 }} onClick={() => changeFontSize(1)} disabled={fontSize >= 13} title="Aumenta testo">A+</button>
-            <div style={{ marginLeft: 'auto', position: 'relative', zIndex: 10, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+          </div>
+
+          {/* SAL CONTROLS — barra isolata, non influenza la tabella */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: '#f0fdf4', borderBottom: '1px solid #bbf7d0', flexShrink: 0 }}>
             <select value={salSel?.id || ''} onChange={e => {
               const s = salList.find((x: any) => x.id === e.target.value) || null
               setSalSel(s)
               if (s) { const qt: Record<string,number> = {}; Object.entries(qtPerSal[s.id] || {}).forEach(([k, v]) => { qt[k] = v as number }); setQtInput(qt) }
               else setQtInput({})
-            }} style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #d1fae5', background: '#f0fdf4', fontSize: 11 }}>
+            }} style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #bbf7d0', background: '#fff', fontSize: 11, flex: 1, minWidth: 0 }}>
               <option value=''>— Seleziona SAL —</option>
               {salList.map((s: any) => {
                 const ar = alertRiserva(s)
@@ -921,7 +924,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
               const { data, error } = await supabase.from('sal').insert({ commessa_id: id, azienda_id: aziendaId, tipo: 'ATTIVO', codice: 'SAL-' + String(n).padStart(3, '0'), numero: n, data_emissione: new Date().toISOString().split('T')[0], stato: 'bozza', metodo: 'manuale', note: '' }).select().single()
               if (error) { showToast('Errore creazione SAL: ' + error.message); return }
               if (data) { setSalList((p: any) => [...p, data]); setSalSel(data); setQtInput({}) }
-            }} style={{ padding: '4px 12px', background: 'rgba(79,142,247,.2)', border: '1px solid rgba(79,142,247,.3)', borderRadius: 6, color: '#7baff8', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>+ Nuovo SAL</button>
+            }} style={{ padding: '4px 12px', background: 'rgba(79,142,247,.2)', border: '1px solid rgba(79,142,247,.3)', borderRadius: 6, color: '#7baff8', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>+ Nuovo SAL</button>
             <button onClick={async () => { if (!salSel) return
               await supabase.from('sal_voci').delete().eq('sal_id', salSel.id)
               const rows = Object.entries(qtInput).filter(([, q]) => q > 0).map(([vid, q]) => ({ sal_id: salSel.id, voce_computo_id: vid, quantita_periodo: q }))
@@ -956,8 +959,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
                 s.id === salSel.id ? { ...s, importo_certificato: importoPeriodo, stato: 'emesso' } : s
               ))
               showToast('✓ SAL salvato')
-            }} style={{ padding: '4px 12px', background: 'rgba(52,211,153,.2)', border: '1px solid rgba(52,211,153,.3)', borderRadius: 6, color: '#34d399', fontSize: 11, fontWeight: 600, cursor: 'pointer', visibility: salSel ? 'visible' : 'hidden', pointerEvents: salSel ? 'auto' : 'none' }}>💾 Salva SAL</button>
-            </div>
+            }} style={{ padding: '4px 12px', background: 'rgba(52,211,153,.2)', border: '1px solid rgba(52,211,153,.3)', borderRadius: 6, color: '#34d399', fontSize: 11, fontWeight: 600, cursor: 'pointer', visibility: salSel ? 'visible' : 'hidden', pointerEvents: salSel ? 'auto' : 'none', flexShrink: 0 }}>💾 Salva SAL</button>
           </div>
 
           {/* ALERT RISERVA 15GG — DM 49/2018 art. 23 */}
