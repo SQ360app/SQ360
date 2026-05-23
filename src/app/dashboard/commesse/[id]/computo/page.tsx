@@ -862,7 +862,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
         <div className="cmp-main">
 
           {/* TOOLBAR */}
-          <div className="cmp-tbar">
+          <div className="cmp-tbar" style={{ flexShrink: 0, flexWrap: 'nowrap', overflow: 'hidden' }}>
             {sbHidden && <button className="cmp-tbtn green" onClick={() => setSbHidden(false)}>▶</button>}
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}>
               {wbsSel ? (
