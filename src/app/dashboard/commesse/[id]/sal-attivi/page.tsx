@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useCallback, use } from 'react'
+import React, { useState, useEffect, useRef, useCallback, use, useMemo } from 'react'
 import { supabase, getAziendaId } from '@/lib/supabase'
 
 // ─── WBS FLAT (codice → label) ──────────────────────────────────────────────
@@ -611,12 +611,20 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
     return direct + children.reduce((s, c) => s + wbsCount(c), 0)
   }
 
-  const vociFiltrate = voci.filter(v => {
+  const vociFiltrate = useMemo(() => voci.filter(v => {
     if (wbsSel) return v.wbs_id === wbsSel
-    if (catFilter.c) return v.categoria === catFilter.c || v.capitolo === catFilter.c
-    if (catFilter.sc) return v.capitolo === catFilter.sc
+    if (catFilter.sc) {
+      const sf = catFilter.sc.trim().toLowerCase()
+      return v.capitolo.trim().toLowerCase() === sf
+          || v.categoria.trim().toLowerCase() === sf
+    }
+    if (catFilter.c) {
+      const cf = catFilter.c.trim().toLowerCase()
+      return v.categoria.trim().toLowerCase() === cf
+          || v.capitolo.trim().toLowerCase() === cf
+    }
     return true
-  })
+  }), [voci, catFilter, wbsSel])
 
   const voceNoWBS = voci.filter(v => !v.wbs_id).length
 

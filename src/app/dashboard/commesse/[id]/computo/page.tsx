@@ -549,14 +549,15 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
 
   const vociFiltrate = useMemo(() => voci.filter(v => {
     if (wbsSel) return v.wbs_id === wbsSel
+    if (catFilter.sc) {
+      const sf = catFilter.sc.trim().toLowerCase()
+      return v.capitolo.trim().toLowerCase() === sf
+          || v.categoria.trim().toLowerCase() === sf
+    }
     if (catFilter.c) {
       const cf = catFilter.c.trim().toLowerCase()
       return v.categoria.trim().toLowerCase() === cf
           || v.capitolo.trim().toLowerCase() === cf
-    }
-    if (catFilter.sc) {
-      const sf = catFilter.sc.trim().toLowerCase()
-      return v.capitolo.trim().toLowerCase() === sf
     }
     return true
   }), [voci, catFilter, wbsSel])
