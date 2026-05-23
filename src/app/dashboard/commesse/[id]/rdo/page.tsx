@@ -43,6 +43,11 @@ interface RDO {
   email_inviata_at?: string
   email_destinatario?: string
   wbs_ref?: string
+  revisione?: number
+  doc_padre_id?: string
+  is_vigente?: boolean
+  motivo_rev?: string
+  revised_at?: string
 }
 
 interface RDA {
@@ -282,6 +287,9 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
   const [prossimoPasso, setProssimoPasso] = useState<RDO | null>(null)
   const [inviaRdo, setInviaRdo] = useState<RDO | null>(null)
   const [emailCompose, setEmailCompose] = useState<RDO | null>(null)
+  const [revModal, setRevModal] = useState<{doc: RDO; motivo: string} | null>(null)
+  const [storicoOpen, setStoricoOpen] = useState<Record<string,boolean>>({})
+  const [allRdo, setAllRdo] = useState<RDO[]>([])
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
@@ -292,7 +300,9 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
       supabase.from('rda').select('id,codice,oggetto,tipo,stato').eq('commessa_id', id).in('stato', ['approvata','inviata']),
       supabase.from('commesse').select('sam_obbligatoria,tipo_committente,importo_contrattuale').eq('id', id).single(),
     ])
-    setRdoList((rdo as RDO[]) || [])
+    const allRdoData = (rdo as RDO[]) || []
+    setAllRdo(allRdoData)
+    setRdoList(allRdoData.filter(r => r.is_vigente !== false))
     setRdaList((rda as RDA[]) || [])
     if (comm) setCommessa(comm as any)
     setLoading(false)
@@ -455,6 +465,42 @@ ${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;
     const base = window.location.pathname.replace('/rdo', '/oda')
     const params = new URLSearchParams({ rdo_id: r.id, importo: String(r.importo_offerta || 0), fornitore: r.fornitore || '', richiede_sam: '0' })
     return base + '?' + params.toString()
+  }
+
+  const displayCodice = (r: RDO) => r.revisione ? `${r.codice} REV.${r.revisione}` : r.codice
+  const getStorico = (rdoId: string): RDO[] => {
+    const chain: RDO[] = []
+    let current = allRdo.find(r => r.id === rdoId)
+    while (current?.doc_padre_id) {
+      const parent = allRdo.find(r => r.id === current!.doc_padre_id)
+      if (!parent) break
+      chain.push(parent)
+      current = parent
+    }
+    return chain
+  }
+  const creaRevisioneRdo = async (rdo: RDO, motivo: string) => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const aziendaId = await getAziendaId()
+    const { error } = await supabase.from('rdo').insert({
+      commessa_id: rdo.commessa_id, azienda_id: aziendaId || null,
+      rda_id: rdo.rda_id, rdo_gruppo_id: rdo.rdo_gruppo_id,
+      codice: rdo.codice, fornitore: rdo.fornitore,
+      email_fornitore: rdo.email_fornitore, oggetto: rdo.oggetto,
+      data_scadenza: rdo.data_scadenza, note: rdo.note,
+      tipo_affidamento: rdo.tipo_affidamento, pct_manodopera: rdo.pct_manodopera,
+      richiede_sam: rdo.richiede_sam, wbs_ref: rdo.wbs_ref,
+      token_offerta: crypto.randomUUID(), stato: 'bozza',
+      revisione: (rdo.revisione || 0) + 1,
+      doc_padre_id: rdo.id, is_vigente: true,
+      motivo_rev: motivo || null,
+      revised_by: user?.id || null,
+      revised_at: new Date().toISOString(),
+    })
+    if (error) { showToast('Errore: ' + error.message); return }
+    await supabase.from('rdo').update({ is_vigente: false }).eq('id', rdo.id)
+    showToast('✅ Revisione RDO creata')
+    setRevModal(null); carica()
   }
 
   const rdoFiltrate = rdoList.filter(r => filtroStato === 'tutti' || r.stato === filtroStato)
@@ -657,12 +703,14 @@ ${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;
               <tbody>
                 {rdoFiltrate.map(r => {
                   const rda = rdaList.find(x => x.id === r.rda_id)
+                  const storico = getStorico(r.id)
                   return (
-                    <tr key={r.id}
+                    <React.Fragment key={r.id}>
+                    <tr
                       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--accent-light)' }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
                       <td style={{ ...styleTd, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>
-                        {r.codice}
+                        {displayCodice(r)}
                         {r.email_inviata && (
                           <span style={{ fontSize:9, padding:'1px 5px', borderRadius:4, background:'#10b98120', color:'#10b981', fontWeight:600, display:'inline-block', marginLeft:4 }}>✓ email</span>
                         )}
@@ -707,8 +755,34 @@ ${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;
                         {r.stato === 'aggiudicata' && !r.richiede_sam && (
                           <button style={{...styleBtn('#10b981'),fontSize:11,marginLeft:4}} onClick={() => setProssimoPasso(r)}>✅ ODA →</button>
                         )}
+                        {!['annullata'].includes(r.stato) && (
+                          <button style={{...styleBtn('#6d28d9'),fontSize:11,marginLeft:4}} onClick={() => setRevModal({doc: r, motivo: ''})} title="Crea revisione">📝</button>
+                        )}
+                        {storico.length > 0 && (
+                          <button style={{...styleBtn('#6b7280'),fontSize:11,marginLeft:4}} onClick={() => setStoricoOpen(prev => ({...prev, [r.id]: !prev[r.id]}))} title="Storico revisioni">📜 {storico.length}</button>
+                        )}
                       </td>
                     </tr>
+                    {storico.length > 0 && storicoOpen[r.id] && (
+                      <tr>
+                        <td colSpan={8} style={{ padding:0, background:'#f5f3ff', borderBottom:'2px solid #ddd6fe' }}>
+                          <div style={{ padding:'8px 16px' }}>
+                            <p style={{ fontSize:10, fontWeight:700, color:'#6d28d9', textTransform:'uppercase' as const, letterSpacing:'.04em', margin:'0 0 6px' }}>Storico revisioni</p>
+                            {storico.map(h => (
+                              <div key={h.id} style={{ display:'flex', gap:10, alignItems:'center', padding:'5px 0', borderBottom:'1px solid #ede9fe', fontSize:11 }}>
+                                <span style={{ fontFamily:'monospace', color:'#7c3aed', minWidth:160 }}>{displayCodice(h)}</span>
+                                <span style={{ padding:'2px 7px', borderRadius:4, background:(STATO_COLOR[h.stato]||'#ccc')+'22', color:STATO_COLOR[h.stato]||'#666', fontSize:10, fontWeight:700 }}>{h.stato}</span>
+                                {h.motivo_rev && <span style={{ color:'var(--t3)', fontStyle:'italic' }}>"{h.motivo_rev}"</span>}
+                                <span style={{ color:'var(--t4)', marginLeft:'auto', fontSize:10 }}>
+                                  {h.revised_at ? new Date(h.revised_at).toLocaleDateString('it-IT') : '—'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   )
                 })}
               </tbody>
@@ -947,6 +1021,29 @@ ${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;
                 ⚠️ Per generare il link, porta lo stato RDO a <b>inviata</b> tramite il menu a tendina nella lista.
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {revModal && (
+        <div className="modal-overlay" onClick={e => { if(e.target===e.currentTarget) setRevModal(null) }}>
+          <div className="modal-box" style={{ maxWidth:420, width:'90%' }}>
+            <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>📝 Crea revisione RDO</h3>
+            <p style={{ fontSize:12, color:'var(--t3)', marginBottom:14 }}>
+              {displayCodice(revModal.doc)} → <strong>REV.{(revModal.doc.revisione||0)+1}</strong>
+            </p>
+            <div>
+              <label style={styleLbl}>Motivo revisione (opzionale)</label>
+              <textarea style={{ ...styleInp, resize:'vertical' as const, minHeight:70 }}
+                value={revModal.motivo} onChange={e => setRevModal({...revModal, motivo:e.target.value})}
+                placeholder="es. Aggiornamento importo, cambio fornitore..." />
+            </div>
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:14 }}>
+              <button style={styleBtn('#6b7280')} onClick={() => setRevModal(null)}>Annulla</button>
+              <button style={styleBtn('#6d28d9')} onClick={() => creaRevisioneRdo(revModal.doc, revModal.motivo)}>
+                Crea revisione →
+              </button>
+            </div>
           </div>
         </div>
       )}

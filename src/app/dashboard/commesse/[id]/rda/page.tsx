@@ -18,6 +18,12 @@ interface RDA {
   data_necessita: string; stato: string; fornitore_sugg: string
   note: string; created_at: string; wbs_id?: string
   voci_ids?: string[]
+  wbs_ref?: string
+  revisione?: number
+  doc_padre_id?: string
+  is_vigente?: boolean
+  motivo_rev?: string
+  revised_at?: string
 }
 interface VoceComputo { id: string; descrizione: string; um?: string; quantita?: number }
 
@@ -124,14 +130,25 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
   const [vociRda, setVociRda] = useState<VoceComputo[]>([])
   const [loadingVoci, setLoadingVoci] = useState(false)
   const [generandoRdo, setGenerandoRdo] = useState(false)
+  const [wbsEls, setWbsEls] = useState<{id:string;codice:string;descrizione:string}[]>([])
+  const [revModal, setRevModal] = useState<{doc: RDA; motivo: string} | null>(null)
+  const [storicoOpen, setStoricoOpen] = useState<Record<string,boolean>>({})
+  const [allRda, setAllRda] = useState<RDA[]>([])
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
   const carica = useCallback(async () => {
     setLoading(true)
     const { data } = await supabase.from('rda').select('*').eq('commessa_id', id).order('created_at', { ascending: false })
-    setRdaList((data as RDA[]) || [])
+    const all = (data as RDA[]) || []
+    setAllRda(all)
+    setRdaList(all.filter(r => r.is_vigente !== false))
     setLoading(false)
+  }, [id])
+
+  useEffect(() => {
+    supabase.from('wbs_elements' as any).select('id,codice,descrizione').eq('commessa_id', id)
+      .then(({ data }: any) => setWbsEls((data as any[]) || []))
   }, [id])
 
   useEffect(() => { carica() }, [carica])
@@ -177,6 +194,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
         fornitore_sugg: editRda.fornitore_sugg || '',
         note: editRda.note || '',
         wbs_id: editRda.wbs_id || null,
+      wbs_ref: editRda.wbs_ref || null,
       }
       if (editRda.id) {
         await supabase.from('rda').update(payload).eq('id', editRda.id)
@@ -253,6 +271,40 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
     showToast('RDA eliminata'); carica()
   }
 
+  const displayCodice = (r: RDA) => r.revisione ? `${r.codice} REV.${r.revisione}` : r.codice
+  const getStorico = (rdaId: string): RDA[] => {
+    const chain: RDA[] = []
+    let current = allRda.find(r => r.id === rdaId)
+    while (current?.doc_padre_id) {
+      const parent = allRda.find(r => r.id === current!.doc_padre_id)
+      if (!parent) break
+      chain.push(parent)
+      current = parent
+    }
+    return chain
+  }
+  const creaRevisione = async (rda: RDA, motivo: string) => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const aziendaId = await getAziendaId()
+    const { error } = await supabase.from('rda').insert({
+      commessa_id: rda.commessa_id, azienda_id: aziendaId || null,
+      codice: rda.codice, tipo: rda.tipo, oggetto: rda.oggetto,
+      qta_stimata: rda.qta_stimata, um: rda.um,
+      data_necessita: rda.data_necessita, stato: 'bozza',
+      fornitore_sugg: rda.fornitore_sugg, note: rda.note,
+      wbs_id: rda.wbs_id, wbs_ref: rda.wbs_ref,
+      revisione: (rda.revisione || 0) + 1,
+      doc_padre_id: rda.id, is_vigente: true,
+      motivo_rev: motivo || null,
+      revised_by: user?.id || null,
+      revised_at: new Date().toISOString(),
+    })
+    if (error) { showToast('Errore: ' + error.message); return }
+    await supabase.from('rda').update({ is_vigente: false }).eq('id', rda.id)
+    showToast('✅ Revisione creata')
+    setRevModal(null); carica()
+  }
+
   const rdaFiltrate = rdaList.filter(r => {
     if (filtroStato !== 'tutti' && r.stato !== filtroStato) return false
     if (filtroTipo  !== 'tutti' && r.tipo  !== filtroTipo)  return false
@@ -298,6 +350,18 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
         ))}
       </div>
 
+      {/* Alert WBS */}
+      {(() => {
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+        const senza = rdaList.filter(r => !r.wbs_ref && r.created_at < sevenDaysAgo && !['annullata','chiusa'].includes(r.stato))
+        if (senza.length === 0) return null
+        return (
+          <div style={{ padding:'10px 16px', background:'#fef9c3', border:'1px solid #fde68a', borderRadius:10, fontSize:12, color:'#92400e', display:'flex', alignItems:'center', gap:8 }}>
+            ⚠️ <b>{senza.length} RDA</b> senza WBS da più di 7 giorni — assegna per completare il tracking costi
+          </div>
+        )
+      })()}
+
       {/* Lista */}
       <div style={(styleObj as any).card as React.CSSProperties}>
         <div style={(styleObj as any).hdr as React.CSSProperties}>
@@ -334,12 +398,18 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
                 </tr>
               </thead>
               <tbody>
-                {rdaFiltrate.map(r => (
-                  <tr key={r.id} style={{ transition:'background .1s', cursor:'pointer' }}
+                {rdaFiltrate.map(r => {
+                  const storico = getStorico(r.id)
+                  return (
+                  <React.Fragment key={r.id}>
+                  <tr style={{ transition:'background .1s', cursor:'pointer' }}
                     onClick={() => caricaVoci(r)}
                     onMouseEnter={e=>(e.currentTarget.style.background='var(--accent-light)')}
                     onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
-                    <td style={{ ...(styleObj as any).td, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>{r.codice}</td>
+                    <td style={{ ...(styleObj as any).td, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>
+                      {displayCodice(r)}
+                      {r.wbs_ref && <span style={{ display:'block', fontSize:9, color:'var(--t3)', marginTop:1 }}>WBS: {r.wbs_ref}</span>}
+                    </td>
                     <td style={(styleObj as any).td as React.CSSProperties}><span style={(styleObj as any).badge('#3b82f6')}>{r.tipo}</span></td>
                     <td style={{ ...(styleObj as any).td, maxWidth:300, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{r.oggetto}</td>
                     <td style={{ ...(styleObj as any).td, fontSize:11 }}>{r.data_necessita || '—'}</td>
@@ -366,25 +436,55 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
   )}
 </td>
                     <td style={(styleObj as any).td as React.CSSProperties}>
-                      <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' as const }}>
+                      <div style={{ display:'flex', gap:5, alignItems:'center', flexWrap:'wrap' as const }}>
                         <span style={(styleObj as any).badge(STATO_COLOR[r.stato]||'#6b7280')}>{r.stato}</span>
                         {!['chiusa','annullata','inviata'].includes(r.stato) && (
-                          <button style={{ ...(styleObj as any).btn('#3b82f6'), padding:'4px 10px', fontSize:11 }}
+                          <button style={{ ...(styleObj as any).btn('#3b82f6'), padding:'3px 8px', fontSize:10 }}
                             onClick={e => { e.stopPropagation(); setEditRda(r); setFSearch(r.fornitore_sugg||''); setForm(true) }}>✎</button>
                         )}
                         {!['chiusa','annullata','inviata'].includes(r.stato) && (
-                          <button style={{ ...(styleObj as any).btn('#ef4444'), padding:'4px 10px', fontSize:11 }}
+                          <button style={{ ...(styleObj as any).btn('#ef4444'), padding:'3px 8px', fontSize:10 }}
                             onClick={e => {
                               e.stopPropagation()
                               if (!window.confirm(`Annullare la RDA ${r.codice}?`)) return
                               if (!window.confirm('Conferma: la RDA verrà marcata come ANNULLATA.')) return
                               cambiaStato(r, 'annullata')
-                            }}>✕ Annulla</button>
+                            }}>✕</button>
+                        )}
+                        {!['annullata'].includes(r.stato) && (
+                          <button style={{ ...(styleObj as any).btn('#6d28d9'), padding:'3px 8px', fontSize:10 }}
+                            onClick={e => { e.stopPropagation(); setRevModal({doc: r, motivo: ''}) }}
+                            title="Crea revisione">📝</button>
+                        )}
+                        {storico.length > 0 && (
+                          <button style={{ ...(styleObj as any).btn('#6b7280'), padding:'3px 8px', fontSize:10 }}
+                            onClick={e => { e.stopPropagation(); setStoricoOpen(prev => ({...prev, [r.id]: !prev[r.id]})) }}
+                            title="Storico revisioni">📜 {storico.length}</button>
                         )}
                       </div>
                     </td>
                   </tr>
-                ))}
+                  {storico.length > 0 && storicoOpen[r.id] && (
+                    <tr>
+                      <td colSpan={7} style={{ padding:0, background:'#f5f3ff', borderBottom:'2px solid #ddd6fe' }}>
+                        <div style={{ padding:'8px 16px' }}>
+                          <p style={{ fontSize:10, fontWeight:700, color:'#6d28d9', textTransform:'uppercase' as const, letterSpacing:'.04em', margin:'0 0 6px' }}>Storico revisioni</p>
+                          {storico.map(h => (
+                            <div key={h.id} style={{ display:'flex', gap:10, alignItems:'center', padding:'5px 0', borderBottom:'1px solid #ede9fe', fontSize:11 }}>
+                              <span style={{ fontFamily:'monospace', color:'#7c3aed', minWidth:130 }}>{displayCodice(h)}</span>
+                              <span style={(styleObj as any).badge(STATO_COLOR[h.stato]||'#6b7280')}>{h.stato}</span>
+                              {h.motivo_rev && <span style={{ color:'var(--t3)', fontStyle:'italic' }}>"{h.motivo_rev}"</span>}
+                              <span style={{ color:'var(--t4)', marginLeft:'auto', fontSize:10 }}>
+                                {h.revised_at ? new Date(h.revised_at).toLocaleDateString('it-IT') : h.created_at ? new Date(h.created_at).toLocaleDateString('it-IT') : '—'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
+                )})}
               </tbody>
             </table>
           </div>
@@ -451,6 +551,15 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
                   </div>
                 )}
              </div>}
+              {wbsEls.length > 0 && (
+                <div>
+                  <label style={(styleObj as any).lbl as React.CSSProperties}>WBS di riferimento</label>
+                  <select style={(styleObj as any).inp as React.CSSProperties} value={editRda.wbs_ref||''} onChange={e=>setEditRda({...editRda, wbs_ref:e.target.value})}>
+                    <option value="">— Nessuna WBS —</option>
+                    {wbsEls.map(w => <option key={w.id} value={w.codice}>{w.codice} — {w.descrizione}</option>)}
+                  </select>
+                </div>
+              )}
               <div>
                 <label style={(styleObj as any).lbl as React.CSSProperties}>Note</label>
                 <textarea style={{ ...(styleObj as any).inp, resize:'vertical' as const, minHeight:60 }} value={editRda.note||''} onChange={e=>setEditRda({...editRda, note:e.target.value})} />
@@ -528,6 +637,29 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
       {toast && (
         <div style={{ position:'fixed', bottom:20, right:20, background:'#14532d', color:'#fff', padding:'10px 18px', borderRadius:10, fontSize:12, fontWeight:700, zIndex:1000, boxShadow:'var(--shadow-lg)' }}>
           {toast}
+        </div>
+      )}
+
+      {revModal && (
+        <div className="modal-overlay" onClick={e => { if(e.target===e.currentTarget) setRevModal(null) }}>
+          <div className="modal-box" style={{ maxWidth:420, width:'90%' }}>
+            <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>📝 Crea revisione</h3>
+            <p style={{ fontSize:12, color:'var(--t3)', marginBottom:14 }}>
+              {displayCodice(revModal.doc)} → <strong>REV.{(revModal.doc.revisione||0)+1}</strong>
+            </p>
+            <div>
+              <label style={(styleObj as any).lbl as React.CSSProperties}>Motivo revisione (opzionale)</label>
+              <textarea style={{ ...(styleObj as any).inp, resize:'vertical' as const, minHeight:70 }}
+                value={revModal.motivo} onChange={e => setRevModal({...revModal, motivo:e.target.value})}
+                placeholder="es. Aggiornamento prezzi, cambio fornitore..." />
+            </div>
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:14 }}>
+              <button style={(styleObj as any).btn('#6b7280')} onClick={() => setRevModal(null)}>Annulla</button>
+              <button style={(styleObj as any).btn('#6d28d9')} onClick={() => creaRevisione(revModal.doc, revModal.motivo)}>
+                Crea revisione →
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

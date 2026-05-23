@@ -25,6 +25,10 @@ interface DAM {
   note_dl: string; note_interne: string
   data_emissione: string; data_invio_dl: string; data_risposta_dl: string
   motivo_rifiuto: string; fornitore_id: string; rdo_id?: string
+  doc_padre_id?: string
+  is_vigente?: boolean
+  motivo_rev?: string
+  revised_at?: string
 }
 
 interface Fornitore {
@@ -69,13 +73,18 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
   const [compliance, setCompliance] = useState<Record<string,boolean>>({})
   const [complianceOpen, setComplianceOpen] = useState(false)
   const [blockModal, setBlockModal] = useState(false)
+  const [revModal, setRevModal] = useState<{doc: DAM; motivo: string} | null>(null)
+  const [storicoOpen, setStoricoOpen] = useState<Record<string,boolean>>({})
+  const [allDam, setAllDam] = useState<DAM[]>([])
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
   const carica = useCallback(async () => {
     setLoading(true)
     const { data } = await supabase.from('dam').select('*').eq('commessa_id', id).order('created_at', { ascending: false })
-    setDamList((data as DAM[]) || [])
+    const allData = (data as DAM[]) || []
+    setAllDam(allData)
+    setDamList(allData.filter(d => d.is_vigente !== false))
     setLoading(false)
   }, [id])
 
@@ -227,6 +236,41 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
     showToast(`DAM ${dam.codice} → ${STATO_LBL[stato]}`); carica()
   }
 
+  const displayCodice = (d: DAM) => d.revisione ? `${d.codice} REV.${d.revisione}` : d.codice
+  const getStorico = (damId: string): DAM[] => {
+    const chain: DAM[] = []
+    let current = allDam.find(d => d.id === damId)
+    while (current?.doc_padre_id) {
+      const parent = allDam.find(d => d.id === current!.doc_padre_id)
+      if (!parent) break
+      chain.push(parent)
+      current = parent
+    }
+    return chain
+  }
+  const creaRevisioneDAM = async (dam: DAM, motivo: string) => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const aziendaId = await getAziendaId()
+    const { error } = await supabase.from('dam').insert({
+      commessa_id: dam.commessa_id, azienda_id: aziendaId || null,
+      codice: dam.codice, materiale: dam.materiale, descrizione: dam.descrizione,
+      quantita: dam.quantita, um: dam.um, marca_modello: dam.marca_modello,
+      norma_riferimento: dam.norma_riferimento, classe_prestazionale: dam.classe_prestazionale,
+      cam_compliant: dam.cam_compliant, dl_nome: dam.dl_nome, dl_email: dam.dl_email,
+      note_interne: dam.note_interne, fornitore_id: dam.fornitore_id, rdo_id: dam.rdo_id,
+      stato: 'bozza',
+      revisione: (dam.revisione || 0) + 1,
+      doc_padre_id: dam.id, is_vigente: true,
+      motivo_rev: motivo || null,
+      revised_by: user?.id || null,
+      revised_at: new Date().toISOString(),
+    })
+    if (error) { showToast('Errore: ' + error.message); return }
+    await supabase.from('dam').update({ is_vigente: false }).eq('id', dam.id)
+    showToast('✅ Revisione SAM creata')
+    setRevModal(null); carica()
+  }
+
   const damFiltrate = damList.filter(d => {
     if (filtroStato !== 'tutti' && d.stato !== filtroStato) return false
     if (search && !d.materiale?.toLowerCase().includes(search.toLowerCase()) && !d.codice?.toLowerCase().includes(search.toLowerCase())) return false
@@ -287,13 +331,15 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
                 </tr>
               </thead>
               <tbody>
-                {damFiltrate.map(d => (
-                  <tr key={d.id}
+                {damFiltrate.map(d => {
+                  const storico = getStorico(d.id)
+                  return (
+                  <React.Fragment key={d.id}>
+                  <tr
                     onMouseEnter={e=>(e.currentTarget.style.background='var(--accent-light)')}
                     onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
                     <td style={{ ...(styleObj as any).td, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>
-                      {d.codice}<br/>
-                      <span style={{ fontSize:10, color:'var(--t4)' }}>Rev.{d.revisione}</span>
+                      {displayCodice(d)}
                     </td>
                     <td style={(styleObj as any).td as React.CSSProperties}>
                       <p style={{ fontWeight:700, fontSize:12 }}>{d.materiale}</p>
@@ -367,9 +413,37 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
                             window.location.href = base + '?' + params.toString()
                           }}>✅ → ODA</button>
                       )}
+                      {!['approvata','rifiutata'].includes(d.stato) && (
+                        <button style={{ ...(styleObj as any).btn('#6d28d9'), padding:'4px 8px', fontSize:11, marginLeft:4 }}
+                          onClick={() => setRevModal({doc: d, motivo: ''})} title="Crea revisione">📝</button>
+                      )}
+                      {storico.length > 0 && (
+                        <button style={{ ...(styleObj as any).btn('#6b7280'), padding:'4px 8px', fontSize:11, marginLeft:4 }}
+                          onClick={() => setStoricoOpen(prev => ({...prev, [d.id]: !prev[d.id]}))} title="Storico">📜 {storico.length}</button>
+                      )}
                     </td>
                   </tr>
-                ))}
+                  {storico.length > 0 && storicoOpen[d.id] && (
+                    <tr>
+                      <td colSpan={8} style={{ padding:0, background:'#f5f3ff', borderBottom:'2px solid #ddd6fe' }}>
+                        <div style={{ padding:'8px 16px' }}>
+                          <p style={{ fontSize:10, fontWeight:700, color:'#6d28d9', textTransform:'uppercase' as const, letterSpacing:'.04em', margin:'0 0 6px' }}>Storico revisioni</p>
+                          {storico.map(h => (
+                            <div key={h.id} style={{ display:'flex', gap:10, alignItems:'center', padding:'5px 0', borderBottom:'1px solid #ede9fe', fontSize:11 }}>
+                              <span style={{ fontFamily:'monospace', color:'#7c3aed', minWidth:130 }}>{displayCodice(h)}</span>
+                              <span style={{ padding:'2px 7px', borderRadius:4, background:(STATO_COLOR[h.stato]||'#ccc')+'22', color:STATO_COLOR[h.stato]||'#666', fontSize:10, fontWeight:700 }}>{STATO_LBL[h.stato]||h.stato}</span>
+                              {h.motivo_rev && <span style={{ color:'var(--t3)', fontStyle:'italic' }}>"{h.motivo_rev}"</span>}
+                              <span style={{ color:'var(--t4)', marginLeft:'auto', fontSize:10 }}>
+                                {h.revised_at ? new Date(h.revised_at).toLocaleDateString('it-IT') : '—'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
+                )})}
               </tbody>
             </table>
           </div>
@@ -590,6 +664,29 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {revModal && (
+        <div className="modal-overlay" onClick={e => { if(e.target===e.currentTarget) setRevModal(null) }}>
+          <div className="modal-box" style={{ maxWidth:420, width:'90%' }}>
+            <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>📝 Crea revisione SAM</h3>
+            <p style={{ fontSize:12, color:'var(--t3)', marginBottom:14 }}>
+              {displayCodice(revModal.doc)} → <strong>REV.{(revModal.doc.revisione||0)+1}</strong>
+            </p>
+            <div>
+              <label style={(styleObj as any).lbl as React.CSSProperties}>Motivo revisione (opzionale)</label>
+              <textarea style={{ ...(styleObj as any).inp, resize:'vertical' as const, minHeight:70 }}
+                value={revModal.motivo} onChange={e => setRevModal({...revModal, motivo:e.target.value})}
+                placeholder="es. Cambio marca, aggiornamento norma..." />
+            </div>
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:14 }}>
+              <button style={(styleObj as any).btn('#6b7280')} onClick={() => setRevModal(null)}>Annulla</button>
+              <button style={(styleObj as any).btn('#6d28d9')} onClick={() => creaRevisioneDAM(revModal.doc, revModal.motivo)}>
+                Crea revisione →
+              </button>
             </div>
           </div>
         </div>

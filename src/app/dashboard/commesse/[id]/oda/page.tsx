@@ -99,6 +99,10 @@ export default function ODAPage() {
   const [damId, setDamId] = useState('')
   const [richiedeSam, setRichiedeSam] = useState(false)
   const [wbsRef, setWbsRef] = useState('')
+  const [wbsEls, setWbsEls] = useState<{id:string;codice:string;descrizione:string}[]>([])
+  const [revModal, setRevModal] = useState<{doc: any; motivo: string} | null>(null)
+  const [odaStorico, setOdaStorico] = useState<Record<string, any[]>>({})
+  const [storicoOpen, setStoricoOpen] = useState<Record<string,boolean>>({})
 
   const importoNum = parseFloat(importoNetto) || 0
   const totale = importoNum * (1 + parseFloat(ivaPct) / 100)
@@ -128,6 +132,10 @@ export default function ODAPage() {
 
   useEffect(() => { load(0) }, [commessaId])
   useEffect(() => { setRitenuta(String(TIPI_ODA.find(x => x.value === tipo)?.ritenuta || 0)) }, [tipo])
+  useEffect(() => {
+    ;(supabase as any).from('wbs_elements').select('id,codice,descrizione').eq('commessa_id', commessaId)
+      .then(({ data }: any) => setWbsEls((data as any[]) || []))
+  }, [commessaId])
 
   useEffect(() => {
     const rdo = searchParams.get('rdo_id')
@@ -234,14 +242,53 @@ export default function ODAPage() {
     await load()
   }
 
-  const totImpegnato = oda.filter(o => o.stato !== 'ANNULLATO').reduce((s: number, o: any) => s + o.importo_netto, 0)
-  const totRitenute = oda.filter(o => o.stato !== 'ANNULLATO').reduce((s: number, o: any) => s + (o.ritenuta_importo || 0), 0)
+  const odaVigente = oda.filter((o: any) => o.is_vigente !== false)
+  const totImpegnato = odaVigente.filter((o: any) => o.stato !== 'ANNULLATO').reduce((s: number, o: any) => s + o.importo_netto, 0)
+  const totRitenute = odaVigente.filter((o: any) => o.stato !== 'ANNULLATO').reduce((s: number, o: any) => s + (o.ritenuta_importo || 0), 0)
+
+  const displayCodiceOda = (o: any) => o.revisione ? `${o.numero} REV.${o.revisione}` : o.numero
+  const creaRevisioneOda = async (o: any, motivo: string) => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const aziendaId = await getAziendaId()
+    const { count } = await supabase.from('oda').select('*', { count: 'exact', head: true }).eq('commessa_id', commessaId)
+    const numero = `ODA-${new Date().getFullYear()}-${String((count || 0) + 1).padStart(3, '0')}`
+    const { error } = await (supabase as any).from('oda').insert({
+      commessa_id: o.commessa_id, azienda_id: aziendaId || null,
+      numero, tipo: o.tipo, tipo_oda: o.tipo_oda || o.tipo,
+      oggetto: o.oggetto, fornitore_id: o.fornitore_id,
+      importo_netto: o.importo_netto, iva_pct: o.iva_pct,
+      ritenuta_pct: o.ritenuta_pct, condizioni_pagamento: o.condizioni_pagamento,
+      data_consegna_prevista: o.data_consegna_prevista, note: o.note,
+      rdo_id: o.rdo_id, dam_id: o.dam_id, cig_riferimento: o.cig_riferimento,
+      wbs_ref: o.wbs_ref, stato: 'EMESSO',
+      revisione: (o.revisione || 0) + 1,
+      doc_padre_id: o.id, is_vigente: true,
+      motivo_rev: motivo || null,
+      revised_by: user?.id || null,
+      revised_at: new Date().toISOString(),
+    })
+    if (error) { alert('Errore revisione: ' + error.message); return }
+    await (supabase as any).from('oda').update({ is_vigente: false }).eq('id', o.id)
+    setRevModal(null); await load(0)
+  }
+  const loadStoricoOda = async (odaId: string, docPadreId?: string) => {
+    if (!docPadreId) return
+    const chain: any[] = []
+    let currentId: string | undefined = docPadreId
+    while (currentId) {
+      const { data } = await (supabase as any).from('oda').select('*').eq('id', currentId).maybeSingle()
+      if (!data) break
+      chain.push(data)
+      currentId = data.doc_padre_id
+    }
+    setOdaStorico(prev => ({...prev, [odaId]: chain}))
+  }
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-4 gap-3">
         {[
-          ['ODA emessi', String(oda.filter(o => o.stato !== 'ANNULLATO').length)],
+          ['ODA emessi', String(odaVigente.filter((o: any) => o.stato !== 'ANNULLATO').length)],
           ['Costi impegnati', '€ ' + fmt(totImpegnato)],
           ['Ritenute accumulate', '€ ' + fmt(totRitenute)],
           ['Da pagare netto', '€ ' + fmt(totImpegnato - totRitenute)],
@@ -252,6 +299,16 @@ export default function ODAPage() {
           </div>
         ))}
       </div>
+      {(() => {
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+        const senza = odaVigente.filter((o: any) => !o.wbs_ref && o.created_at < sevenDaysAgo && o.stato !== 'ANNULLATO')
+        if (senza.length === 0) return null
+        return (
+          <div style={{ padding:'10px 16px', background:'#fef9c3', border:'1px solid #fde68a', borderRadius:10, fontSize:12, color:'#92400e', display:'flex', alignItems:'center', gap:8 }}>
+            ⚠️ <b>{senza.length} ODA</b> senza WBS da più di 7 giorni — assegna per completare il tracking costi
+          </div>
+        )
+      })()}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-gray-900">Ordini di Acquisto (ODA)</h2>
@@ -266,14 +323,14 @@ export default function ODAPage() {
         : oda.length === 0
         ? <div className="flex flex-col items-center justify-center h-40 text-gray-400"><FileText className="w-10 h-10 text-gray-200 mb-3" /><p className="text-sm">Nessun ordine emesso</p></div>
         : <div className="space-y-2">
-            {oda.map((o: any) => (
+            {odaVigente.map((o: any) => (
               <div key={o.id} className="border border-gray-100 rounded-xl overflow-hidden">
                 <div className="flex items-center gap-3 p-3 cursor-pointer hover:bg-gray-50 select-none"
                   onClick={() => setExpanded(expanded === o.id ? null : o.id)}>
                   {expanded === o.id
                     ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
                     : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
-                  <span className="text-xs font-mono text-gray-400 w-28 shrink-0">{o.numero}</span>
+                  <span className="text-xs font-mono text-gray-400 w-28 shrink-0">{displayCodiceOda(o)}</span>
                   {(() => { const td = TIPI_ODA.find(x => x.value === (o.tipo_oda || o.tipo)); return (
                     <span style={{ flexShrink: 0, fontSize: 11, padding: '2px 8px', borderRadius: 4, fontWeight: 500, color: td?.color || '#374151', background: td?.bg || '#f3f4f6' }}>
                       {td?.label || o.tipo_oda || o.tipo}
@@ -335,6 +392,43 @@ export default function ODAPage() {
                       </button>
                     </div>
                     <VociRdaSection rdoId={o.rdo_id} supabase={supabase} />
+                    {o.wbs_ref && (
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <span className="font-medium">WBS:</span>
+                        <span className="font-mono bg-gray-100 px-2 py-0.5 rounded">{o.wbs_ref}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+                      {o.stato !== 'ANNULLATO' && (
+                        <button onClick={() => setRevModal({doc: o, motivo: ''})}
+                          className="text-xs px-2.5 py-1 rounded border border-purple-200 text-purple-600 hover:bg-purple-50 flex items-center gap-1">
+                          📝 Revisiona
+                        </button>
+                      )}
+                      {o.doc_padre_id && (
+                        <button onClick={() => {
+                          const isOpen = !!storicoOpen[o.id]
+                          setStoricoOpen(prev => ({...prev, [o.id]: !isOpen}))
+                          if (!isOpen && !odaStorico[o.id]) loadStoricoOda(o.id, o.doc_padre_id)
+                        }}
+                          className="text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 flex items-center gap-1">
+                          📜 Storico
+                        </button>
+                      )}
+                    </div>
+                    {storicoOpen[o.id] && odaStorico[o.id] && (
+                      <div className="bg-purple-50 rounded-lg p-3 space-y-2">
+                        <p className="text-xs font-semibold text-purple-700 uppercase tracking-wider">Storico revisioni</p>
+                        {odaStorico[o.id].map((h: any) => (
+                          <div key={h.id} className="flex items-center gap-3 text-xs text-gray-600 py-1 border-b border-purple-100">
+                            <span className="font-mono text-purple-600 w-36">{displayCodiceOda(h)}</span>
+                            <span className={`px-2 py-0.5 rounded font-medium ${STATI[h.stato]?.color || ''}`}>{STATI[h.stato]?.label || h.stato}</span>
+                            {h.motivo_rev && <span className="italic text-gray-400">"{h.motivo_rev}"</span>}
+                            <span className="ml-auto text-gray-400">{h.revised_at ? new Date(h.revised_at).toLocaleDateString('it-IT') : '—'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -450,8 +544,16 @@ export default function ODAPage() {
             )}
             <div>
               <label className="text-xs text-gray-500 mb-1 block">WBS / Area di riferimento</label>
-              <input value={wbsRef} onChange={e => setWbsRef(e.target.value)} placeholder="es. 01.02 — Struttura"
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2" />
+              {wbsEls.length > 0 ? (
+                <select value={wbsRef} onChange={e => setWbsRef(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2">
+                  <option value="">— Nessuna WBS —</option>
+                  {wbsEls.map((w: any) => <option key={w.id} value={w.codice}>{w.codice} — {w.descrizione}</option>)}
+                </select>
+              ) : (
+                <input value={wbsRef} onChange={e => setWbsRef(e.target.value)} placeholder="es. 01.02 — Struttura"
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2" />
+              )}
             </div>
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Note</label>
@@ -468,6 +570,30 @@ export default function ODAPage() {
                 className="flex-1 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
                 {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 Crea ODA
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {revModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <h2 className="text-base font-semibold">📝 Crea revisione ODA</h2>
+            <p className="text-sm text-gray-500">{displayCodiceOda(revModal.doc)} → <strong>REV.{(revModal.doc.revisione||0)+1}</strong></p>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Motivo revisione (opzionale)</label>
+              <textarea value={revModal.motivo} onChange={e => setRevModal({...revModal, motivo:e.target.value})}
+                rows={3} placeholder="es. Aggiornamento importo, cambio condizioni..."
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none" />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setRevModal(null)}
+                className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
+                Annulla
+              </button>
+              <button onClick={() => creaRevisioneOda(revModal.doc, revModal.motivo)}
+                className="flex-1 px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                Crea revisione →
               </button>
             </div>
           </div>
