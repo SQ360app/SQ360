@@ -11,9 +11,9 @@ import {
 
 const NAV = [
   { href: '/dashboard',                 icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/dashboard/mappa',           icon: Map,             label: 'Mappa cantieri' },
   { href: '/dashboard/gare',            icon: Search,          label: 'Analisi Gare' },
   { href: '/dashboard/commesse',        icon: FolderOpen,      label: 'Commesse' },
-  { href: '/dashboard/mappa',           icon: Map,             label: 'Mappa' },
   { href: '/dashboard/fornitori',       icon: Users,           label: 'Contatti' },
   { href: '/dashboard/scadenzario',     icon: Calendar,        label: 'Scadenzario' },
   { href: '/dashboard/amministrazione', icon: CreditCard,      label: 'Amministrazione' },
