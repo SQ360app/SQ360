@@ -60,7 +60,7 @@ interface AnalisiExtraVoce {
 
 // ─── CSS ────────────────────────────────────────────────────────────────────
 const V3_CSS = `
-.cmp-root{display:flex;width:100%;height:100%;overflow:hidden;background:#f4f5f7;font-family:'Segoe UI',system-ui,sans-serif;font-size:11px;user-select:none;box-sizing:border-box}
+.cmp-root{display:flex;height:100%;overflow:hidden;background:#f4f5f7;font-family:'Segoe UI',system-ui,sans-serif;font-size:11px;user-select:none}
 .cmp-sb{background:#fff;border-right:1px solid rgba(0,0,0,.12);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;transition:width .18s}
 .cmp-logo{padding:7px 10px;background:#14532d;display:flex;align-items:center;gap:8px;flex-shrink:0}
 .cmp-logo-txt{color:#fff;font-size:12px;font-weight:700;white-space:nowrap}
