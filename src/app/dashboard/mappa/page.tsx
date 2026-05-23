@@ -221,7 +221,7 @@ export default function MappaCantieri() {
 
       // ── Sede impresa ──────────────────────────────────────────────────────
       const { data: az, error: azErr } = await (supabase as any)
-        .from('azienda').select('*').eq('id', aziendaId).single()
+        .from('azienda').select('*').eq('id', aziendaId).maybeSingle()
 
       console.log('[Sede]', az, '— error:', azErr?.message)
 
