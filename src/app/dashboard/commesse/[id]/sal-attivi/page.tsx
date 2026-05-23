@@ -117,7 +117,7 @@ const V3_CSS = `
 .cmp-vcnt{color:#9ca3af;margin-left:auto;font-size:9px;white-space:nowrap}
 .cmp-tscroll{flex:1 1 0%;overflow-x:auto;overflow-y:scroll;min-height:0;min-width:0;width:100%;contain:strict}
 .cmp-tscroll::-webkit-scrollbar{width:6px;height:6px}.cmp-tscroll::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}
-table.cmp-t{width:100%;min-width:860px;border-collapse:collapse;table-layout:fixed}
+table.cmp-t{width:100%;border-collapse:collapse;table-layout:fixed}
 col.cc2{width:40px}col.cc3{width:120px}col.cc4{width:auto}
 col.cc5,col.cc6,col.cc7,col.cc8{width:60px}
 col.cc9{width:80px}col.cc10{width:80px}col.cc11{width:90px}
@@ -129,6 +129,7 @@ table.cmp-t td{padding:2px 3px;vertical-align:top;border-right:1px solid #e5e7eb
 .cmp-hsc td{background:#1e5631;padding:4px 10px;font-weight:700;font-size:11px;color:#fff;letter-spacing:.4px;border-bottom:2px solid #4ade80}
 .cmp-hca td{background:#166534;padding:3px 10px 3px 20px;font-weight:600;font-size:11px;color:#d1fae5}
 .cmp-rvo{cursor:pointer}
+.cmp-rvo td:nth-child(1),.cmp-rvo td:nth-child(2){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cmp-rvo:hover td{background:#d1fae5}
 .cmp-rvo.sel td{background:#bfdbfe!important;font-weight:600}
 .cmp-rvo.msel td{background:#c7d2fe!important;font-weight:600}
