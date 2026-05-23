@@ -322,13 +322,34 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
                       </div>
                     </td>
                     <td style={(styleObj as any).td as React.CSSProperties}>
-                      <select value={d.stato} onChange={e=>cambiaStato(d, e.target.value)}
-                        style={{ padding:'3px 6px', borderRadius:6, border:`1px solid ${STATO_COLOR[d.stato]||'#ccc'}44`, background:(STATO_COLOR[d.stato]||'#ccc')+'22', color:STATO_COLOR[d.stato]||'#666', fontSize:11, fontWeight:700, cursor:'pointer' }}>
-                        {STATI_DAM.map(s => <option key={s} value={s}>{STATO_LBL[s]}</option>)}
-                      </select>
+                      <span style={{ padding:'2px 8px', borderRadius:6, background:(STATO_COLOR[d.stato]||'#ccc')+'22', color:STATO_COLOR[d.stato]||'#666', fontSize:11, fontWeight:700, display:'inline-block' }}>
+                        {STATO_LBL[d.stato] || d.stato}
+                      </span>
                     </td>
                     <td style={(styleObj as any).td as React.CSSProperties}>
-                      <button style={{ ...(styleObj as any).btn('#3b82f6'), padding:'4px 10px', fontSize:11 }}
+                      {d.stato === 'bozza' && (
+                        <button style={{ ...(styleObj as any).btn('#7c3aed'), padding:'4px 10px', fontSize:11 }}
+                          onClick={() => cambiaStato(d, 'inviata_dl')}>📤 Invia DL</button>
+                      )}
+                      {d.stato === 'inviata_dl' && (
+                        <>
+                          <button style={{ ...(styleObj as any).btn('#10b981'), padding:'4px 10px', fontSize:11 }}
+                            onClick={() => cambiaStato(d, 'approvata')}>✅ Approva</button>
+                          <button style={{ ...(styleObj as any).btn('#dc2626'), padding:'4px 10px', fontSize:11, marginLeft:4 }}
+                            onClick={() => { if (!window.confirm(`Rifiutare la SAM ${d.codice}?`)) return; cambiaStato(d, 'rifiutata') }}>✕ Rifiuta</button>
+                          <button style={{ ...(styleObj as any).btn('#f59e0b'), padding:'4px 10px', fontSize:11, marginLeft:4 }}
+                            onClick={() => cambiaStato(d, 'integrazione')}>🔄 Integrazione</button>
+                        </>
+                      )}
+                      {d.stato === 'integrazione' && (
+                        <button style={{ ...(styleObj as any).btn('#7c3aed'), padding:'4px 10px', fontSize:11 }}
+                          onClick={() => cambiaStato(d, 'inviata_dl')}>📤 Reinvia DL</button>
+                      )}
+                      {d.stato === 'rifiutata' && (
+                        <button style={{ ...(styleObj as any).btn('#6b7280'), padding:'4px 10px', fontSize:11 }}
+                          onClick={() => cambiaStato(d, 'bozza')}>↩ Riapri</button>
+                      )}
+                      <button style={{ ...(styleObj as any).btn('#3b82f6'), padding:'4px 10px', fontSize:11, marginLeft:4 }}
                         onClick={() => { setEditDam(d); setFSearch(''); setCompliance({}); setComplianceOpen(false); setForm(true) }}>✎</button>
                       <button style={{ ...(styleObj as any).btn('#6366f1'), padding:'4px 8px', fontSize:11, marginLeft:4 }}
                         disabled={pdfLoading === d.id}
@@ -456,17 +477,9 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
                   <input type="email" style={(styleObj as any).inp as React.CSSProperties} value={editDam.dl_email||''} onChange={e=>setEditDam({...editDam, dl_email:e.target.value})} />
                 </div>
               </div>
-              <div style={(styleObj as any).row(2)}>
-                <div>
-                  <label style={(styleObj as any).lbl as React.CSSProperties}>Stato</label>
-                  <select style={(styleObj as any).inp as React.CSSProperties} value={editDam.stato||'bozza'} onChange={e=>setEditDam({...editDam, stato:e.target.value})}>
-                    {STATI_DAM.map(s => <option key={s} value={s}>{STATO_LBL[s]}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={(styleObj as any).lbl as React.CSSProperties}>Note DL</label>
-                  <input style={(styleObj as any).inp as React.CSSProperties} value={editDam.note_dl||''} onChange={e=>setEditDam({...editDam, note_dl:e.target.value})} />
-                </div>
+              <div>
+                <label style={(styleObj as any).lbl as React.CSSProperties}>Note DL</label>
+                <input style={(styleObj as any).inp as React.CSSProperties} value={editDam.note_dl||''} onChange={e=>setEditDam({...editDam, note_dl:e.target.value})} />
               </div>
               {editDam.stato === 'rifiutata' && (
                 <div>

@@ -677,15 +677,23 @@ ${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;
                         {r.importo_offerta ? fi(r.importo_offerta) : '—'}
                       </td>
                       <td style={styleTd}>
-                        <select value={r.stato} onChange={e => cambiaStato(r, e.target.value)}
-                          style={{ padding:'3px 6px', borderRadius:6, border:'1px solid ' + (STATO_COLOR[r.stato] || '#ccc') + '44', background:(STATO_COLOR[r.stato] || '#ccc') + '22', color: STATO_COLOR[r.stato] || '#666', fontSize:11, fontWeight:700, cursor:'pointer' }}>
-                          {STATI_RDO.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
+                        <span style={{ padding:'2px 8px', borderRadius:6, background:(STATO_COLOR[r.stato] || '#ccc') + '22', color: STATO_COLOR[r.stato] || '#666', fontSize:11, fontWeight:700, display:'inline-block' }}>
+                          {r.stato}
+                        </span>
                       </td>
                       <td style={{ ...styleTd, whiteSpace:'nowrap' }}>
-                        <button style={styleBtn('#3b82f6')} onClick={() => { setEditRdo(r); setFSearch(r.fornitore || ''); setForm(true) }}>
-                          Modifica
-                        </button>
+                        {!['aggiudicata','annullata'].includes(r.stato) && (
+                          <button style={styleBtn('#3b82f6')} onClick={() => { setEditRdo(r); setFSearch(r.fornitore || ''); setForm(true) }}>
+                            Modifica
+                          </button>
+                        )}
+                        {!['aggiudicata','annullata'].includes(r.stato) && (
+                          <button style={{...styleBtn('#dc2626'),fontSize:11,marginLeft:4}} onClick={() => {
+                            if (!window.confirm(`Annullare la RDO ${r.codice}?`)) return
+                            if (!window.confirm('Conferma: la RDO verrà marcata come ANNULLATA.')) return
+                            cambiaStato(r, 'annullata')
+                          }}>✕ Annulla</button>
+                        )}
                         <button style={{...styleBtn('#475569'),fontSize:11,marginLeft:4}} onClick={() => generaPdf(r)}>📄 PDF</button>
                         {r.stato === 'inviata' && (
                           <button style={{...styleBtn('#7c3aed'),fontSize:11,marginLeft:4}} onClick={() => setInviaRdo(r)}>📤 Invia</button>
@@ -792,12 +800,6 @@ ${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;
               <div>
                 <label style={styleLbl}>Importo offerta ricevuta (EUR)</label>
                 <input type="number" step="0.01" style={styleInp} value={editRdo.importo_offerta || ''} onChange={e => setEditRdo({ ...editRdo, importo_offerta: parseFloat(e.target.value) || 0 })} />
-              </div>
-              <div>
-                <label style={styleLbl}>Stato</label>
-                <select style={styleInp} value={editRdo.stato || 'bozza'} onChange={e => setEditRdo({ ...editRdo, stato: e.target.value })}>
-                  {STATI_RDO.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
               </div>
               <div>
                 <label style={styleLbl}>Tipo affidamento</label>

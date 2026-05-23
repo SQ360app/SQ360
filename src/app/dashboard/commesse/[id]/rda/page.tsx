@@ -361,24 +361,25 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
     </button>
   ) : (
     <span style={{ fontSize:10, color:'var(--t3)' }}>
-      {r.stato === 'inviata' ? '🔵 RDO in corso' : r.stato === 'chiusa' ? '✅ Chiusa' : ''}
+      {r.stato === 'inviata' ? '🔵 RDO in corso' : r.stato === 'chiusa' ? '✅ Chiusa' : r.stato === 'annullata' ? '🔴 Annullata' : ''}
     </span>
   )}
 </td>
                     <td style={(styleObj as any).td as React.CSSProperties}>
-                      <select value={r.stato}
-                        onChange={e => cambiaStato(r, e.target.value)}
-                        style={{ padding:'3px 6px', borderRadius:6, border:`1px solid ${STATO_COLOR[r.stato] || '#ccc'}44`, background:(STATO_COLOR[r.stato]||'#ccc')+'22', color:STATO_COLOR[r.stato]||'#666', fontSize:11, fontWeight:700, cursor:'pointer' }}>
-                        {STATI.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </td>
-                    <td style={(styleObj as any).td as React.CSSProperties}>
-                      <div style={{ display:'flex', gap:6 }}>
-                        <button style={{ ...(styleObj as any).btn('#3b82f6'), padding:'4px 10px', fontSize:11 }}
-                          onClick={() => { setEditRda(r); setFSearch(r.fornitore_sugg||''); setForm(true) }}>✎</button>
-                        {r.stato === 'bozza' && (
+                      <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' as const }}>
+                        <span style={(styleObj as any).badge(STATO_COLOR[r.stato]||'#6b7280')}>{r.stato}</span>
+                        {!['chiusa','annullata','inviata'].includes(r.stato) && (
+                          <button style={{ ...(styleObj as any).btn('#3b82f6'), padding:'4px 10px', fontSize:11 }}
+                            onClick={e => { e.stopPropagation(); setEditRda(r); setFSearch(r.fornitore_sugg||''); setForm(true) }}>✎</button>
+                        )}
+                        {!['chiusa','annullata','inviata'].includes(r.stato) && (
                           <button style={{ ...(styleObj as any).btn('#ef4444'), padding:'4px 10px', fontSize:11 }}
-                            onClick={() => elimina(r)}>✕</button>
+                            onClick={e => {
+                              e.stopPropagation()
+                              if (!window.confirm(`Annullare la RDA ${r.codice}?`)) return
+                              if (!window.confirm('Conferma: la RDA verrà marcata come ANNULLATA.')) return
+                              cambiaStato(r, 'annullata')
+                            }}>✕ Annulla</button>
                         )}
                       </div>
                     </td>
@@ -412,19 +413,11 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
                 <label style={(styleObj as any).lbl as React.CSSProperties}>Oggetto *</label>
                 <input style={(styleObj as any).inp as React.CSSProperties} value={editRda.oggetto||''} onChange={e=>setEditRda({...editRda, oggetto:e.target.value})} placeholder="Descrivi la richiesta..." />
               </div>
-              <div style={(styleObj as any).row as React.CSSProperties}>
-                <div>
-                  <label style={(styleObj as any).lbl as React.CSSProperties}>Tipo *</label>
-                  <select style={(styleObj as any).inp as React.CSSProperties} value={editRda.tipo||'MAT'} onChange={e=>setEditRda({...editRda, tipo:e.target.value})}>
-                    {TIPI.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={(styleObj as any).lbl as React.CSSProperties}>Stato</label>
-                  <select style={(styleObj as any).inp as React.CSSProperties} value={editRda.stato||'bozza'} onChange={e=>setEditRda({...editRda, stato:e.target.value})}>
-                    {STATI.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
+              <div>
+                <label style={(styleObj as any).lbl as React.CSSProperties}>Tipo *</label>
+                <select style={(styleObj as any).inp as React.CSSProperties} value={editRda.tipo||'MAT'} onChange={e=>setEditRda({...editRda, tipo:e.target.value})}>
+                  {TIPI.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
               </div>
               <div style={(styleObj as any).row as React.CSSProperties}>
                 <div>

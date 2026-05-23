@@ -322,7 +322,10 @@ export default function ODAPage() {
                           {STATI[s]?.label}
                         </button>
                       ))}
-                      <button onClick={() => cambiaStato(o.id, 'ANNULLATO')}
+                      <button onClick={() => {
+                        if (!window.confirm(`Annullare l'ODA ${o.numero}? Operazione non reversibile.`)) return
+                        cambiaStato(o.id, 'ANNULLATO')
+                      }}
                         className="text-xs px-2.5 py-1 rounded border border-red-100 text-red-500 hover:bg-red-50 ml-auto">
                         Annulla
                       </button>
