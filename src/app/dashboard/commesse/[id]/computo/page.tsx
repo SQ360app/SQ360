@@ -950,20 +950,20 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
             <div ref={scrollRef} className="cmp-tscroll" onClick={() => setCtx(null)}>
               <table className="cmp-t">
                 <colgroup>
-                  <col className="cc2" /><col className="cc3" /><col className="cc4" />
+                  <col style={{ width: 28 }} /><col className="cc2" /><col className="cc3" /><col className="cc4" />
                   <col className="cc5" /><col className="cc6" /><col className="cc7" /><col className="cc8" />
                   <col className="cc9" /><col className="cc10" /><col className="cc11" />
                   <col className="cc12" /><col className="cc13" /><col className="cc14" /><col className="cc15" />
                 </colgroup>
                 <thead>
                   <tr>
-                    <th rowSpan={2} style={{ width: 40 }}>
-                      <input type="checkbox" style={{ display: 'block', margin: '0 auto 2px' }}
+                    <th rowSpan={2} style={{ width: 28, textAlign: 'center', verticalAlign: 'middle' }}>
+                      <input type="checkbox" style={{ margin: 0 }}
                         checked={tableRows.filter(r => r.type === 'vo').length > 0 && tableRows.filter(r => r.type === 'vo').every(r => multiSel.has((r as any).v.id))}
                         onChange={e => { const ids = tableRows.filter(r => r.type === 'vo').map(r => (r as any).v.id); setMultiSel(e.target.checked ? new Set(ids) : new Set()) }}
                         onClick={ev => ev.stopPropagation()} />
-                      Nr
                     </th>
+                    <th rowSpan={2} style={{ width: 36 }}>Nr</th>
                     <th rowSpan={2}>Tariffa</th>
                     <th rowSpan={2} className="thl">DESIGNAZIONE dei LAVORI / WBS</th>
                     <th colSpan={4}>DIMENSIONI</th>
@@ -981,8 +981,8 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                 </thead>
                 <tbody>
                   {tableRows.map(row => {
-                    if (row.type === 'hsc') return <tr key={`hsc_${row.id}`} className="cmp-hsc"><td colSpan={14}>▸ {row.lb}</td></tr>
-                    if (row.type === 'hca') return <tr key={`hca_${row.id}`} className="cmp-hca"><td colSpan={14}>{row.lb}</td></tr>
+                    if (row.type === 'hsc') return <tr key={`hsc_${row.id}`} className="cmp-hsc"><td colSpan={15}>▸ {row.lb}</td></tr>
+                    if (row.type === 'hca') return <tr key={`hca_${row.id}`} className="cmp-hca"><td colSpan={15}>{row.lb}</td></tr>
 
                     if (row.type === 'vo') {
                       const v = row.v
@@ -994,10 +994,10 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                         <tr key={v.id} className={`cmp-rvo${isMSel ? ' msel' : isSel ? ' sel' : ''}`}
                           onClick={e => handleRowClick(e, v.id)}
                           onContextMenu={e => { e.preventDefault(); setCtx({ x: e.clientX, y: e.clientY, id: v.id }) }}>
-                          <td style={{ textAlign: 'center', fontSize: 11, fontWeight: 700 }}>
-                            <input type="checkbox" checked={isMSel} onChange={() => toggleSelezione(v.id)} onClick={e => e.stopPropagation()} style={{ display: 'block', margin: '0 auto 1px' }} />
-                            {idx}
+                          <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
+                            <input type="checkbox" checked={isMSel} onChange={() => toggleSelezione(v.id)} onClick={e => e.stopPropagation()} style={{ margin: 0 }} />
                           </td>
+                          <td style={{ textAlign: 'center', fontSize: 11, fontWeight: 700 }}>{idx}</td>
                           <td className="tariffa-link" style={{ fontSize: 10, color: '#1d4ed8', fontFamily: 'monospace', cursor: 'pointer' }}
                             onClick={e => { e.stopPropagation(); setSel(v.id) }}>{v.codice}</td>
                           <td style={{ fontSize: 10, maxWidth: 0 }}>
@@ -1123,6 +1123,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                       return (
                         <tr key={`mi_${v.id}`} className={`cmp-rmi${isSel ? ' sel' : ''}`}>
                           <td />
+                          <td />
                           <td /><td style={{ paddingLeft: 28, color: '#6b7280', fontSize: 10, fontStyle: 'italic' }}>
                             {v.note?.split('>').pop()?.trim() || 'misura da XPWE'}
                           </td>
@@ -1141,6 +1142,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                       return (
                         <React.Fragment key={`som_${v.id}`}>
                           <tr className="cmp-rsom">
+                            <td />
                             <td colSpan={3} style={{ textAlign: 'right', paddingRight: 6, fontWeight: 700, fontSize: 10 }}>SOMMANO {v.um}</td>
                             <td colSpan={4} />
                             <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 11, fontFamily: 'monospace' }}>{f3(v.quantita)}</td>
@@ -1168,7 +1170,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                             const altreVoci = voci.filter(x => x.codice === v.codice && x.id !== v.id).length
                             return (
                               <tr>
-                                <td colSpan={14} style={{ padding: 0 }}>
+                                <td colSpan={15} style={{ padding: 0 }}>
                                   <div className="cmp-analisi-panel" onClick={e => e.stopPropagation()}>
 
                                     {/* Header */}
