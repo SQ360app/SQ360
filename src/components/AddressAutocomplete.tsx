@@ -76,6 +76,16 @@ function buildQuery(tipo: string, testo: string, comune?: string, provincia?: st
   }
 }
 
+const NOM_HEADERS = { 'Accept-Language': 'it', 'User-Agent': 'SQ360/1.0 info.sq360@gmail.com' }
+const NOM_BASE    = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&countrycodes=it&viewbox=6.6,47.1,18.5,35.5&bounded=0'
+
+async function nominatimFetch(q: string): Promise<NominatimResult[]> {
+  try {
+    const r = await fetch(`${NOM_BASE}&q=${encodeURIComponent(q)}`, { headers: NOM_HEADERS })
+    return await r.json()
+  } catch { return [] }
+}
+
 function getProvince(a: Record<string, string>): string {
   const iso = a['ISO3166-2-lvl6']
   if (iso) return iso.split('-').pop()?.toUpperCase() || ''
@@ -148,12 +158,23 @@ export function AddressAutocomplete({
     setLoading(true)
     setNoResults(false)
     try {
-      const query = buildQuery(tipo, q, comuneCorrente, provinciaCorrente)
-      const res   = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5&countrycodes=it`,
-        { headers: { 'Accept-Language': 'it', 'User-Agent': 'SQ360/1.0 info.sq360@gmail.com' } }
-      )
-      const data: NominatimResult[] = await res.json()
+      // Tentativo 1: query completa con comune/provincia
+      let data = await nominatimFetch(buildQuery(tipo, q, comuneCorrente, provinciaCorrente))
+
+      // Tentativo 2: rimuovi numero civico (Nominatim trova meglio la via senza civico)
+      if (data.length === 0 && /\d/.test(q)) {
+        const soloVia = q.replace(/\s*\d+[a-zA-Z]?\s*/g, ' ').trim()
+        if (soloVia.length >= 3) {
+          data = await nominatimFetch(buildQuery(tipo, soloVia, comuneCorrente, provinciaCorrente))
+        }
+      }
+
+      // Tentativo 3: fallback solo comune + provincia (utile per frazioni/contrade sconosciute)
+      if (data.length === 0 && comuneCorrente) {
+        const q3 = [comuneCorrente, provinciaCorrente, 'Italia'].filter(Boolean).join(', ')
+        data = await nominatimFetch(q3)
+      }
+
       setResults(data)
       setOpen(true)
       setNoResults(data.length === 0)

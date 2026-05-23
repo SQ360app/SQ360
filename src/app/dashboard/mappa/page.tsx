@@ -265,9 +265,28 @@ export default function MappaCantieri() {
       aziendaIdRef.current = aziendaId
 
       // ── Sedi azienda (pin colorati per tipo) ──────────────────────────────
-      const { data: sediAz } = await (supabase as any)
+      const { data: sediAz, error: sediErr } = await (supabase as any)
         .from('azienda_sedi').select('*').eq('azienda_id', aziendaId).eq('attiva', true)
+      console.log('[Sedi]', sediAz, sediErr?.message)
+
       for (const s of sediAz || []) {
+        // Geocodifica on-the-fly se mancano le coordinate
+        if (!s.lat || !s.lng) {
+          const q = [s.indirizzo, s.comune, s.provincia, 'Italia'].filter(Boolean).join(', ')
+          if (q.trim()) {
+            try {
+              await new Promise(r => setTimeout(r, 600))
+              const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=it`, { headers: { 'Accept-Language': 'it' } })
+              const j = await r.json()
+              if (j[0]) {
+                s.lat = parseFloat(j[0].lat)
+                s.lng = parseFloat(j[0].lon)
+                ;(supabase as any).from('azienda_sedi').update({ lat: s.lat, lng: s.lng }).eq('id', s.id).then()
+                console.log('[Sedi geocoding]', s.nome || s.tipo, '→', s.lat, s.lng)
+              }
+            } catch { /* non bloccante */ }
+          }
+        }
         if (!s.lat || !s.lng) continue
         const meta = SEDE_TIPI[s.tipo] || SEDE_TIPI.altro
         const el = document.createElement('div')

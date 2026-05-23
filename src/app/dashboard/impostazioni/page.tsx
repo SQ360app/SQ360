@@ -65,7 +65,10 @@ interface AziendaInfo {
   ragione_sociale: string
   piva: string
   cf: string
-  sede: string
+  indirizzo_sede: string
+  cap_sede: string
+  comune_sede: string
+  provincia_sede: string
   pec: string
   email: string
   tel: string
@@ -182,7 +185,10 @@ export default function ImpostazioniPage() {
     ragione_sociale: 'Costruzioni Generali Bianchi Srl',
     piva: '12345678901',
     cf: '12345678901',
-    sede: 'Via Roma 1, 20100 Milano MI',
+    indirizzo_sede: 'Via Roma 1',
+    cap_sede: '20100',
+    comune_sede: 'Milano',
+    provincia_sede: 'MI',
     pec: 'costruzioni.bianchi@pec.it',
     email: 'info@costruzionibianchi.it',
     tel: '+39 02 1234567',
@@ -405,35 +411,84 @@ export default function ImpostazioniPage() {
                   { key: 'piva', label: 'Partita IVA' },
                   { key: 'cf', label: 'Codice Fiscale' },
                   { key: 'rea', label: 'Numero REA' },
-                  { key: 'sede', label: 'Sede Legale', full: true },
+                ] as { key: keyof AziendaInfo; label: string }[]).map(f => (
+                  <div key={String(f.key)}>
+                    <label style={{ display: 'block', fontSize: 11, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, fontWeight: 600 }}>{f.label}</label>
+                    <input
+                      value={azienda[f.key] as string}
+                      onChange={e => setAzienda(prev => ({ ...prev, [f.key]: e.target.value }))}
+                      style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', color: 'var(--t1)', fontSize: 13 }}
+                    />
+                  </div>
+                ))}
+
+                {/* Sede legale — campi separati */}
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'block', fontSize: 11, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, fontWeight: 600 }}>Sede Legale — Indirizzo</label>
+                  <AddressAutocomplete
+                    value={azienda.indirizzo_sede}
+                    onChange={v => setAzienda(prev => ({ ...prev, indirizzo_sede: v }))}
+                    onSelect={parsed => setAzienda(prev => ({
+                      ...prev,
+                      indirizzo_sede: parsed.indirizzo,
+                      cap_sede:       parsed.cap,
+                      comune_sede:    parsed.comune,
+                      provincia_sede: parsed.provincia,
+                    }))}
+                    placeholder="Via Roma 1"
+                    inputStyle={{ width: '100%', boxSizing: 'border-box' as const, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', color: 'var(--t1)', fontSize: 13 }}
+                  />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 70px', gap: 10, gridColumn: 'span 2' }}>
+                  {([
+                    { key: 'cap_sede',       label: 'CAP',     maxLen: 5, placeholder: '20100' },
+                    { key: 'comune_sede',    label: 'Comune',  placeholder: 'Milano' },
+                    { key: 'provincia_sede', label: 'Prov.',   maxLen: 2, placeholder: 'MI', upper: true },
+                  ] as { key: keyof AziendaInfo; label: string; maxLen?: number; placeholder: string; upper?: boolean }[]).map(f => (
+                    <div key={String(f.key)}>
+                      <label style={{ display: 'block', fontSize: 11, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, fontWeight: 600 }}>{f.label}</label>
+                      <input
+                        value={azienda[f.key] as string}
+                        maxLength={f.maxLen}
+                        placeholder={f.placeholder}
+                        onChange={e => setAzienda(prev => ({ ...prev, [f.key]: f.upper ? e.target.value.toUpperCase() : e.target.value }))}
+                        style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', color: 'var(--t1)', fontSize: 13 }}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                {([
                   { key: 'pec', label: 'PEC' },
                   { key: 'email', label: 'Email' },
                   { key: 'tel', label: 'Telefono' },
-                  { key: 'soa_categorie', label: 'Categorie SOA', full: true },
-                  { key: 'patente_crediti', label: 'Punteggio Patente Crediti' },
-                ] as { key: keyof AziendaInfo; label: string; full?: boolean }[]).map(f => (
-                  <div key={f.key} style={{ gridColumn: f.full ? 'span 2' : undefined }}>
+                ] as { key: keyof AziendaInfo; label: string }[]).map(f => (
+                  <div key={String(f.key)}>
                     <label style={{ display: 'block', fontSize: 11, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, fontWeight: 600 }}>{f.label}</label>
-                    {f.key === 'sede' ? (
-                      <AddressAutocomplete
-                        value={azienda.sede}
-                        onChange={v => setAzienda(prev => ({ ...prev, sede: v }))}
-                        onSelect={parsed => setAzienda(prev => ({
-                          ...prev,
-                          sede: [parsed.indirizzo, parsed.cap && parsed.comune ? `${parsed.cap} ${parsed.comune}` : parsed.comune, parsed.provincia].filter(Boolean).join(', '),
-                        }))}
-                        placeholder="Via Roma 1, 20100 Milano MI"
-                        inputStyle={{ width: '100%', boxSizing: 'border-box' as const, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', color: 'var(--t1)', fontSize: 13 }}
-                      />
-                    ) : (
-                      <input
-                        value={azienda[f.key]}
-                        onChange={e => setAzienda(prev => ({ ...prev, [f.key]: e.target.value }))}
-                        style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', color: 'var(--t1)', fontSize: 13 }}
-                      />
-                    )}
+                    <input
+                      value={azienda[f.key] as string}
+                      onChange={e => setAzienda(prev => ({ ...prev, [f.key]: e.target.value }))}
+                      style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', color: 'var(--t1)', fontSize: 13 }}
+                    />
                   </div>
                 ))}
+
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'block', fontSize: 11, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, fontWeight: 600 }}>Categorie SOA</label>
+                  <input
+                    value={azienda.soa_categorie}
+                    onChange={e => setAzienda(prev => ({ ...prev, soa_categorie: e.target.value }))}
+                    style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', color: 'var(--t1)', fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, fontWeight: 600 }}>Punteggio Patente Crediti</label>
+                  <input
+                    value={azienda.patente_crediti}
+                    onChange={e => setAzienda(prev => ({ ...prev, patente_crediti: e.target.value }))}
+                    style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', color: 'var(--t1)', fontSize: 13 }}
+                  />
+                </div>
               </div>
               <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
                 {savedOk && (
