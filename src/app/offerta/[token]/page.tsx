@@ -10,7 +10,7 @@ interface VoceRDA { id: string; codice: string; descrizione: string; um: string;
 interface RDO {
   id: string; codice: string; oggetto: string; fornitore: string
   data_scadenza: string; note: string; stato_offerta: string
-  rda_id?: string; commessa_id?: string
+  rda_id?: string; commessa_id?: string; azienda_id?: string
 }
 interface Commessa { codice: string; nome: string; committente: string }
 
@@ -41,6 +41,7 @@ export default function OffertaPage({ params: p }: { params: Promise<{ token: st
   const [inviata, setInviata] = useState(false)
   const [sending, setSending] = useState(false)
   const [errore, setErrore]   = useState('')
+  const [adminEmail, setAdminEmail] = useState('')
 
   // ── Form state ────────────────────────────────────────────────────────────
   const [prezziVoci, setPrezziVoci] = useState<Record<string, number>>({})
@@ -63,7 +64,7 @@ export default function OffertaPage({ params: p }: { params: Promise<{ token: st
     ;(async () => {
       const { data: rdoData } = await supabase
         .from('rdo')
-        .select('id,codice,oggetto,fornitore,data_scadenza,note,stato_offerta,rda_id,commessa_id')
+        .select('id,codice,oggetto,fornitore,data_scadenza,note,stato_offerta,rda_id,commessa_id,azienda_id')
         .eq('token_offerta', token)
         .maybeSingle()
 
@@ -90,6 +91,11 @@ export default function OffertaPage({ params: p }: { params: Promise<{ token: st
           ;(v || []).forEach((x: VoceRDA) => { init[x.id] = 0 })
           setPrezziVoci(init)
         }
+      }
+
+      if (rdoData.azienda_id) {
+        const { data: admin } = await (supabase as any).from('utenti').select('email').eq('azienda_id', rdoData.azienda_id).eq('ruolo', 'admin').limit(1).maybeSingle()
+        if (admin?.email) setAdminEmail(admin.email)
       }
 
       setLoading(false)
@@ -131,6 +137,13 @@ export default function OffertaPage({ params: p }: { params: Promise<{ token: st
       }).eq('id', rdo.id)
 
       if (error) { setErrore('Errore invio: ' + error.message); return }
+
+      if (adminEmail && rdo) {
+        const sub = `Offerta ricevuta: ${rdo.codice} da ${rdo.fornitore || 'Fornitore'}`
+        const notHtml = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto"><div style="background:#1e3a5f;padding:20px;text-align:center"><span style="font-size:22px;font-weight:800;color:#fff">SQ360</span></div><div style="padding:24px;background:#fff;border:1px solid #e5e7eb"><h2 style="color:#1e3a5f;font-size:16px">Nuova offerta ricevuta</h2><p style="color:#374151;font-size:13px">Il fornitore <b>${rdo.fornitore || '—'}</b> ha inviato la propria offerta per la RDO <b>${rdo.codice}</b>.</p><div style="padding:12px 16px;background:#f0fdf4;border-left:4px solid #10b981;border-radius:4px;margin:16px 0"><span style="font-size:20px;font-weight:800;color:#059669">€ ${fi(totOfferta)}</span><span style="font-size:12px;color:#6b7280;margin-left:8px">importo offerta</span></div><p style="color:#6b7280;font-size:12px">Accedi a SQ360 per visualizzare il dettaglio e procedere con la comparativa.</p></div><p style="text-align:center;color:#9ca3af;font-size:10px;padding:12px">Notifica automatica SQ360</p></div>`
+        fetch('/api/email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: adminEmail, subject: sub, html: notHtml }) }).catch(() => {})
+      }
+
       setInviata(true)
     } finally { setSending(false) }
   }

@@ -35,6 +35,10 @@ interface RDO {
   tipo_affidamento?: string
   pct_manodopera?: number
   richiede_sam?: boolean
+  token_offerta?: string
+  email_inviata?: boolean
+  email_inviata_at?: string
+  email_destinatario?: string
 }
 
 interface RDA {
@@ -272,6 +276,9 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
   const [pdfRdo, setPdfRdo] = useState<RDO | null>(null)
   const [commessa, setCommessa] = useState<{sam_obbligatoria:boolean;tipo_committente:string;importo_contrattuale:number}|null>(null)
   const [prossimoPasso, setProssimoPasso] = useState<RDO | null>(null)
+  const [inviaRdo, setInviaRdo] = useState<RDO | null>(null)
+  const [inviaEmail, setInviaEmail] = useState('')
+  const [sendingEmail, setSendingEmail] = useState(false)
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
@@ -313,14 +320,19 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
       }
     }
     const rows = voci.map((v,i) => `<tr><td>${i+1}</td><td>${v.descrizione}</td><td>${v.um||'—'}</td><td>${v.quantita!=null?Number(v.quantita).toLocaleString('it-IT'):'—'}</td></tr>`).join('')
+    const portalUrl = rdo.token_offerta ? `${window.location.origin}/offerta/${rdo.token_offerta}` : null
+    const qrUrl = portalUrl ? `https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(portalUrl)}` : null
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>RDO ${rdo.codice}</title>
 <style>body{font-family:Arial;font-size:12px;margin:40px}table{width:100%;border-collapse:collapse}th,td{padding:6px 8px;border:1px solid #ccc;text-align:left}th{background:#f5f5f5}.firma{margin-top:40px;display:flex;gap:30px}.fbox{flex:1;border-top:1px solid #333;padding-top:8px;font-size:11px;color:#555}</style>
 </head><body>
-<div style="border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:18px">
-  <div style="font-size:10px;color:#777;text-transform:uppercase">Richiesta di Offerta</div>
-  <h1 style="font-size:18px;margin:4px 0">${rdo.codice}</h1>
-  ${com ? `<div><b>Commessa:</b> ${com.codice} — ${com.nome}</div>` : ''}
-  ${com?.committente ? `<div><b>Committente:</b> ${com.committente}</div>` : ''}
+<div style="border-bottom:2px solid #1e3a5f;padding-bottom:12px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-start">
+  <div>
+    <div style="font-size:10px;color:#777;text-transform:uppercase">Richiesta di Offerta</div>
+    <h1 style="font-size:18px;margin:4px 0">${rdo.codice}</h1>
+    ${com ? `<div><b>Commessa:</b> ${com.codice} — ${com.nome}</div>` : ''}
+    ${com?.committente ? `<div><b>Committente:</b> ${com.committente}</div>` : ''}
+  </div>
+  ${qrUrl ? `<div style="text-align:center"><img src="${qrUrl}" width="80" height="80" style="border-radius:6px;border:1px solid #e5e7eb"/><div style="font-size:8px;color:#999;margin-top:3px">Portale offerte</div></div>` : ''}
 </div>
 <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px">
   <span><b>Oggetto:</b> ${rdo.oggetto||'—'}</span>
@@ -330,7 +342,9 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
 ${rdo.note ? `<p><b>Note:</b> ${rdo.note}</p>` : ''}
 ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descrizione</th><th>U.M.</th><th>Quantità</th></tr></thead><tbody>${rows}</tbody></table>` : '<p style="color:#777;font-style:italic">Nessuna voce collegata.</p>'}
 <p style="margin-top:16px;font-size:11px;color:#666">Formulare offerta con prezzi unitari IVA esclusa.</p>
+${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px"><b style="font-size:11px;color:#0369a1">ISTRUZIONI FORNITORE</b><p style="font-size:11px;color:#374151;margin:6px 0 4px">Compilare e inviare l'offerta tramite il portale sicuro:</p><code style="font-size:10px;color:#2563eb;word-break:break-all">${portalUrl}</code></div>` : ''}
 <div class="firma"><div class="fbox">Firma Fornitore</div><div class="fbox">Prezzo offerto €</div><div class="fbox">Note</div></div>
+<p style="margin-top:30px;font-size:9px;color:#999;border-top:1px solid #eee;padding-top:8px">${rdo.codice} · Generato il ${new Date().toLocaleDateString('it-IT')} · SQ360</p>
 </body></html>`
     const w = window.open('','_blank')
     if(w){w.document.write(html);w.document.close();setTimeout(()=>w.print(),400)}
@@ -372,8 +386,24 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
   }
 
   const cambiaStato = async (rdo: RDO, stato: string) => {
-    await supabase.from('rdo').update({ stato }).eq('id', rdo.id)
+    const update: any = { stato }
+    if (stato === 'inviata' && !rdo.token_offerta) update.token_offerta = crypto.randomUUID()
+    await supabase.from('rdo').update(update).eq('id', rdo.id)
     showToast('RDO aggiornata'); carica()
+  }
+
+  const inviaEmailRdo = async (r: RDO, email: string) => {
+    if (!email || !r.token_offerta) return
+    setSendingEmail(true)
+    try {
+      const portalUrl = `${window.location.origin}/offerta/${r.token_offerta}`
+      const subject = `Richiesta d'offerta ${r.codice}${r.oggetto ? ' — ' + r.oggetto : ''}`
+      const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto"><div style="background:#1e3a5f;padding:20px;text-align:center"><span style="font-size:22px;font-weight:800;color:#fff">SQ360</span></div><div style="padding:24px;background:#fff;border:1px solid #e5e7eb"><h2 style="color:#1e3a5f;font-size:16px;margin-bottom:8px">Richiesta d'Offerta: <b>${r.codice}</b></h2><p style="color:#374151;font-size:13px">Gentile <b>${r.fornitore}</b>,</p><p style="color:#374151;font-size:13px">Siete invitati a compilare la vostra offerta tramite il portale sicuro:</p>${r.oggetto ? `<p style="padding:10px 14px;background:#f0f9ff;border-left:4px solid #3b82f6;color:#1e40af;font-size:13px;margin:12px 0"><b>${r.oggetto}</b></p>` : ''}${r.data_scadenza ? `<p style="color:#ef4444;font-size:12px">⏰ Scadenza: <strong>${new Date(r.data_scadenza).toLocaleDateString('it-IT')}</strong></p>` : ''}<div style="text-align:center;margin:24px 0"><a href="${portalUrl}" style="background:#3b82f6;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:700">📤 Compila la tua offerta →</a></div><p style="color:#9ca3af;font-size:11px;text-align:center">Link diretto: ${portalUrl}</p>${r.note ? `<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0"><p style="color:#6b7280;font-size:12px"><b>Note:</b> ${r.note}</p>` : ''}</div><p style="text-align:center;color:#9ca3af;font-size:10px;padding:12px">Messaggio generato da SQ360 — gestionale edile</p></div>`
+      await fetch('/api/email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: email, subject, html }) })
+      await supabase.from('rdo').update({ email_inviata: true, email_inviata_at: new Date().toISOString(), email_destinatario: email }).eq('id', r.id)
+      showToast('✓ Email inviata a ' + email)
+      carica(); setInviaRdo(null)
+    } finally { setSendingEmail(false) }
   }
 
   const aggiudicaGruppo = async (vincitrice: RDO, gruppoId: string) => {
@@ -604,6 +634,9 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
                       <td style={{ ...styleTd, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>
                         {r.codice}
+                        {r.email_inviata && (
+                          <span style={{ fontSize:9, padding:'1px 5px', borderRadius:4, background:'#10b98120', color:'#10b981', fontWeight:600, display:'inline-block', marginLeft:4 }}>✓ email</span>
+                        )}
                         <FlowThread rdoId={r.id} rdaId={r.rda_id} richiedeSam={r.richiede_sam} />
                         <VociRdaSection rdaId={r.rda_id || ''} supabase={supabase} />
                       </td>
@@ -626,7 +659,10 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
                         </button>
                         <button style={{...styleBtn('#475569'),fontSize:11,marginLeft:4}} onClick={() => generaPdf(r)}>📄 PDF</button>
                         {r.stato === 'inviata' && (
-                          <button style={{...styleBtn('#7c3aed'),fontSize:11,marginLeft:4}} onClick={() => setPdfRdo(r)}>📎 Preventivo</button>
+                          <button style={{...styleBtn('#7c3aed'),fontSize:11,marginLeft:4}} onClick={() => { setInviaRdo(r); setInviaEmail(r.email_fornitore || '') }}>📤 Invia</button>
+                        )}
+                        {r.stato === 'inviata' && (
+                          <button style={{...styleBtn('#6366f1'),fontSize:11,marginLeft:4}} onClick={() => setPdfRdo(r)}>📎 Preventivo</button>
                         )}
                         {r.stato === 'aggiudicata' && (
                           <button style={{...styleBtn('#0d9488'),fontSize:11,marginLeft:4}} onClick={() => window.location.href = buildSamUrl(r)}>📋 SAM/DAM</button>
@@ -816,6 +852,71 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
             ) : (
               <div style={{ padding:'10px 14px', background:'#ef444410', border:'1px solid #ef444440', borderRadius:8, fontSize:12, color:'#ef4444' }}>
                 ⛔ SAM obbligatoria per questa commessa — l&apos;ODA sarà disponibile dopo l&apos;approvazione SAM.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal invia ai fornitori */}
+      {inviaRdo && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setInviaRdo(null) }}>
+          <div className="modal-box" style={{ maxWidth:520, width:'92%' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:16 }}>
+              <h3 style={{ fontSize:14, fontWeight:700 }}>📤 Invia ai fornitori — {inviaRdo.fornitore}</h3>
+              <button onClick={() => setInviaRdo(null)} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'var(--t3)' }}>×</button>
+            </div>
+
+            {inviaRdo.token_offerta ? (
+              <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                {/* URL portale */}
+                <div>
+                  <label style={styleLbl}>Link portale offerte</label>
+                  <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                    <code style={{ flex:1, fontSize:10, padding:'8px 10px', background:'var(--bg)', borderRadius:6, border:'1px solid var(--border)', color:'var(--accent)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>
+                      {`${window.location.origin}/offerta/${inviaRdo.token_offerta}`}
+                    </code>
+                    <button style={styleBtn('#475569')} onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/offerta/${inviaRdo.token_offerta}`); showToast('Link copiato!') }}>📋 Copia</button>
+                    <button style={styleBtn('#3b82f6')} onClick={() => window.open(`/offerta/${inviaRdo.token_offerta}`, '_blank')}>🌐 Apri</button>
+                  </div>
+                </div>
+
+                {/* QR code */}
+                <div style={{ display:'flex', justifyContent:'center', padding:'8px 0' }}>
+                  <div style={{ textAlign:'center' }}>
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(`${window.location.origin}/offerta/${inviaRdo.token_offerta}`)}`}
+                      alt="QR portale"
+                      style={{ borderRadius:8, border:'1px solid var(--border)', display:'block' }} />
+                    <p style={{ fontSize:9, color:'var(--t3)', margin:'4px 0 0' }}>Scansiona per accedere al portale</p>
+                  </div>
+                </div>
+
+                {/* Email */}
+                <div style={{ borderTop:'1px solid var(--border)', paddingTop:14 }}>
+                  <label style={styleLbl}>Invia link via email</label>
+                  <div style={{ display:'flex', gap:8 }}>
+                    <input type="email" style={{ ...styleInp, flex:1 }}
+                      value={inviaEmail}
+                      onChange={e => setInviaEmail(e.target.value)}
+                      placeholder="email@fornitore.it" />
+                    <button style={styleBtn(inviaEmail ? '#10b981' : '#6b7280')}
+                      onClick={() => inviaEmailRdo(inviaRdo, inviaEmail)}
+                      disabled={!inviaEmail || sendingEmail}>
+                      {sendingEmail ? '⏳' : '📧 Invia'}
+                    </button>
+                  </div>
+                  {inviaRdo.email_inviata && (
+                    <p style={{ fontSize:11, color:'#10b981', marginTop:6 }}>
+                      ✓ Email già inviata a <b>{inviaRdo.email_destinatario}</b>
+                      {inviaRdo.email_inviata_at && ` il ${new Date(inviaRdo.email_inviata_at).toLocaleString('it-IT')}`}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div style={{ padding:'14px', background:'#fef3c720', border:'1px solid #fcd34d44', borderRadius:8, fontSize:12, color:'#92400e' }}>
+                ⚠️ Per generare il link, porta lo stato RDO a <b>inviata</b> tramite il menu a tendina nella lista.
               </div>
             )}
           </div>
