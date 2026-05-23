@@ -14,12 +14,14 @@ interface CommessaKPI {
   residuo: number; giorni_rimanenti: number; in_ritardo: boolean
   lat: number | null; lng: number | null
   indirizzo_cantiere: string | null; comune_cantiere: string | null; provincia: string | null
+  responsabile_nome?: string | null
 }
 
 interface Filtri {
   stato: 'tutti' | 'attive' | 'ritardo' | 'completate'
   avanzamento: 'tutti' | '0' | '1-50' | '51-99' | '100'
   provincia: string
+  responsabile: string
 }
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
@@ -64,6 +66,7 @@ function applyFilters(data: CommessaKPI[], f: Filtri): CommessaKPI[] {
     if (f.avanzamento === '51-99' && (c.avanzamento_pct < 51 || c.avanzamento_pct > 99))  return false
     if (f.avanzamento === '100'   && c.avanzamento_pct < 100) return false
     if (f.provincia && c.provincia !== f.provincia) return false
+    if (f.responsabile && c.responsabile_nome !== f.responsabile) return false
     return true
   })
 }
@@ -83,6 +86,7 @@ function toGeoJSON(data: CommessaKPI[]) {
           importo_contratto: c.importo_contratto,
           residuo: c.residuo, giorni_rimanenti: c.giorni_rimanenti,
           color: pinColor(c), provincia: c.provincia || '',
+          responsabile_nome: c.responsabile_nome || null,
         },
       })),
   }
@@ -117,6 +121,7 @@ function buildPopupHTML(p: Record<string, any>, lat: number, lng: number): strin
           <div style="font-weight:600;color:${gg === 0 ? '#ef4444' : '#374151'}">${gg === 0 ? '⚠ Scaduta' : gg + ' gg'}</div>
         </div>
       </div>
+      ${p.responsabile_nome ? `<div style="font-size:11px;color:#6b7280;padding:4px 2px 6px">👷 <span style="color:#374151;font-weight:600">${p.responsabile_nome}</span></div>` : ''}
       <div style="display:flex;gap:6px;padding-top:6px;border-top:1px solid #f3f4f6">
         <button onclick="window.__sq360_open('${p.id}')"
           style="flex:1;padding:6px 10px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">
@@ -141,7 +146,7 @@ const LEGENDA = [
   { color: '#ef4444', label: 'In ritardo' },
 ]
 
-const FILTRI_DEFAULT: Filtri = { stato: 'tutti', avanzamento: 'tutti', provincia: '' }
+const FILTRI_DEFAULT: Filtri = { stato: 'tutti', avanzamento: 'tutti', provincia: '', responsabile: '' }
 
 const STATO_LABELS: Record<string, string> = {
   tutti: 'Tutti', attive: 'Attive', ritardo: 'In ritardo', completate: 'Completate',
@@ -167,6 +172,7 @@ export default function MappaCantieri() {
   const [filtri, setFiltri]               = useState<Filtri>(FILTRI_DEFAULT)
   const [filtriOpen, setFiltriOpen]       = useState(false)
   const [province, setProvince]           = useState<string[]>([])
+  const [responsabili, setResponsabili]   = useState<string[]>([])
 
   // Keep ref in sync so closures always see the latest filters
   filtriRef.current = filtri
@@ -293,7 +299,7 @@ export default function MappaCantieri() {
       // ── Carica commesse ───────────────────────────────────────────────────
       const { data: kpiData, error: dbErr } = await (supabase as any)
         .from('v_commesse_kpi')
-        .select('id,codice,nome,stato,importo_contratto,avanzamento_pct,residuo,giorni_rimanenti,in_ritardo,lat,lng')
+        .select('id,codice,nome,stato,importo_contratto,avanzamento_pct,residuo,giorni_rimanenti,in_ritardo,lat,lng,responsabile_nome')
         .eq('azienda_id', aziendaId)
 
       if (dbErr) { setError('Errore caricamento dati: ' + dbErr.message); setLoading(false); return }
@@ -315,13 +321,16 @@ export default function MappaCantieri() {
           indirizzo_cantiere: addr.indirizzo_cantiere || null,
           comune_cantiere:    addr.comune_cantiere    || null,
           provincia:          addr.provincia           || null,
+          responsabile_nome:  c.responsabile_nome     || null,
         }
       })
 
       allDataRef.current = allData
 
-      const provSet = new Set(allData.map(c => c.provincia).filter((p): p is string => !!p))
+      const provSet  = new Set(allData.map(c => c.provincia).filter((p): p is string => !!p))
+      const respSet  = new Set(allData.map(c => c.responsabile_nome).filter((r): r is string => !!r))
       setProvince(Array.from(provSet).sort())
+      setResponsabili(Array.from(respSet).sort())
 
       const conCoord  = allData.filter(c => c.lat != null && c.lng != null)
       const senzaCoord = allData.filter(c => (c.lat == null || c.lng == null) && (c.indirizzo_cantiere || c.comune_cantiere))
@@ -477,7 +486,7 @@ export default function MappaCantieri() {
 
   // ─── JSX ──────────────────────────────────────────────────────────────────
 
-  const filtriAttivi = filtri.stato !== 'tutti' || filtri.avanzamento !== 'tutti' || !!filtri.provincia
+  const filtriAttivi = filtri.stato !== 'tutti' || filtri.avanzamento !== 'tutti' || !!filtri.provincia || !!filtri.responsabile
 
   return (
     <div style={{ position: 'relative', width: '100%', height: 'calc(100vh - 52px)' }}>
@@ -560,6 +569,26 @@ export default function MappaCantieri() {
                 ))}
               </div>
             </div>
+
+            {/* Responsabile */}
+            {responsabili.length > 0 && (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.45)', letterSpacing: '.8px', textTransform: 'uppercase', marginBottom: 6 }}>
+                  Responsabile
+                </div>
+                <select
+                  value={filtri.responsabile}
+                  onChange={e => handleFiltri({ ...filtri, responsabile: e.target.value })}
+                  style={{
+                    width: '100%', background: 'rgba(255,255,255,.12)',
+                    border: '1px solid rgba(255,255,255,.2)', borderRadius: 5,
+                    color: '#fff', padding: '5px 8px', fontSize: 11,
+                  }}>
+                  <option value="">Tutti i responsabili</option>
+                  {responsabili.map(r => <option key={r} value={r} style={{ color: '#111' }}>{r}</option>)}
+                </select>
+              </div>
+            )}
 
             {/* Provincia */}
             {province.length > 0 && (

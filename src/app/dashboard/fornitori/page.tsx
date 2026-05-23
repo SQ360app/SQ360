@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { AddressAutocomplete } from '@/components/AddressAutocomplete'
 const TIPI = ['professionista', 'fornitore', 'subappaltatore', 'nolo', 'altro']
 const TIPI_COLOR: Record<string, string> = {
   professionista: '#3b82f6', fornitore: '#10b981',
@@ -15,6 +16,7 @@ interface Soggetto {
   pec?: string; email?: string; telefono?: string
   ordine_professionale?: string; numero_iscrizione?: string
   categoria_soa?: string; studio?: string
+  indirizzo?: string; comune?: string; provincia?: string
   attivo: boolean; created_at: string
 }
 
@@ -237,6 +239,8 @@ export default function FornitoriPage() {
             {detail.email && <Row label="Email" value={detail.email} href={'mailto:' + detail.email} />}
             {detail.telefono && <Row label="Telefono" value={detail.telefono} href={'tel:' + detail.telefono} />}
             {detail.studio && <Row label="Studio" value={detail.studio} />}
+            {detail.indirizzo && <Row label="Indirizzo" value={detail.indirizzo} />}
+            {(detail.comune || detail.provincia) && <Row label="Comune" value={[detail.comune, detail.provincia].filter(Boolean).join(' ')} />}
           </div>
           {/* SEZIONE REFERENTI */}
           <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
@@ -330,6 +334,24 @@ export default function FornitoriPage() {
               <div>
                 <label style={lbl}>Cat. SOA</label>
                 <input style={inp} value={edit.categoria_soa || ''} onChange={e => setEdit({ ...edit, categoria_soa: e.target.value })} placeholder="OS1, OG1..." />
+              </div>
+              <div style={{ gridColumn: '1/-1' }}>
+                <label style={lbl}>Indirizzo</label>
+                <AddressAutocomplete
+                  value={edit.indirizzo || ''}
+                  onChange={v => setEdit({ ...edit, indirizzo: v })}
+                  onSelect={parsed => setEdit({ ...edit, indirizzo: parsed.indirizzo, comune: parsed.comune, provincia: parsed.provincia })}
+                  placeholder="Via Roma, 1"
+                  inputStyle={{ ...inp, marginBottom: 0 }}
+                />
+              </div>
+              <div>
+                <label style={lbl}>Comune</label>
+                <input style={inp} value={edit.comune || ''} onChange={e => setEdit({ ...edit, comune: e.target.value })} placeholder="Napoli" />
+              </div>
+              <div>
+                <label style={lbl}>Provincia</label>
+                <input style={inp} maxLength={2} value={edit.provincia || ''} onChange={e => setEdit({ ...edit, provincia: e.target.value.toUpperCase() })} placeholder="NA" />
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Building2, Users, Bell, Shield, Plus, Save, CheckCircle, Edit2, Upload, Image as ImageIcon, FileImage, Loader2 } from 'lucide-react'
 import { supabase, getAziendaId } from '@/lib/supabase'
+import { AddressAutocomplete } from '@/components/AddressAutocomplete'
 
 // ─── Tipi ────────────────────────────────────────────────────────────────────
 type Ruolo = 'admin' | 'direttore_tecnico' | 'responsabile_commessa' | 'operatore' | 'contabilita' | 'viewer'
@@ -335,11 +336,24 @@ export default function ImpostazioniPage() {
                 ] as { key: keyof AziendaInfo; label: string; full?: boolean }[]).map(f => (
                   <div key={f.key} style={{ gridColumn: f.full ? 'span 2' : undefined }}>
                     <label style={{ display: 'block', fontSize: 11, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, fontWeight: 600 }}>{f.label}</label>
-                    <input
-                      value={azienda[f.key]}
-                      onChange={e => setAzienda(prev => ({ ...prev, [f.key]: e.target.value }))}
-                      style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', color: 'var(--t1)', fontSize: 13 }}
-                    />
+                    {f.key === 'sede' ? (
+                      <AddressAutocomplete
+                        value={azienda.sede}
+                        onChange={v => setAzienda(prev => ({ ...prev, sede: v }))}
+                        onSelect={parsed => setAzienda(prev => ({
+                          ...prev,
+                          sede: [parsed.indirizzo, parsed.cap && parsed.comune ? `${parsed.cap} ${parsed.comune}` : parsed.comune, parsed.provincia].filter(Boolean).join(', '),
+                        }))}
+                        placeholder="Via Roma 1, 20100 Milano MI"
+                        inputStyle={{ width: '100%', boxSizing: 'border-box' as const, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', color: 'var(--t1)', fontSize: 13 }}
+                      />
+                    ) : (
+                      <input
+                        value={azienda[f.key]}
+                        onChange={e => setAzienda(prev => ({ ...prev, [f.key]: e.target.value }))}
+                        style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', color: 'var(--t1)', fontSize: 13 }}
+                      />
+                    )}
                   </div>
                 ))}
               </div>

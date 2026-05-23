@@ -7,6 +7,7 @@ import {
   MapPin, FileText, Building2, HardHat, Edit3
 } from 'lucide-react'
 import { supabase, getAziendaId } from '@/lib/supabase'
+import { AddressAutocomplete } from '@/components/AddressAutocomplete'
 
 // ─── Tipi ─────────────────────────────────────────────────────────────────────
 
@@ -663,8 +664,20 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
               <div /> {/* spacer */}
               <div style={{ gridColumn: 'span 2' }}>
                 <label style={S.label}><MapPin size={10} style={{ display: 'inline', marginRight: 3 }} />Via / Indirizzo cantiere</label>
-                {editDati ? <input style={inpEdit} value={commessa.indirizzo_cantiere || ''} onChange={e => fc('indirizzo_cantiere', e.target.value)} placeholder="Via Roma, 1" />
-                : <p style={S.value}>{commessa.indirizzo_cantiere || '—'}</p>}
+                {editDati ? (
+                  <AddressAutocomplete
+                    value={commessa.indirizzo_cantiere || ''}
+                    onChange={v => fc('indirizzo_cantiere', v)}
+                    onSelect={parsed => {
+                      fc('indirizzo_cantiere', parsed.indirizzo)
+                      fc('cap_cantiere', parsed.cap)
+                      fc('comune_cantiere', parsed.comune)
+                      fc('provincia', parsed.provincia)
+                    }}
+                    placeholder="Via Roma, 1"
+                    inputStyle={inpEdit}
+                  />
+                ) : <p style={S.value}>{commessa.indirizzo_cantiere || '—'}</p>}
               </div>
               <div>
                 <label style={S.label}>CAP</label>

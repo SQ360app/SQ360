@@ -3,9 +3,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import dynamic from 'next/dynamic'
-
-const MapCommesse = dynamic(() => import('@/components/MapCommesse'), { ssr: false })
 
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 const fmt  = (n: number) => (n || 0).toLocaleString('it-IT', { maximumFractionDigits: 0 })
@@ -146,7 +143,7 @@ export default function DashboardPage() {
       rFS,   // fatture in scadenza ≤30gg
     ] = await Promise.all([
       supabase.from('commesse')
-        .select('id,codice,nome,stato,committente,importo_contratto')
+        .select('id,codice,nome,stato,committente,importo_contratto,data_fine_contrattuale,data_proroga,comune_cantiere')
         .order('created_at', { ascending: false }),
 
       supabase.from('oda')
@@ -344,8 +341,54 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* ── MAPPA CANTIERI ───────────────────────────────────────── */}
-        <MapCommesse />
+        {/* ── CANTIERI IN SCADENZA ─────────────────────────────────── */}
+        {(() => {
+          const attiveConData = commesseAttive
+            .filter((c: any) => c.data_fine_contrattuale || c.data_proroga)
+            .map((c: any) => {
+              const scad = c.data_proroga || c.data_fine_contrattuale
+              const gg   = Math.round((new Date(scad).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000)
+              return { ...c, gg }
+            })
+            .sort((a: any, b: any) => a.gg - b.gg)
+            .slice(0, 5)
+          if (attiveConData.length === 0) return null
+          return (
+            <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>🏗️ Cantieri in scadenza</span>
+                <button onClick={() => router.push('/dashboard/mappa')}
+                  style={{ fontSize: 11, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+                  Vedi mappa →
+                </button>
+              </div>
+              {attiveConData.map((c: any, i: number) => {
+                const ritardo  = c.gg < 0
+                const urgente  = !ritardo && c.gg <= 30
+                const dotColor = ritardo ? '#dc2626' : urgente ? '#d97706' : '#10b981'
+                return (
+                  <div key={c.id} onClick={() => nav(c.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', cursor: 'pointer', borderBottom: i < attiveConData.length - 1 ? '1px solid var(--border)' : 'none' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--t1)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nome}</p>
+                      <p style={{ fontSize: 10, color: 'var(--t3)', margin: '2px 0 0' }}>{c.comune_cantiere || c.committente || '—'}</p>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <p style={{ fontSize: 12, fontWeight: 700, color: dotColor, margin: 0 }}>
+                        {ritardo ? `${Math.abs(c.gg)}gg scad.` : `${c.gg}gg`}
+                      </p>
+                      <p style={{ fontSize: 9, color: 'var(--t3)', margin: 0 }}>{ritardo ? '⚠ In ritardo' : 'rimanenti'}</p>
+                    </div>
+                    <span style={{ fontSize: 12, color: 'var(--t4)', flexShrink: 0 }}>→</span>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
 
         {/* ── MAIN: Commesse + Scadenziario ────────────────────────── */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 14 }}>
