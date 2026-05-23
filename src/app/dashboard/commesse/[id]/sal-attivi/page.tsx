@@ -98,7 +98,7 @@ const V3_CSS = `
 .cmp-wkpi-v{font-size:11px;font-weight:700;color:#14532d;display:block}
 .cmp-wkpi-l{font-size:8px;color:#6b7280;display:block}
 .cmp-main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;min-height:0}
-.cmp-tbar{display:flex;align-items:center;gap:5px;padding:4px 10px;background:#fff;border-bottom:1px solid rgba(0,0,0,.1);flex-shrink:0;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.cmp-tbar{display:flex;align-items:center;gap:5px;padding:4px 10px;background:#fff;border-bottom:1px solid rgba(0,0,0,.1);flex-shrink:0;box-shadow:0 1px 4px rgba(0,0,0,.06);width:100%;box-sizing:border-box}
 .cmp-tbtn{font-size:10px;padding:3px 8px;border:none;border-radius:4px;cursor:pointer;color:#fff;font-weight:600;background:#374151}
 .cmp-tbtn.blue{background:#1d4ed8}
 .cmp-tbtn.green{background:#14532d}
@@ -115,7 +115,7 @@ const V3_CSS = `
 .cmp-vtab{font-size:10px;padding:2px 8px;background:transparent;border:1px solid rgba(0,0,0,.15);border-radius:10px;cursor:pointer;color:#6b7280}
 .cmp-vtab.on{background:#14532d;color:#fff;border-color:#14532d}
 .cmp-vcnt{color:#9ca3af;margin-left:auto;font-size:9px;white-space:nowrap}
-.cmp-tscroll{flex:1 1 0%;overflow:auto;min-height:0;min-width:0;width:100%}
+.cmp-tscroll{flex:1 1 0%;overflow-x:auto;overflow-y:scroll;min-height:0;min-width:0;width:100%;contain:strict}
 .cmp-tscroll::-webkit-scrollbar{width:6px;height:6px}.cmp-tscroll::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}
 table.cmp-t{width:100%;min-width:860px;border-collapse:collapse;table-layout:fixed}
 col.cc2{width:34px}col.cc3{width:96px}col.cc4{width:220px;min-width:220px}
@@ -922,7 +922,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
               if (error) { showToast('Errore creazione SAL: ' + error.message); return }
               if (data) { setSalList((p: any) => [...p, data]); setSalSel(data); setQtInput({}) }
             }} style={{ padding: '4px 12px', background: 'rgba(79,142,247,.2)', border: '1px solid rgba(79,142,247,.3)', borderRadius: 6, color: '#7baff8', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>+ Nuovo SAL</button>
-            {salSel && <button onClick={async () => {
+            <button onClick={async () => { if (!salSel) return
               await supabase.from('sal_voci').delete().eq('sal_id', salSel.id)
               const rows = Object.entries(qtInput).filter(([, q]) => q > 0).map(([vid, q]) => ({ sal_id: salSel.id, voce_computo_id: vid, quantita_periodo: q }))
               if (rows.length) await supabase.from('sal_voci').insert(rows)
@@ -956,7 +956,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
                 s.id === salSel.id ? { ...s, importo_certificato: importoPeriodo, stato: 'emesso' } : s
               ))
               showToast('✓ SAL salvato')
-            }} style={{ padding: '4px 12px', background: 'rgba(52,211,153,.2)', border: '1px solid rgba(52,211,153,.3)', borderRadius: 6, color: '#34d399', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>💾 Salva SAL</button>}
+            }} style={{ padding: '4px 12px', background: 'rgba(52,211,153,.2)', border: '1px solid rgba(52,211,153,.3)', borderRadius: 6, color: '#34d399', fontSize: 11, fontWeight: 600, cursor: 'pointer', visibility: salSel ? 'visible' : 'hidden', pointerEvents: salSel ? 'auto' : 'none' }}>💾 Salva SAL</button>
             </div>
           </div>
 
