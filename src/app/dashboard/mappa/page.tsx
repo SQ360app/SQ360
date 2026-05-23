@@ -269,16 +269,22 @@ export default function MappaCantieri() {
       if (!aziendaId) { setError('Profilo utente non trovato'); setLoading(false); return }
       aziendaIdRef.current = aziendaId
 
+      // ── Source 'sedi' registrato subito (prima del geocoding asincrono) ─────
+      map.addSource('sedi', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+
       // ── Sedi azienda (pin colorati per tipo) ──────────────────────────────
       const caricaSedi = async () => {
+        console.log('[Sedi source]', map.getSource('sedi'))
         sediMarkersRef.current.forEach(m => m.remove())
         sediMarkersRef.current = []
         const { data: sediAz, error: sediErr } = await (supabase as any)
           .from('azienda_sedi').select('*').eq('azienda_id', aziendaIdRef.current).eq('attiva', true)
-        console.log('[Sedi]', sediAz, sediErr?.message)
+        console.log('[Sedi]', sediAz?.length ?? 0, 'trovate — errore:', sediErr?.message ?? 'nessuno')
+        const sediFeatures: any[] = []
         for (const s of sediAz || []) {
           if (!s.lat || !s.lng) {
             const q = [s.indirizzo, s.comune, s.provincia, 'Italia'].filter(Boolean).join(', ')
+            console.log('[Sedi geocoding] tentativo:', q)
             if (q.trim()) {
               try {
                 await new Promise(r => setTimeout(r, 600))
@@ -287,12 +293,14 @@ export default function MappaCantieri() {
                 if (j[0]) {
                   s.lat = parseFloat(j[0].lat); s.lng = parseFloat(j[0].lon)
                   ;(supabase as any).from('azienda_sedi').update({ lat: s.lat, lng: s.lng }).eq('id', s.id).then()
-                  console.log('[Sedi geocoding]', s.nome || s.tipo, '→', s.lat, s.lng)
+                  console.log('[Sedi geocoding] ok →', s.lat, s.lng)
+                } else {
+                  console.warn('[Sedi geocoding] nessun risultato per:', q)
                 }
-              } catch { /* non bloccante */ }
+              } catch (e) { console.warn('[Sedi geocoding] errore:', e) }
             }
           }
-          if (!s.lat || !s.lng) continue
+          if (!s.lat || !s.lng) { console.warn('[Sedi] skip — no coordinate:', s.nome || s.indirizzo); continue }
           const meta = SEDE_TIPI[s.tipo] || SEDE_TIPI.altro
           const el = document.createElement('div')
           el.innerHTML = `<div style="width:38px;height:38px;border-radius:50%;background:${meta.color};border:2.5px solid #fff;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.45)">${meta.emoji}</div>`
@@ -307,7 +315,15 @@ export default function MappaCantieri() {
           const marker = new mapboxgl.Marker({ element: el }).setLngLat([s.lng, s.lat]).setPopup(sedeP)
           sediMarkersRef.current.push(marker)
           if (mostraSediRef.current) marker.addTo(map)
+          sediFeatures.push({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [s.lng, s.lat] },
+            properties: { id: s.id, nome: s.nome || meta.label, tipo: s.tipo, color: meta.color },
+          })
         }
+        // Aggiorna il source 'sedi' con le coordinate geocodificate
+        ;(map.getSource('sedi') as any)?.setData({ type: 'FeatureCollection', features: sediFeatures })
+        console.log('[Sedi] source aggiornato con', sediFeatures.length, 'pin')
       }
       caricaSediMapRef.current = caricaSedi
       await caricaSedi()

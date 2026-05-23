@@ -247,40 +247,43 @@ export default function ImpostazioniPage() {
   async function saveSede() {
     if (!aziendaId || !nuovaSede) return
     setSalvandoSede(true)
-    let lat = nuovaSede.lat ?? null
-    let lng = nuovaSede.lng ?? null
-    if ((!lat || !lng) && nuovaSede.indirizzo) {
-      const q = [nuovaSede.indirizzo, nuovaSede.comune, nuovaSede.provincia, 'Italia'].filter(Boolean).join(', ')
-      try {
-        const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=it`, { headers: { 'Accept-Language': 'it' } })
-        const j = await r.json()
-        if (j[0]) { lat = parseFloat(j[0].lat); lng = parseFloat(j[0].lon) }
-      } catch { /* non bloccante */ }
+    try {
+      let lat = nuovaSede.lat ?? null
+      let lng = nuovaSede.lng ?? null
+      if ((!lat || !lng) && nuovaSede.indirizzo) {
+        const q = [nuovaSede.indirizzo, nuovaSede.comune, nuovaSede.provincia, 'Italia'].filter(Boolean).join(', ')
+        try {
+          const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=it`, { headers: { 'Accept-Language': 'it' } })
+          const j = await r.json()
+          if (j[0]) { lat = parseFloat(j[0].lat); lng = parseFloat(j[0].lon) }
+        } catch { /* non bloccante */ }
+      }
+      const payload = {
+        azienda_id: aziendaId,
+        tipo: nuovaSede.tipo || 'operativa',
+        nome: nuovaSede.nome || null,
+        indirizzo: nuovaSede.indirizzo || null,
+        comune: nuovaSede.comune || null,
+        cap: nuovaSede.cap || null,
+        provincia: nuovaSede.provincia || null,
+        lat, lng,
+        telefono: nuovaSede.telefono || null,
+        email: nuovaSede.email || null,
+        referente: nuovaSede.referente || null,
+        note: nuovaSede.note || null,
+        attiva: nuovaSede.attiva !== false,
+      }
+      if (nuovaSede.id) {
+        await (supabase as any).from('azienda_sedi').update(payload).eq('id', nuovaSede.id)
+      } else {
+        await (supabase as any).from('azienda_sedi').insert(payload)
+      }
+      const { data } = await (supabase as any).from('azienda_sedi').select('*').eq('azienda_id', aziendaId).order('created_at', { ascending: true })
+      if (data) setSedi(data)
+    } finally {
+      setNuovaSede(null)
+      setSalvandoSede(false)
     }
-    const payload = {
-      azienda_id: aziendaId,
-      tipo: nuovaSede.tipo || 'operativa',
-      nome: nuovaSede.nome || null,
-      indirizzo: nuovaSede.indirizzo || null,
-      comune: nuovaSede.comune || null,
-      cap: nuovaSede.cap || null,
-      provincia: nuovaSede.provincia || null,
-      lat, lng,
-      telefono: nuovaSede.telefono || null,
-      email: nuovaSede.email || null,
-      referente: nuovaSede.referente || null,
-      note: nuovaSede.note || null,
-      attiva: nuovaSede.attiva !== false,
-    }
-    if (nuovaSede.id) {
-      await (supabase as any).from('azienda_sedi').update(payload).eq('id', nuovaSede.id)
-    } else {
-      await (supabase as any).from('azienda_sedi').insert(payload)
-    }
-    const { data } = await (supabase as any).from('azienda_sedi').select('*').eq('azienda_id', aziendaId).order('created_at', { ascending: true })
-    if (data) setSedi(data)
-    setNuovaSede(null)
-    setSalvandoSede(false)
   }
 
   async function deleteSede(id: string) {
@@ -588,7 +591,10 @@ export default function ImpostazioniPage() {
                       {s.telefono  && <div style={{ fontSize: 11, color: 'var(--t3)' }}>📞 {s.telefono}</div>}
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                      <button onClick={() => setNuovaSede({ ...s })}
+                      <button onClick={() => {
+                          setNuovaSede(null)
+                          setTimeout(() => setNuovaSede({ ...s }), 0)
+                        }}
                         style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 8px', cursor: 'pointer', color: 'var(--t3)' }}>
                         <Edit2 size={12} />
                       </button>
