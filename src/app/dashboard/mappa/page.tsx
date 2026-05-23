@@ -221,22 +221,21 @@ export default function MappaCantieri() {
 
       // ── Sede impresa ──────────────────────────────────────────────────────
       const { data: az, error: azErr } = await (supabase as any)
-        .from('aziende').select('*').eq('id', aziendaId).single()
+        .from('azienda').select('*').eq('id', aziendaId).single()
 
       console.log('[Sede]', az, '— error:', azErr?.message)
 
       if (az) {
-        const nomeAz    = az.nome || az.ragione_sociale || 'Sede impresa'
-        const indirizzo = az.sede_legale || az.indirizzo || null
-        const citta     = az.comune || az.citta || null
+        const nomeAz    = az.ragione_sociale || az.nome || 'Sede impresa'
+        const sedeLegale = az.sede_legale || null
         const prov      = az.provincia || null
         let sedeLat = az.sede_lat ?? az.lat ?? null
         let sedeLng = az.sede_lng ?? az.lng ?? null
 
-        console.log('[Sede] campi risolti →', { nomeAz, indirizzo, citta, prov, sedeLat, sedeLng })
+        console.log('[Sede] campi risolti →', { nomeAz, sedeLegale, prov, sedeLat, sedeLng })
 
-        if ((!sedeLat || !sedeLng) && (indirizzo || citta || prov)) {
-          const q = [indirizzo, citta, prov, 'Italia'].filter(Boolean).join(', ')
+        if ((!sedeLat || !sedeLng) && sedeLegale) {
+          const q = `${sedeLegale}, Italia`
           try {
             const r = await fetch(
               `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`,
@@ -247,7 +246,7 @@ export default function MappaCantieri() {
             if (j[0]) { sedeLat = parseFloat(j[0].lat); sedeLng = parseFloat(j[0].lon) }
           } catch { /* non bloccante */ }
         }
-        // Fallback: nome + provincia
+        // Fallback: ragione_sociale + provincia
         if (!sedeLat && (nomeAz || prov)) {
           const q2 = [nomeAz, prov, 'Italia'].filter(Boolean).join(', ')
           try {
@@ -276,8 +275,8 @@ export default function MappaCantieri() {
             .setHTML(`
               <div style="font-family:'Segoe UI',sans-serif;font-size:12px;padding:2px">
                 <div style="font-weight:700;font-size:13px;color:#1e3a5f;margin-bottom:6px">🏢 ${nomeAz}</div>
-                ${indirizzo ? `<div style="color:#374151;margin-bottom:2px">📍 ${indirizzo}</div>` : ''}
-                ${(citta || prov) ? `<div style="color:#6b7280;font-size:11px">${[citta, prov].filter(Boolean).join(', ')}</div>` : ''}
+                ${sedeLegale ? `<div style="color:#374151;margin-bottom:2px">📍 ${sedeLegale}</div>` : ''}
+                ${prov ? `<div style="color:#6b7280;font-size:11px">${prov}</div>` : ''}
                 ${az.piva ? `<div style="color:#6b7280;font-size:10px;margin-top:4px;font-family:monospace">P.IVA ${az.piva}</div>` : ''}
               </div>`)
 
