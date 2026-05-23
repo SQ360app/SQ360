@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback, use, useMemo } from 'react'
-import { useVirtualizer } from '@tanstack/react-virtual'
 import { supabase, getAziendaId } from '@/lib/supabase'
 
 // ─── WBS FLAT (codice → label) ──────────────────────────────────────────────
@@ -629,25 +628,6 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
 
   const voceIdx = (v: VoceDB) => voci.indexOf(v) + 1
 
-  // ─── Virtualizzatore tabella ──────────────────────────────────────────────
-  const virtualizer = useVirtualizer({
-    count: tableRows.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: (i) => {
-      const r = tableRows[i]
-      if (r.type === 'hsc') return 28
-      if (r.type === 'hca') return 24
-      if (r.type === 'som' && sel === (r as any).v?.id) return 380
-      if (r.type === 'vo'  && sel === (r as any).v?.id) return 0  // vo panel in som
-      if (r.type === 'vo') return 56
-      return 27
-    },
-    overscan: 15,
-  })
-  const vItems      = virtualizer.getVirtualItems()
-  const totalSize   = virtualizer.getTotalSize()
-  const padTop      = vItems.length > 0 ? vItems[0].start : 0
-  const padBottom   = vItems.length > 0 ? totalSize - vItems[vItems.length - 1].end : 0
 
   // ─── Importo selezione corrente ───────────────────────────────────────────
 
@@ -976,9 +956,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                   </tr>
                 </thead>
                 <tbody>
-                  {padTop > 0 && <tr><td colSpan={15} style={{ height: padTop, padding: 0, border: 'none' }} /></tr>}
-                  {vItems.map(vItem => {
-                    const row = tableRows[vItem.index]
+                  {tableRows.map(row => {
                     if (row.type === 'hsc') return <tr key={`hsc_${row.id}`} className="cmp-hsc"><td colSpan={14}>▸ {row.lb}</td></tr>
                     if (row.type === 'hca') return <tr key={`hca_${row.id}`} className="cmp-hca"><td colSpan={14}>{row.lb}</td></tr>
 
@@ -1358,7 +1336,6 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                     }
                     return null
                   })}
-                  {padBottom > 0 && <tr><td colSpan={15} style={{ height: padBottom, padding: 0, border: 'none' }} /></tr>}
                 </tbody>
               </table>
             </div>
