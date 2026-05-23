@@ -201,7 +201,7 @@ export default function CommessaLayout({ children }: { children: React.ReactNode
       </div>
 
       {/* Contenuto tab */}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {children}
       </div>
 
