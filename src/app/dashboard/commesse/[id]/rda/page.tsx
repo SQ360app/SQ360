@@ -12,6 +12,20 @@ const STATO_COLOR: Record<string,string> = {
   bozza:'#f59e0b', approvata:'#3b82f6', inviata:'#8b5cf6', chiusa:'#10b981', annullata:'#ef4444'
 }
 
+const WBS_FLAT: [string, string][] = [
+  ['F01','FASE PRELIMINARE'],['F01.01','Apertura commessa'],
+  ['F02','PROGETTAZIONE'],['F02.01','Progett. architettonica'],['F02.02','Strutturale'],['F02.03','Impianti'],
+  ['F03','APPROVVIGIONAMENTI'],['F03.01','Materiali strutturali'],['F03.02','Finiture'],['F03.03','Noleggi'],['F03.04','Contratti sub'],
+  ['F04','CANTIERE'],['F04.01','Opere preliminari'],['F04.02','Demolizioni'],['F04.03','Scavi'],
+  ['F04.04','Fondazioni'],['F04.05','Struttura in elevazione'],['F04.06','Solaio e copertura'],
+  ['F04.07','Tamponamenti'],['F04.08','Intonaci'],['F04.09','Massetti e pavimenti'],
+  ['F04.10','Serramenti'],['F04.11','Tinteggiature'],
+  ['F05','IMPIANTI'],['F05.01','Impianto elettrico'],['F05.02','Idro-sanitario'],['F05.03','Termico'],
+  ['F06','OPERE ESTERNE'],['F06.01','Pavimentazioni esterne'],['F06.02','Recinzioni'],
+  ['F07','SICUREZZA'],['F07.01','DPI'],['F07.02','Apprestamenti'],
+  ['F08','GESTIONE ECONOMICA'],['F08.01','Controllo budget'],['F08.02','Fatturazione'],
+]
+
 interface RDA {
   id: string; codice: string; commessa_id: string
   tipo: string; oggetto: string; qta_stimata: number; um: string
@@ -130,7 +144,6 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
   const [vociRda, setVociRda] = useState<VoceComputo[]>([])
   const [loadingVoci, setLoadingVoci] = useState(false)
   const [generandoRdo, setGenerandoRdo] = useState(false)
-  const [wbsEls, setWbsEls] = useState<{id:string;codice:string;descrizione:string}[]>([])
   const [revModal, setRevModal] = useState<{doc: RDA; motivo: string} | null>(null)
   const [storicoOpen, setStoricoOpen] = useState<Record<string,boolean>>({})
   const [allRda, setAllRda] = useState<RDA[]>([])
@@ -144,11 +157,6 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
     setAllRda(all)
     setRdaList(all.filter(r => r.is_vigente !== false))
     setLoading(false)
-  }, [id])
-
-  useEffect(() => {
-    supabase.from('wbs_elements' as any).select('id,codice,descrizione').eq('commessa_id', id)
-      .then(({ data }: any) => setWbsEls((data as any[]) || []))
   }, [id])
 
   useEffect(() => { carica() }, [carica])
@@ -182,9 +190,10 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
     if (!editRda?.oggetto || !editRda?.tipo) { showToast('Compila oggetto e tipo'); return }
     setSaving(true)
     try {
+      const aziendaId = await getAziendaId() || null
       const payload = {
         commessa_id: id,
-        azienda_id: await getAziendaId() || null,
+        azienda_id: aziendaId,
         tipo: editRda.tipo || 'MAT',
         oggetto: editRda.oggetto || '',
         qta_stimata: editRda.qta_stimata || 1,
@@ -200,7 +209,9 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
         await supabase.from('rda').update(payload).eq('id', editRda.id)
         showToast('RDA aggiornata')
       } else {
-        const codice = 'RDA-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.floor(Math.random()*1000).toString().padStart(3,'0')
+        const { count } = await supabase.from('rda').select('*', { count: 'exact', head: true }).eq('commessa_id', id).eq('azienda_id', aziendaId)
+        const anno = new Date().getFullYear().toString().slice(2)
+        const codice = `RDA-${anno}-${String((count || 0) + 1).padStart(3, '0')}`
         await supabase.from('rda').insert({ ...payload, codice })
         showToast('RDA creata')
       }
@@ -551,15 +562,13 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
                   </div>
                 )}
              </div>}
-              {wbsEls.length > 0 && (
-                <div>
-                  <label style={(styleObj as any).lbl as React.CSSProperties}>WBS di riferimento</label>
-                  <select style={(styleObj as any).inp as React.CSSProperties} value={editRda.wbs_ref||''} onChange={e=>setEditRda({...editRda, wbs_ref:e.target.value})}>
-                    <option value="">— Nessuna WBS —</option>
-                    {wbsEls.map(w => <option key={w.id} value={w.codice}>{w.codice} — {w.descrizione}</option>)}
-                  </select>
-                </div>
-              )}
+              <div>
+                <label style={(styleObj as any).lbl as React.CSSProperties}>WBS di riferimento</label>
+                <select style={(styleObj as any).inp as React.CSSProperties} value={editRda.wbs_ref||''} onChange={e=>setEditRda({...editRda, wbs_ref:e.target.value})}>
+                  <option value="">— Nessuna WBS —</option>
+                  {WBS_FLAT.map(([code, label]) => <option key={code} value={code}>{code} — {label}</option>)}
+                </select>
+              </div>
               <div>
                 <label style={(styleObj as any).lbl as React.CSSProperties}>Note</label>
                 <textarea style={{ ...(styleObj as any).inp, resize:'vertical' as const, minHeight:60 }} value={editRda.note||''} onChange={e=>setEditRda({...editRda, note:e.target.value})} />

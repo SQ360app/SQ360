@@ -369,13 +369,12 @@ ${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;
     if (!editRdo?.fornitore) { showToast('Inserisci almeno un fornitore'); return }
     setSaving(true)
     try {
-      const codice = 'RDO-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.floor(Math.random()*1000).toString().padStart(3,'0')
+      const aziendaId = await getAziendaId() || null
       const defaultSam = commessa?.sam_obbligatoria || commessa?.tipo_committente === 'pubblico' || false
       const payload = {
         commessa_id: id,
-        azienda_id: await getAziendaId() || null,
+        azienda_id: aziendaId,
         rda_id: editRdo.rda_id || null,
-        codice: editRdo.id ? (editRdo.codice || codice) : codice,
         fornitore: editRdo.fornitore || '',
         email_fornitore: editRdo.email_fornitore || '',
         data_invio: editRdo.data_invio || null,
@@ -389,10 +388,13 @@ ${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;
         wbs_ref: editRdo.wbs_ref || null,
       }
       if (editRdo.id) {
-        await supabase.from('rdo').update(payload).eq('id', editRdo.id)
+        await supabase.from('rdo').update({ ...payload, codice: editRdo.codice || '' }).eq('id', editRdo.id)
         showToast('RDO aggiornata')
       } else {
-        await supabase.from('rdo').insert(payload)
+        const { count } = await supabase.from('rdo').select('*', { count: 'exact', head: true }).eq('commessa_id', id).eq('azienda_id', aziendaId)
+        const anno = new Date().getFullYear().toString().slice(2)
+        const codice = `RDO-${anno}-${String((count || 0) + 1).padStart(3, '0')}`
+        await supabase.from('rdo').insert({ ...payload, codice })
         showToast('RDO creata')
       }
       setForm(false); setEditRdo(null); carica()
