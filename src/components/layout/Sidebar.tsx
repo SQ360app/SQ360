@@ -6,13 +6,14 @@ import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import {
   LayoutDashboard, Search, FolderOpen, Users,
-  Calendar, Settings, CreditCard, Building2, LogOut
+  Calendar, Settings, CreditCard, Building2, LogOut, Map
 } from 'lucide-react'
 
 const NAV = [
   { href: '/dashboard',                 icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/dashboard/gare',            icon: Search,          label: 'Analisi Gare' },
   { href: '/dashboard/commesse',        icon: FolderOpen,      label: 'Commesse' },
+  { href: '/dashboard/mappa',           icon: Map,             label: 'Mappa' },
   { href: '/dashboard/fornitori',       icon: Users,           label: 'Contatti' },
   { href: '/dashboard/scadenzario',     icon: Calendar,        label: 'Scadenzario' },
   { href: '/dashboard/amministrazione', icon: CreditCard,      label: 'Amministrazione' },
