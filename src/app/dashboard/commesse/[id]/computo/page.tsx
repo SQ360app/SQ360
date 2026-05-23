@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useCallback, use } from 'react'
+import React, { useState, useEffect, useRef, useCallback, use, useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { supabase, getAziendaId } from '@/lib/supabase'
 
@@ -547,12 +547,19 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     return direct + children.reduce((s, c) => s + wbsCount(c), 0)
   }
 
-  const vociFiltrate = voci.filter(v => {
+  const vociFiltrate = useMemo(() => voci.filter(v => {
     if (wbsSel) return v.wbs_id === wbsSel
-    if (catFilter.c) return v.categoria === catFilter.c || v.capitolo === catFilter.c
-    if (catFilter.sc) return v.capitolo === catFilter.sc
+    if (catFilter.c) {
+      const cf = catFilter.c.trim().toLowerCase()
+      return v.categoria.trim().toLowerCase() === cf
+          || v.capitolo.trim().toLowerCase() === cf
+    }
+    if (catFilter.sc) {
+      const sf = catFilter.sc.trim().toLowerCase()
+      return v.capitolo.trim().toLowerCase() === sf
+    }
     return true
-  })
+  }), [voci, catFilter, wbsSel])
 
   const voceNoWBS = voci.filter(v => !v.wbs_id).length
 
@@ -609,7 +616,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     | { type: 'som'; v: VoceDB }
 
   const isFiltered = !!(catFilter.c || catFilter.sc || wbsSel)
-  const tableRows: Row[] = (() => {
+  const tableRows: Row[] = useMemo(() => {
     const rows: Row[] = []
     let lastSC = '', lastC = ''
     for (const v of vociFiltrate) {
@@ -620,7 +627,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
       rows.push({ type: 'vo', v }); rows.push({ type: 'mi', v }); rows.push({ type: 'som', v })
     }
     return rows
-  })()
+  }, [vociFiltrate, isFiltered])
 
   const voceIdx = (v: VoceDB) => voci.indexOf(v) + 1
 
@@ -930,6 +937,14 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                 📥 Seleziona file XPWE
                 <input type="file" accept=".xpwe,.pwe,.xml" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) importaFile(f) }} />
               </label>
+            </div>
+          ) : isFiltered && tableRows.length === 0 ? (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#6b7280', fontSize: 14 }}>
+              Nessuna voce trovata per questo filtro.
+              <button onClick={() => { setCatFilter({ sc: null, c: null }); setWbsSel(null) }}
+                style={{ color: '#3b82f6', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }}>
+                Rimuovi filtro
+              </button>
             </div>
           ) : (
             <div ref={scrollRef} className="cmp-tscroll" onClick={() => setCtx(null)}>
