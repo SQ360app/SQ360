@@ -141,6 +141,24 @@ export default function ImpostazioniPage() {
         if (d.carta_intestata_header_url)   { setHeaderUrl(d.carta_intestata_header_url); setHeaderPreview(d.carta_intestata_header_url) }
         if (d.carta_intestata_footer_url)   { setFooterUrl(d.carta_intestata_footer_url); setFooterPreview(d.carta_intestata_footer_url) }
       }
+      const { data: az } = await (supabase as any).from('azienda').select('*').eq('id', id).maybeSingle()
+      if (az) {
+        setAzienda({
+          ragione_sociale: az.ragione_sociale || az.nome || '',
+          piva:            az.piva || '',
+          cf:              az.codice_fiscale || az.cf || '',
+          indirizzo_sede:  az.sede_legale || '',
+          cap_sede:        az.cap || '',
+          comune_sede:     az.comune || '',
+          provincia_sede:  az.provincia || '',
+          pec:             az.pec || '',
+          email:           az.email || '',
+          tel:             az.telefono || az.tel || '',
+          rea:             az.rea || '',
+          soa_categorie:   az.soa_categorie || '',
+          patente_crediti: az.patente_crediti != null ? String(az.patente_crediti) : '',
+        })
+      }
       const { data: sediData } = await (supabase as any)
         .from('azienda_sedi').select('*').eq('azienda_id', id).order('created_at', { ascending: true })
       if (sediData) setSedi(sediData)
@@ -197,7 +215,28 @@ export default function ImpostazioniPage() {
     patente_crediti: '100'
   })
 
-  function saveAzienda() {
+  async function saveAzienda() {
+    if (!aziendaId) return
+    const sedeLegale = [
+      azienda.indirizzo_sede,
+      azienda.cap_sede && azienda.comune_sede
+        ? `${azienda.cap_sede} ${azienda.comune_sede}`
+        : azienda.cap_sede || azienda.comune_sede,
+    ].filter(Boolean).join(', ')
+    const { error } = await (supabase as any).from('azienda').update({
+      ragione_sociale: azienda.ragione_sociale || null,
+      piva:            azienda.piva || null,
+      codice_fiscale:  azienda.cf || null,
+      sede_legale:     sedeLegale || null,
+      provincia:       azienda.provincia_sede || null,
+      pec:             azienda.pec || null,
+      email:           azienda.email || null,
+      telefono:        azienda.tel || null,
+      rea:             azienda.rea || null,
+      soa_categorie:   azienda.soa_categorie || null,
+      patente_crediti: azienda.patente_crediti || null,
+    }).eq('id', aziendaId)
+    if (error) { alert('Errore salvataggio: ' + error.message); return }
     setSavedOk(true)
     setTimeout(() => setSavedOk(false), 3000)
   }

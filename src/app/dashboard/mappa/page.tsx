@@ -198,6 +198,9 @@ export default function MappaCantieri() {
   const aziendaIdRef        = useRef<string>('')
   const allDataRef          = useRef<CommessaKPI[]>([])
   const filtriRef           = useRef<Filtri>(FILTRI_DEFAULT)
+  const caricaSediMapRef    = useRef<(() => Promise<void>) | null>(null)
+  const mostraSediRef       = useRef(true)
+  const visibilityHandlerRef = useRef<(() => void) | null>(null)
   const router              = useRouter()
 
   const [loading, setLoading]               = useState(true)
@@ -211,9 +214,11 @@ export default function MappaCantieri() {
   const [mostraSedi, setMostraSedi]         = useState(true)
   const [mostraFornitori, setMostraFornitori] = useState(false)
   const [ragioFornitori, setRagioFornitori] = useState<25 | 50 | 100>(50)
+  const [refreshing, setRefreshing]         = useState(false)
 
-  // Keep ref in sync so closures always see the latest filters
+  // Keep refs in sync so closures always see the latest values
   filtriRef.current = filtri
+  mostraSediRef.current = mostraSedi
 
   const updateSource = useCallback((newFiltri: Filtri) => {
     const map = mapRef.current
@@ -265,43 +270,47 @@ export default function MappaCantieri() {
       aziendaIdRef.current = aziendaId
 
       // ── Sedi azienda (pin colorati per tipo) ──────────────────────────────
-      const { data: sediAz, error: sediErr } = await (supabase as any)
-        .from('azienda_sedi').select('*').eq('azienda_id', aziendaId).eq('attiva', true)
-      console.log('[Sedi]', sediAz, sediErr?.message)
-
-      for (const s of sediAz || []) {
-        // Geocodifica on-the-fly se mancano le coordinate
-        if (!s.lat || !s.lng) {
-          const q = [s.indirizzo, s.comune, s.provincia, 'Italia'].filter(Boolean).join(', ')
-          if (q.trim()) {
-            try {
-              await new Promise(r => setTimeout(r, 600))
-              const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=it`, { headers: { 'Accept-Language': 'it' } })
-              const j = await r.json()
-              if (j[0]) {
-                s.lat = parseFloat(j[0].lat)
-                s.lng = parseFloat(j[0].lon)
-                ;(supabase as any).from('azienda_sedi').update({ lat: s.lat, lng: s.lng }).eq('id', s.id).then()
-                console.log('[Sedi geocoding]', s.nome || s.tipo, '→', s.lat, s.lng)
-              }
-            } catch { /* non bloccante */ }
+      const caricaSedi = async () => {
+        sediMarkersRef.current.forEach(m => m.remove())
+        sediMarkersRef.current = []
+        const { data: sediAz, error: sediErr } = await (supabase as any)
+          .from('azienda_sedi').select('*').eq('azienda_id', aziendaIdRef.current).eq('attiva', true)
+        console.log('[Sedi]', sediAz, sediErr?.message)
+        for (const s of sediAz || []) {
+          if (!s.lat || !s.lng) {
+            const q = [s.indirizzo, s.comune, s.provincia, 'Italia'].filter(Boolean).join(', ')
+            if (q.trim()) {
+              try {
+                await new Promise(r => setTimeout(r, 600))
+                const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=it`, { headers: { 'Accept-Language': 'it' } })
+                const j = await r.json()
+                if (j[0]) {
+                  s.lat = parseFloat(j[0].lat); s.lng = parseFloat(j[0].lon)
+                  ;(supabase as any).from('azienda_sedi').update({ lat: s.lat, lng: s.lng }).eq('id', s.id).then()
+                  console.log('[Sedi geocoding]', s.nome || s.tipo, '→', s.lat, s.lng)
+                }
+              } catch { /* non bloccante */ }
+            }
           }
+          if (!s.lat || !s.lng) continue
+          const meta = SEDE_TIPI[s.tipo] || SEDE_TIPI.altro
+          const el = document.createElement('div')
+          el.innerHTML = `<div style="width:38px;height:38px;border-radius:50%;background:${meta.color};border:2.5px solid #fff;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.45)">${meta.emoji}</div>`
+          const addrLine = [s.indirizzo, s.cap && s.comune ? `${s.cap} ${s.comune}` : s.comune, s.provincia].filter(Boolean).join(', ')
+          const sedeP = new mapboxgl.Popup({ offset: 22, maxWidth: '230px' })
+            .setHTML(`<div style="font-family:'Segoe UI',sans-serif;font-size:12px">
+              <div style="font-weight:700;font-size:13px;color:${meta.color};margin-bottom:4px">${meta.emoji} ${s.nome || meta.label}</div>
+              ${addrLine ? `<div style="color:#374151;margin-bottom:2px">📍 ${addrLine}</div>` : ''}
+              ${s.referente ? `<div style="color:#6b7280;font-size:11px">👤 ${s.referente}</div>` : ''}
+              ${s.telefono  ? `<div style="color:#6b7280;font-size:11px">📞 ${s.telefono}</div>` : ''}
+            </div>`)
+          const marker = new mapboxgl.Marker({ element: el }).setLngLat([s.lng, s.lat]).setPopup(sedeP)
+          sediMarkersRef.current.push(marker)
+          if (mostraSediRef.current) marker.addTo(map)
         }
-        if (!s.lat || !s.lng) continue
-        const meta = SEDE_TIPI[s.tipo] || SEDE_TIPI.altro
-        const el = document.createElement('div')
-        el.innerHTML = `<div style="width:38px;height:38px;border-radius:50%;background:${meta.color};border:2.5px solid #fff;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.45)">${meta.emoji}</div>`
-        const addrLine = [s.indirizzo, s.cap && s.comune ? `${s.cap} ${s.comune}` : s.comune, s.provincia].filter(Boolean).join(', ')
-        const sedeP = new mapboxgl.Popup({ offset: 22, maxWidth: '230px' })
-          .setHTML(`<div style="font-family:'Segoe UI',sans-serif;font-size:12px">
-            <div style="font-weight:700;font-size:13px;color:${meta.color};margin-bottom:4px">${meta.emoji} ${s.nome || meta.label}</div>
-            ${addrLine ? `<div style="color:#374151;margin-bottom:2px">📍 ${addrLine}</div>` : ''}
-            ${s.referente ? `<div style="color:#6b7280;font-size:11px">👤 ${s.referente}</div>` : ''}
-            ${s.telefono  ? `<div style="color:#6b7280;font-size:11px">📞 ${s.telefono}</div>` : ''}
-          </div>`)
-        const marker = new mapboxgl.Marker({ element: el }).setLngLat([s.lng, s.lat]).setPopup(sedeP).addTo(map)
-        sediMarkersRef.current.push(marker)
       }
+      caricaSediMapRef.current = caricaSedi
+      await caricaSedi()
 
       // ── Sede impresa ──────────────────────────────────────────────────────
       const { data: az, error: azErr } = await (supabase as any)
@@ -578,6 +587,11 @@ export default function MappaCantieri() {
           }
         } catch { /* non bloccante */ }
       }
+
+      // ── Ricarica sedi quando l'utente torna sulla tab ──────────────────────
+      const onVisibility = () => { if (!document.hidden) caricaSediMapRef.current?.() }
+      document.addEventListener('visibilitychange', onVisibility)
+      visibilityHandlerRef.current = onVisibility
     })
 
     ;(window as any).__sq360_open = (id: string) => {
@@ -614,6 +628,11 @@ export default function MappaCantieri() {
     }
 
     return () => {
+      if (visibilityHandlerRef.current) {
+        document.removeEventListener('visibilitychange', visibilityHandlerRef.current)
+        visibilityHandlerRef.current = null
+      }
+      caricaSediMapRef.current = null
       sedeMarker.current?.remove()
       sedeMarker.current = null
       sediMarkersRef.current.forEach(m => m.remove())
@@ -692,6 +711,19 @@ export default function MappaCantieri() {
               {loading ? 'Caricamento…' : `${count} cantieri sulla mappa`}
             </div>
           </div>
+          <button
+            onClick={async () => {
+              setRefreshing(true)
+              try { await caricaSediMapRef.current?.() } finally { setRefreshing(false) }
+            }}
+            disabled={refreshing || loading}
+            title="Ricarica sedi"
+            style={{
+              background: 'rgba(255,255,255,.15)', border: 'none', borderRadius: 6,
+              padding: '4px 9px', color: '#fff', cursor: 'pointer', fontSize: 13, flexShrink: 0,
+            }}>
+            {refreshing ? '⏳' : '🔄'}
+          </button>
           <button
             onClick={() => setFiltriOpen(v => !v)}
             style={{
