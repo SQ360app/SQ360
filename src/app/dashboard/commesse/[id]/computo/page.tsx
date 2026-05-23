@@ -618,7 +618,12 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
   const tableRows: Row[] = useMemo(() => {
     const rows: Row[] = []
     let lastSC = '', lastC = ''
-    for (const v of vociFiltrate) {
+    const sorted = [...vociFiltrate].sort((a, b) => {
+      const sc = (a.capitolo || '').localeCompare(b.capitolo || '')
+      if (sc !== 0) return sc
+      return (a.categoria || '').localeCompare(b.categoria || '')
+    })
+    for (const v of sorted) {
       if (v.capitolo !== lastSC) { rows.push({ type: 'hsc', id: v.capitolo, lb: v.capitolo }); lastSC = v.capitolo; lastC = '' }
       if (v.categoria && v.categoria !== v.capitolo && v.categoria !== lastC) { rows.push({ type: 'hca', id: v.categoria, lb: v.categoria }); lastC = v.categoria }
       rows.push({ type: 'vo', v }); rows.push({ type: 'mi', v }); rows.push({ type: 'som', v })
