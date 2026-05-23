@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
-import { supabase, getAziendaId } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
 interface CommessaKPI {
@@ -155,9 +155,21 @@ export default function MappaCantieri() {
     map.addControl(new mapboxgl.ScaleControl({ unit: 'metric' }), 'bottom-right')
 
     map.on('load', async () => {
-      const aziendaId = await getAziendaId()
-      if (!aziendaId) {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
         setError('Sessione scaduta — effettua il login')
+        setLoading(false)
+        return
+      }
+      const { data: profile } = await (supabase as any)
+        .from('utenti')
+        .select('azienda_id')
+        .eq('id', user.id)
+        .single()
+      const aziendaId = profile?.azienda_id
+      console.log('[Mappa] user.id:', user.id, '→ azienda_id:', aziendaId)
+      if (!aziendaId) {
+        setError('Profilo utente non trovato — contatta il supporto')
         setLoading(false)
         return
       }
