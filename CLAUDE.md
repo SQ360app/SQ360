@@ -345,6 +345,65 @@
 - ✅ `documenti/page.tsx`, `fornitori/page.tsx`: import `supabase` mancante aggiunto
 - ✅ `preventivo/page.tsx`: `const firstCap = caps[0]; if (firstCap) setExpandedCap({ [firstCap as string]: true })` — fix computed property key
 
+### Sessione 23 Maggio 2026
+
+#### Fix layout e computo
+- ✅ Layout computo definitivo: rimosso virtualizer, render diretto come SAL Attivi
+- ✅ Filtro categoria/WBS corretto: `vociFiltrate` con `v.categoria` per figlio, `v.capitolo` per padre
+- ✅ Sort `vociFiltrate` prima di `tableRows` per evitare chiavi duplicate
+- ✅ SAL Attivi colonne stabili: rimosso filter `salSel` dal colgroup
+- ✅ Righe `mi` visibili: background `#f0fdf4`, padding, bordo puntinato, font `#374151` 11px
+
+#### UX Selezione computo
+- ✅ Click riga → seleziona (multiSel), click tariffa → apre pannello analisi (setSel)
+- ✅ Ctrl+A rispetta filtro attivo (seleziona solo `tableRows` visibili filtrati)
+- ✅ Barra azioni contestuale layout-safe: sempre nel DOM, `height:0/overflow:hidden` quando vuota
+- ✅ Checkbox header (select-all) + checkbox per-riga nel tbody
+- ✅ Colonna checkbox separata (28px) dal Nr — fix rowSpan che comprimeva righe `mi`
+- ✅ Stessa UX replicata in `sal-attivi/page.tsx` con "📥 Imposta qtà SAL" batch
+
+#### Flusso acquisti
+- ✅ Tipo affidamento RDO: 8 tipi con rilevamento automatico subappalto (soglie D.Lgs. 36/2023 art.119)
+- ✅ SAM (Scheda Approvazione Materiali) opzionale con toggle per commessa
+- ✅ Flusso RDO→SAM→ODA sequenziale forzato
+- ✅ Checklist compliance per tipo fornitore
+- ✅ Stati automatici RDA/RDO/SAM/ODA
+- ✅ Revisioni documentali con codice -R1/-R2
+- ✅ WBS su RDA/ODA extra-computo
+
+#### Sistema email
+- ✅ Template centralizzato in `emailTemplates.ts`
+- ✅ `EmailPreviewModal` riutilizzabile
+- ✅ Log comunicazioni `email_log`
+- ✅ Tab 📧 Email per commessa
+- ✅ Configurazione email per area aziendale
+
+#### Database e Supabase
+- ✅ View `v_commesse_kpi` con `responsabile_nome`
+- ✅ Tabella `azienda_sedi` per multi-sede
+- ✅ Tabella `email_log` con RLS
+- ✅ Function `genera_codice_documento()`
+- ✅ Campi revisioni su `rda`/`rdo`/`dam`/`oda`/`contratti_sub`
+- ✅ Flusso acquisti: `tipo_affidamento`, `compliance_ok`, `dam_id` su `oda`
+- ✅ Codici univoci MAX+1 con constraint `UNIQUE(commessa_id, azienda_id, codice)`
+
+#### Mappa cantieri
+- ✅ Pin sedi azienda per tipo
+- ✅ Figure commessa in mappa (click cantiere)
+- ✅ Fornitori nel raggio (25/50/100km)
+- ✅ Geocoding retroattivo Photon+Nominatim
+- ✅ `fitBounds` su sedi+cantieri
+
+#### Contatti v2
+- ✅ 38 campi professionali
+- ✅ 5 tab: Anagrafica / Professione / Qualificazioni / Commesse / Note
+- ✅ Alert scadenze DURC/polizza/Inarcassa
+
+#### Codifica commesse
+- ✅ Formato `[AA]-[SA]-[PR]-[SOA]-[NNN]`
+- ✅ 17 codici stazione appaltante
+- ✅ Generatore automatico con RPC Supabase
+
 ## Prossimi task prioritari
 1. **SQL migrations da eseguire su Supabase** (se non già fatto):
    - `ALTER TABLE sal ADD COLUMN IF NOT EXISTS pdf_dl_url text, pdf_certificato_url text`
