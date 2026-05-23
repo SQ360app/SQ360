@@ -613,16 +613,10 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
 
   const vociFiltrate = useMemo(() => voci.filter(v => {
     if (wbsSel) return v.wbs_id === wbsSel
-    if (catFilter.sc) {
-      const sf = catFilter.sc.trim().toLowerCase()
-      return v.capitolo.trim().toLowerCase() === sf
-          || v.categoria.trim().toLowerCase() === sf
-    }
-    if (catFilter.c) {
-      const cf = catFilter.c.trim().toLowerCase()
-      return v.categoria.trim().toLowerCase() === cf
-          || v.capitolo.trim().toLowerCase() === cf
-    }
+    if (catFilter.c)  return v.categoria?.trim().toLowerCase()
+                          === catFilter.c.trim().toLowerCase()
+    if (catFilter.sc) return v.capitolo?.trim().toLowerCase()
+                          === catFilter.sc.trim().toLowerCase()
     return true
   }), [voci, catFilter, wbsSel])
 
@@ -836,7 +830,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
                     <span className="cmp-cat-info">{catFilter.c || catFilter.sc || 'Nessun filtro'}</span>
                   </div>
                   {catTree.map(sc => {
-                    const isFlt = catFilter.sc === sc.id && !catFilter.c
+                    const isFlt = catFilter.sc?.trim().toLowerCase() === sc.id?.trim().toLowerCase() && !catFilter.c
                     return (
                       <div key={sc.id}>
                         <div className={`cmp-tnode cmp-t-sc${isFlt ? ' flt' : ''}`}
@@ -847,7 +841,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
                           <span className="cmp-ttot">{fi(sc.tot, 0)}</span>
                         </div>
                         {catExp[sc.id] && sc.ch.map(c => {
-                          const isCFlt = catFilter.c === c.id
+                          const isCFlt = catFilter.c?.trim().toLowerCase() === c.id?.trim().toLowerCase()
                           return (
                             <div key={c.id} className={`cmp-tnode cmp-t-c${isCFlt ? ' flt' : ''}`}
                               onClick={e => { e.stopPropagation(); setCatFilter(isCFlt ? { sc: sc.id, c: null } : { sc: sc.id, c: c.id }) }}>
