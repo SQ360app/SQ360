@@ -273,15 +273,19 @@ export default function ImpostazioniPage() {
         note: nuovaSede.note || null,
         attiva: nuovaSede.attiva !== false,
       }
+      let saveError: any = null
       if (nuovaSede.id) {
-        await (supabase as any).from('azienda_sedi').update(payload).eq('id', nuovaSede.id)
+        const { error } = await (supabase as any).from('azienda_sedi').update(payload).eq('id', nuovaSede.id)
+        saveError = error
       } else {
-        await (supabase as any).from('azienda_sedi').insert(payload)
+        const { error } = await (supabase as any).from('azienda_sedi').insert(payload)
+        saveError = error
       }
+      if (saveError) { alert('Errore salvataggio sede: ' + saveError.message); return }
       const { data } = await (supabase as any).from('azienda_sedi').select('*').eq('azienda_id', aziendaId).order('created_at', { ascending: true })
       if (data) setSedi(data)
-    } finally {
       setNuovaSede(null)
+    } finally {
       setSalvandoSede(false)
     }
   }
