@@ -624,14 +624,12 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     const rows: Row[] = []
     let lastSC = '', lastC = ''
     for (const v of vociFiltrate) {
-      if (!isFiltered) {
-        if (v.capitolo !== lastSC) { rows.push({ type: 'hsc', id: v.capitolo, lb: v.capitolo }); lastSC = v.capitolo; lastC = '' }
-        if (v.categoria && v.categoria !== v.capitolo && v.categoria !== lastC) { rows.push({ type: 'hca', id: v.categoria, lb: v.categoria }); lastC = v.categoria }
-      }
+      if (v.capitolo !== lastSC) { rows.push({ type: 'hsc', id: v.capitolo, lb: v.capitolo }); lastSC = v.capitolo; lastC = '' }
+      if (v.categoria && v.categoria !== v.capitolo && v.categoria !== lastC) { rows.push({ type: 'hca', id: v.categoria, lb: v.categoria }); lastC = v.categoria }
       rows.push({ type: 'vo', v }); rows.push({ type: 'mi', v }); rows.push({ type: 'som', v })
     }
     return rows
-  }, [vociFiltrate, isFiltered])
+  }, [vociFiltrate])
 
   const voceIdx = (v: VoceDB) => voci.indexOf(v) + 1
 
@@ -645,6 +643,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
       if (r.type === 'hca') return 24
       if (r.type === 'som' && sel === (r as any).v?.id) return 380
       if (r.type === 'vo'  && sel === (r as any).v?.id) return 0  // vo panel in som
+      if (r.type === 'vo') return 56
       return 27
     },
     overscan: 15,
