@@ -86,7 +86,7 @@ const FIGURE: FiguraProfessionale[] = [
 // ─── Stili inline basati su design system globals.css ─────────────────────────
 
 const S = {
-  page: { minHeight: '100%', background: 'var(--bg)', padding: 0 } as React.CSSProperties,
+  page: { height: '100%', overflowY: 'auto', background: 'var(--bg)', padding: 0 } as React.CSSProperties,
   stickyHeader: { position: 'sticky' as const, top: 0, zIndex: 30, background: 'var(--panel)', borderBottom: '1px solid var(--border)', padding: '14px 24px', boxShadow: 'var(--shadow-sm)' },
   headerRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
   headerTitle: { fontSize: 15, fontWeight: 700, color: 'var(--t1)' },

@@ -86,6 +86,40 @@ async function nominatimFetch(q: string): Promise<NominatimResult[]> {
   } catch { return [] }
 }
 
+// Photon (Komoot) — indice OSM più completo di Nominatim per strade minori
+// bbox: lon_west,lat_south,lon_east,lat_north (Italia)
+async function photonFetch(q: string): Promise<NominatimResult[]> {
+  try {
+    const r = await fetch(
+      `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&lang=it&limit=5&bbox=6.6,36.6,18.5,47.1`,
+      { headers: { 'User-Agent': 'SQ360/1.0 info.sq360@gmail.com' } }
+    )
+    const json = await r.json()
+    return (json.features || []).map((f: any) => {
+      const p  = f.properties
+      const road = p.street || p.name || ''
+      const hn   = p.housenumber || ''
+      const city = p.city || p.town || p.village || p.municipality || ''
+      return {
+        display_name: [hn ? `${road} ${hn}` : road, p.postcode && city ? `${p.postcode} ${city}` : city].filter(Boolean).join(', '),
+        lat: String(f.geometry.coordinates[1]),
+        lon: String(f.geometry.coordinates[0]),
+        address: {
+          road,
+          house_number: hn,
+          postcode:  p.postcode  || '',
+          city,
+          town:      p.town      || '',
+          village:   p.village   || '',
+          county:    p.county    || '',
+          state:     p.state     || '',
+          'ISO3166-2-lvl6': '',
+        },
+      }
+    })
+  } catch { return [] }
+}
+
 function getProvince(a: Record<string, string>): string {
   const iso = a['ISO3166-2-lvl6']
   if (iso) return iso.split('-').pop()?.toUpperCase() || ''
@@ -169,10 +203,16 @@ export function AddressAutocomplete({
         }
       }
 
-      // Tentativo 3: fallback solo comune + provincia (utile per frazioni/contrade sconosciute)
+      // Tentativo 3: Photon — indice OSM più completo, trova strade minori e toponimi locali
+      if (data.length === 0) {
+        const qPhoton = [q, comuneCorrente].filter(Boolean).join(' ')
+        data = await photonFetch(qPhoton)
+      }
+
+      // Tentativo 4: solo comune + provincia (fallback finale per frazioni/contrade)
       if (data.length === 0 && comuneCorrente) {
-        const q3 = [comuneCorrente, provinciaCorrente, 'Italia'].filter(Boolean).join(', ')
-        data = await nominatimFetch(q3)
+        const q4 = [comuneCorrente, provinciaCorrente, 'Italia'].filter(Boolean).join(', ')
+        data = await nominatimFetch(q4)
       }
 
       setResults(data)
