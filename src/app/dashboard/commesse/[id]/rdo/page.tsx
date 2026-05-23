@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { supabase, getAziendaId } from '@/lib/supabase'
+import { FlowThread } from '@/components/FlowThread'
 
 const fi = (n: number, d = 2) => n?.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? '—'
 
@@ -11,6 +12,18 @@ const STATO_COLOR: Record<string,string> = {
   comparativa:'#f97316', aggiudicata:'#10b981', annullata:'#6b7280'
 }
 
+const TIPI_AFFIDAMENTO = [
+  { value: 'fornitore_materiali', label: 'Fornitura materiali', emoji: '🏭' },
+  { value: 'nolo_freddo',         label: 'Nolo a freddo',       emoji: '🚜' },
+  { value: 'nolo_caldo',          label: 'Nolo a caldo',        emoji: '🚧' },
+  { value: 'posa_opera',          label: 'Solo posa in opera',  emoji: '🔧' },
+  { value: 'fornitura_posa',      label: 'Fornitura con posa',  emoji: '📦' },
+  { value: 'subappalto',          label: 'Subappalto',          emoji: '🏗️' },
+  { value: 'subaffidamento',      label: 'Subaffidamento',      emoji: '📋' },
+  { value: 'lavoratore_autonomo', label: 'Lavoratore autonomo', emoji: '👷' },
+]
+const TIPI_CON_MANODOPERA = ['nolo_caldo','posa_opera','fornitura_posa','subappalto','subaffidamento']
+
 interface RDO {
   id: string; rda_id?: string; commessa_id: string; codice: string
   fornitore: string; email_fornitore: string
@@ -19,6 +32,9 @@ interface RDO {
   rdo_gruppo_id?: string; oggetto?: string
   pagamento_giorni?: number; anticipo_pct?: number; disponibilita?: string
   offerta_voci?: any[]
+  tipo_affidamento?: string
+  pct_manodopera?: number
+  richiede_sam?: boolean
 }
 
 interface RDA {
@@ -254,17 +270,21 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
   const [fSearch, setFSearch] = useState('')
   const [fResults, setFResults] = useState<Fornitore[]>([])
   const [pdfRdo, setPdfRdo] = useState<RDO | null>(null)
+  const [commessa, setCommessa] = useState<{sam_obbligatoria:boolean;tipo_committente:string;importo_contrattuale:number}|null>(null)
+  const [prossimoPasso, setProssimoPasso] = useState<RDO | null>(null)
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
   const carica = useCallback(async () => {
     setLoading(true)
-    const [{ data: rdo }, { data: rda }] = await Promise.all([
+    const [{ data: rdo }, { data: rda }, { data: comm }] = await Promise.all([
       supabase.from('rdo').select('*').eq('commessa_id', id).order('created_at', { ascending: false }),
-      supabase.from('rda').select('id,codice,oggetto,tipo,stato').eq('commessa_id', id).in('stato', ['approvata','inviata'])
+      supabase.from('rda').select('id,codice,oggetto,tipo,stato').eq('commessa_id', id).in('stato', ['approvata','inviata']),
+      supabase.from('commesse').select('sam_obbligatoria,tipo_committente,importo_contrattuale').eq('id', id).single(),
     ])
     setRdoList((rdo as RDO[]) || [])
     setRdaList((rda as RDA[]) || [])
+    if (comm) setCommessa(comm as any)
     setLoading(false)
   }, [id])
 
@@ -323,6 +343,7 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
     setSaving(true)
     try {
       const codice = 'RDO-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.floor(Math.random()*1000).toString().padStart(3,'0')
+      const defaultSam = commessa?.sam_obbligatoria || commessa?.tipo_committente === 'pubblico' || false
       const payload = {
         commessa_id: id,
         azienda_id: await getAziendaId() || null,
@@ -335,6 +356,9 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
         importo_offerta: editRdo.importo_offerta || 0,
         stato: editRdo.stato || 'bozza',
         note: editRdo.note || '',
+        tipo_affidamento: editRdo.tipo_affidamento || null,
+        pct_manodopera: editRdo.pct_manodopera != null ? editRdo.pct_manodopera : null,
+        richiede_sam: editRdo.richiede_sam ?? defaultSam,
       }
       if (editRdo.id) {
         await supabase.from('rdo').update(payload).eq('id', editRdo.id)
@@ -359,14 +383,19 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
     if (altriIds.length) await supabase.from('rdo').update({ stato: 'annullata' }).in('id', altriIds)
     showToast(`✓ Aggiudicata a ${vincitrice.fornitore}`)
     await carica()
+    setProssimoPasso(vincitrice)
+  }
+
+  const buildSamUrl = (r: RDO) => {
     const base = window.location.pathname.replace('/rdo', '/dam')
-    const params = new URLSearchParams({
-      rdo_id: vincitrice.id,
-      fornitore: vincitrice.fornitore || '',
-      importo: String(vincitrice.importo_offerta || 0),
-      rda_id: vincitrice.rda_id || ''
-    })
-    window.location.href = base + '?' + params.toString()
+    const params = new URLSearchParams({ rdo_id: r.id, fornitore: r.fornitore || '', importo: String(r.importo_offerta || 0), rda_id: r.rda_id || '' })
+    return base + '?' + params.toString()
+  }
+
+  const buildOdaUrl = (r: RDO) => {
+    const base = window.location.pathname.replace('/rdo', '/oda')
+    const params = new URLSearchParams({ rdo_id: r.id, importo: String(r.importo_offerta || 0), fornitore: r.fornitore || '', richiede_sam: '0' })
+    return base + '?' + params.toString()
   }
 
   const rdoFiltrate = rdoList.filter(r => filtroStato === 'tutti' || r.stato === filtroStato)
@@ -543,7 +572,11 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 16px', borderBottom:'1px solid var(--border)', background:'var(--bg)' }}>
           <span style={{ fontSize:12, fontWeight:700, color:'var(--t2)', textTransform:'uppercase', letterSpacing:'0.04em' }}>Richieste d&apos;Offerta</span>
           <button className="btn-primary" style={{ fontSize:12, padding:'8px 14px' }}
-            onClick={() => { setEditRdo({ stato:'bozza', importo_offerta:0 }); setFSearch(''); setForm(true) }}>
+            onClick={() => {
+            const defaultSam = commessa?.sam_obbligatoria || commessa?.tipo_committente === 'pubblico' || false
+            setEditRdo({ stato:'bozza', importo_offerta:0, richiede_sam: defaultSam })
+            setFSearch(''); setForm(true)
+          }}>
             + Nuova RDO
           </button>
         </div>
@@ -571,7 +604,7 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
                       <td style={{ ...styleTd, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>
                         {r.codice}
-                        <FlowThreadRDO rdoId={r.id} rdaId={r.rda_id} supabase={supabase} />
+                        <FlowThread rdoId={r.id} rdaId={r.rda_id} richiedeSam={r.richiede_sam} />
                         <VociRdaSection rdaId={r.rda_id || ''} supabase={supabase} />
                       </td>
                       <td style={{ ...styleTd, fontWeight:600 }}>{r.fornitore}</td>
@@ -596,18 +629,10 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
                           <button style={{...styleBtn('#7c3aed'),fontSize:11,marginLeft:4}} onClick={() => setPdfRdo(r)}>📎 Preventivo</button>
                         )}
                         {r.stato === 'aggiudicata' && (
-                          <button style={{...styleBtn('#10b981'),fontSize:11,marginLeft:4}} onClick={() => {
-                            const base = window.location.pathname.replace('/rdo','/oda')
-                            const params = new URLSearchParams({ rdo_id: r.id, importo: String(r.importo_offerta||0), fornitore: r.fornitore||'' })
-                            window.location.href = base + '?' + params.toString()
-                          }}>✅ Genera ODA</button>
+                          <button style={{...styleBtn('#0d9488'),fontSize:11,marginLeft:4}} onClick={() => window.location.href = buildSamUrl(r)}>📋 SAM/DAM</button>
                         )}
-                        {r.stato === 'aggiudicata' && (
-                          <button style={{...styleBtn('#0d9488'),fontSize:11,marginLeft:4}} onClick={() => {
-                            const base = window.location.pathname.replace('/rdo','/dam')
-                            const params = new URLSearchParams({ rdo_id: r.id, fornitore: r.fornitore||'', importo: String(r.importo_offerta||0), rda_id: r.rda_id||'' })
-                            window.location.href = base + '?' + params.toString()
-                          }}>📋 Crea DAM</button>
+                        {r.stato === 'aggiudicata' && !r.richiede_sam && (
+                          <button style={{...styleBtn('#10b981'),fontSize:11,marginLeft:4}} onClick={() => setProssimoPasso(r)}>✅ ODA →</button>
                         )}
                       </td>
                     </tr>
@@ -628,6 +653,29 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
               <button onClick={() => { setForm(false); setEditRdo(null) }} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'var(--t3)' }}>×</button>
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+              {/* Banner subappalto automatico */}
+              {(() => {
+                const ta = editRdo?.tipo_affidamento
+                const pctMan = editRdo?.pct_manodopera || 0
+                const imp = editRdo?.importo_offerta || 0
+                const impCommessa = commessa?.importo_contrattuale || 0
+                const soglia2pct = impCommessa > 0 && imp > impCommessa * 0.02
+                const soglia100k = imp > 100000
+                const isSubBanner = ta && !['fornitore_materiali','nolo_freddo'].includes(ta) && pctMan > 50 && (soglia2pct || soglia100k)
+                if (!isSubBanner) return null
+                return (
+                  <div style={{ padding:'10px 14px', background:'#7c3aed18', border:'1px solid #7c3aed44', borderRadius:8, fontSize:12, color:'#7c3aed' }}>
+                    ⚠️ <b>Soglie D.Lgs. 36/2023 art.119 superate</b> — classificato automaticamente <b>SUBAPPALTO</b>
+                    {editRdo?.tipo_affidamento !== 'subappalto' && (
+                      <button style={{ marginLeft:10, fontSize:11, padding:'2px 8px', borderRadius:4, background:'#7c3aed', color:'#fff', border:'none', cursor:'pointer' }}
+                        onClick={() => setEditRdo({ ...editRdo!, tipo_affidamento: 'subappalto' })}>
+                        Imposta subappalto
+                      </button>
+                    )}
+                  </div>
+                )
+              })()}
+
               {rdaList.length > 0 && (
                 <div>
                   <label style={styleLbl}>Collega a RDA</label>
@@ -687,6 +735,34 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
                 </select>
               </div>
               <div>
+                <label style={styleLbl}>Tipo affidamento</label>
+                <select style={styleInp} value={editRdo.tipo_affidamento || ''} onChange={e => setEditRdo({ ...editRdo, tipo_affidamento: e.target.value || undefined })}>
+                  <option value="">— Non specificato —</option>
+                  {TIPI_AFFIDAMENTO.map(t => <option key={t.value} value={t.value}>{t.emoji} {t.label}</option>)}
+                </select>
+              </div>
+              {editRdo.tipo_affidamento && TIPI_CON_MANODOPERA.includes(editRdo.tipo_affidamento) && (
+                <div>
+                  <label style={styleLbl}>% incidenza manodopera (0–100)</label>
+                  <input type="number" min="0" max="100" style={styleInp}
+                    value={editRdo.pct_manodopera ?? ''}
+                    onChange={e => setEditRdo({ ...editRdo, pct_manodopera: parseFloat(e.target.value) || 0 })}
+                    placeholder="es. 60" />
+                </div>
+              )}
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', background:'var(--bg)', borderRadius:8, border:'1px solid var(--border)' }}>
+                <div>
+                  <span style={{ fontSize:12, fontWeight:600, color:'var(--t1)' }}>📋 Richiedi approvazione SAM</span>
+                  <p style={{ fontSize:10, color:'var(--t3)', margin:'2px 0 0' }}>
+                    {commessa?.tipo_committente === 'pubblico' ? 'Obbligatoria (appalto pubblico)' : commessa?.sam_obbligatoria ? 'Obbligatoria per questa commessa' : 'Opzionale per commessa privata'}
+                  </p>
+                </div>
+                <button onClick={() => setEditRdo({ ...editRdo, richiede_sam: !editRdo.richiede_sam })}
+                  style={{ width:44, height:24, borderRadius:12, border:'none', cursor:'pointer', position:'relative', background: editRdo.richiede_sam ? 'var(--accent)' : 'var(--border)', transition:'background 0.2s', flexShrink:0 }}>
+                  <span style={{ position:'absolute', top:3, width:18, height:18, borderRadius:9, background:'#fff', boxShadow:'0 1px 3px rgba(0,0,0,.2)', transition:'left 0.2s', left: editRdo.richiede_sam ? 23 : 3 }} />
+                </button>
+              </div>
+              <div>
                 <label style={styleLbl}>Note</label>
                 <textarea style={{ ...styleInp, resize:'vertical', minHeight:60 }} value={editRdo.note || ''} onChange={e => setEditRdo({ ...editRdo, note: e.target.value })} />
               </div>
@@ -706,6 +782,44 @@ ${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descri
           onClose={() => setPdfRdo(null)}
           onSaved={() => { setPdfRdo(null); carica() }}
         />
+      )}
+
+      {/* Modal prossimo passo post-aggiudicazione */}
+      {prossimoPasso && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setProssimoPasso(null) }}>
+          <div className="modal-box" style={{ maxWidth:480, width:'92%' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:16 }}>
+              <h3 style={{ fontSize:14, fontWeight:700 }}>✓ Aggiudicata — {prossimoPasso.fornitore}</h3>
+              <button onClick={() => setProssimoPasso(null)} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'var(--t3)' }}>×</button>
+            </div>
+            <p style={{ fontSize:12, color:'var(--t3)', marginBottom:16 }}>Scegli il passo successivo per procedere con l&apos;acquisto:</p>
+
+            {/* SAM — sempre visibile */}
+            <button style={{ ...styleBtn('#0d9488'), width:'100%', marginBottom:10, textAlign:'left' as const, padding:'12px 16px', fontSize:13 }}
+              onClick={() => { setProssimoPasso(null); window.location.href = buildSamUrl(prossimoPasso) }}>
+              <div style={{ fontWeight:700 }}>📋 Crea SAM / Scheda Approvazione Materiali</div>
+              <div style={{ fontSize:10, opacity:0.85, marginTop:2, fontWeight:400 }}>Invia alla Direzione Lavori per approvazione prima dell&apos;ODA</div>
+            </button>
+
+            {/* ODA diretto — solo se richiede_sam = false */}
+            {!prossimoPasso.richiede_sam ? (
+              <div>
+                <div style={{ padding:'8px 12px', background:'#fef3c720', border:'1px solid #f59e0b44', borderRadius:8, fontSize:11, color:'#92400e', marginBottom:10 }}>
+                  ⚠️ <b>SAM non richiesta</b> per questa commessa — buona norma coinvolgere il DL prima di emettere l&apos;ordine.
+                </div>
+                <button style={{ ...styleBtn('#10b981'), width:'100%', textAlign:'left' as const, padding:'12px 16px', fontSize:13 }}
+                  onClick={() => { setProssimoPasso(null); window.location.href = buildOdaUrl(prossimoPasso) }}>
+                  <div style={{ fontWeight:700 }}>✅ Genera ODA direttamente</div>
+                  <div style={{ fontSize:10, opacity:0.85, marginTop:2, fontWeight:400 }}>Salta SAM ed emetti subito l&apos;ordine di acquisto</div>
+                </button>
+              </div>
+            ) : (
+              <div style={{ padding:'10px 14px', background:'#ef444410', border:'1px solid #ef444440', borderRadius:8, fontSize:12, color:'#ef4444' }}>
+                ⛔ SAM obbligatoria per questa commessa — l&apos;ODA sarà disponibile dopo l&apos;approvazione SAM.
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {toast && (

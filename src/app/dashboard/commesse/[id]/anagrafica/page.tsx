@@ -43,6 +43,7 @@ interface CommessaDati {
   cig: string; cup: string; tipo_commessa: string
   importo_contrattuale: number; ribasso_pct: number; oneri_sicurezza: number
   sicurezza_interna_esclusa_ribasso: boolean
+  sam_obbligatoria: boolean
   data_inizio: string; data_fine_prev: string; data_proroga: string
   stato: string
   indirizzo_cantiere: string; cap_cantiere: string; comune_cantiere: string; provincia: string
@@ -393,7 +394,7 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
 
   type Figure = Record<string, { professionista_id: string; professionista?: Professionista }>
 
-  const [commessa, setCommessa] = useState<Partial<CommessaDati>>({ sicurezza_interna_esclusa_ribasso: true })
+  const [commessa, setCommessa] = useState<Partial<CommessaDati>>({ sicurezza_interna_esclusa_ribasso: true, sam_obbligatoria: false })
   const [figure, setFigure] = useState<Figure>({})
   const [aziendaId, setAziendaId] = useState('')
   const [caricamento, setCaricamento] = useState(true)
@@ -452,6 +453,7 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
         importo_contrattuale: commessa.importo_contrattuale,
         ribasso_pct: commessa.ribasso_pct, oneri_sicurezza: commessa.oneri_sicurezza,
         sicurezza_interna_esclusa_ribasso: commessa.sicurezza_interna_esclusa_ribasso,
+        sam_obbligatoria: commessa.sam_obbligatoria ?? false,
         data_inizio: commessa.data_inizio, data_fine_prev: commessa.data_fine_prev,
         data_proroga: commessa.data_proroga || null,
         indirizzo_cantiere: commessa.indirizzo_cantiere,
@@ -644,6 +646,31 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
                       ? '🔒 Non ribassabile (esclude dal ribasso d\'asta)'
                       : '✓ Soggetta a ribasso'}
                   </p>
+                )}
+              </div>
+              <div style={{ gridColumn: 'span 2' }}>
+                <label style={S.label}>
+                  📋 SAM obbligatoria per tutti gli acquisti
+                  <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--t3)', fontWeight: 400, cursor: 'help' }}
+                    title="Se attivo, ogni RDO aggiudicata richiede l'approvazione SAM prima di emettere l'ODA. Default automatico per appalti pubblici.">
+                    ⓘ
+                  </span>
+                </label>
+                {editDati ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                    <button onClick={() => fc('sam_obbligatoria', !commessa.sam_obbligatoria)}
+                      style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', position: 'relative', background: commessa.sam_obbligatoria ? 'var(--accent)' : 'var(--border)', transition: 'background 0.2s' }}>
+                      <span style={{ position: 'absolute', top: 3, width: 18, height: 18, borderRadius: 9, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', transition: 'left 0.2s', left: commessa.sam_obbligatoria ? 23 : 3 }} />
+                    </button>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--t2)' }}>
+                      {commessa.sam_obbligatoria ? '✓ Obbligatoria' : 'Opzionale'}
+                    </span>
+                    {commessa.tipo_committente === 'pubblico' && !commessa.sam_obbligatoria && (
+                      <span style={{ fontSize: 10, color: '#f59e0b', marginLeft: 4 }}>⚠ Consigliata per appalti pubblici</span>
+                    )}
+                  </div>
+                ) : (
+                  <p style={S.value}>{commessa.sam_obbligatoria ? '✓ Obbligatoria per tutti gli acquisti' : 'Opzionale'}</p>
                 )}
               </div>
               <div>

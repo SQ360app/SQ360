@@ -96,6 +96,8 @@ export default function ODAPage() {
   const [odaPagina, setOdaPagina] = useState(0)
   const [odaHasMore, setOdaHasMore] = useState(false)
   const ODA_LIMIT = 50
+  const [damId, setDamId] = useState('')
+  const [richiedeSam, setRichiedeSam] = useState(false)
 
   const importoNum = parseFloat(importoNetto) || 0
   const totale = importoNum * (1 + parseFloat(ivaPct) / 100)
@@ -130,10 +132,17 @@ export default function ODAPage() {
     const rdo = searchParams.get('rdo_id')
     const imp = searchParams.get('importo')
     const forn = searchParams.get('fornitore')
-    if (!rdo) return
-    setRdoId(rdo)
+    const fornId = searchParams.get('fornitore_id')
+    const damIdParam = searchParams.get('dam_id')
+    const richiedeSamParam = searchParams.get('richiede_sam')
+    if (!rdo && !damIdParam) return
+    if (rdo) setRdoId(rdo)
     if (imp) setImportoNetto(imp)
-    if (forn && fornitori.length > 0) {
+    if (damIdParam) setDamId(damIdParam)
+    if (richiedeSamParam === '1') setRichiedeSam(true)
+    if (fornId) {
+      setFornitoreId(fornId)
+    } else if (forn && fornitori.length > 0) {
       const match = fornitori.find((f: any) => f.ragione_sociale === forn)
       if (match) setFornitoreId(match.id)
     }
@@ -142,6 +151,12 @@ export default function ODAPage() {
 
   async function handleSave() {
     if (!oggetto.trim() || importoNum <= 0 || !fornitoreId) { setErr('Compila tutti i campi obbligatori'); return }
+    // Validazione SAM: se c'è un rdo_id e la SAM era obbligatoria o tipo = subappalto, richiede dam_id
+    const damObbligatorio = rdoId && (richiedeSam || tipo === 'subappalto')
+    if (damObbligatorio && !damId) {
+      setErr('⛔ SAM non approvata. Torna alla RDO e completa l\'approvazione materiali prima di emettere l\'ODA.')
+      return
+    }
     setSaving(true)
     const aziendaId = await getAziendaId()
     const { count } = await supabase.from('oda').select('*', { count: 'exact', head: true }).eq('commessa_id', commessaId)
@@ -153,6 +168,9 @@ export default function ODAPage() {
       ritenuta_pct: parseFloat(ritenuta), condizioni_pagamento: condPag || null,
       data_consegna_prevista: dataConsegna || null, note: note || null, stato: 'EMESSO',
       rdo_id: rdoId || null, cig_riferimento: cigCommessa || null,
+      dam_id: damId || null,
+      richiede_sam: richiedeSam || false,
+      is_subappalto: tipo === 'subappalto',
     }).select().single()
     if (error) { setErr(error.message); setSaving(false); return }
     if (tipo === 'subappalto' && odaData) {
@@ -162,23 +180,6 @@ export default function ODAPage() {
         ritenuta_pct: parseFloat(ritenuta), stato: 'BOZZA'
       }).select().single()
       if (cs) await supabase.from('oda').update({ contratto_sub_id: cs.id }).eq('id', odaData.id)
-    }
-    if (tipo === 'materiali' && odaData) {
-      // Passo 2: evita doppio DAM se ne esiste già uno per questo rdo_id
-      let damId: string | null = null
-      if (rdoId) {
-        const { data: existing } = await supabase.from('dam').select('id').eq('rdo_id', rdoId).maybeSingle()
-        damId = existing?.id || null
-      }
-      if (!damId) {
-        const { data: dam } = await supabase.from('dam').insert({
-          commessa_id: commessaId, azienda_id: aziendaId || null,
-          fornitore_id: fornitoreId, materiale: oggetto.trim(),
-          stato: 'bozza', rdo_id: rdoId || null,
-        }).select().single()
-        damId = dam?.id || null
-      }
-      if (damId) await supabase.from('oda').update({ dam_id: damId }).eq('id', odaData.id)
     }
     const fornitoreNome = fornitori.find((f: any) => f.id === fornitoreId)?.ragione_sociale || ''
     const emailData = { numero: odaData?.numero || '', oggetto: oggetto.trim(), fornitore: fornitoreNome, importo: importoNum }
@@ -252,7 +253,7 @@ export default function ODAPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-gray-900">Ordini di Acquisto (ODA)</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Subappalto → contratto sub · Materiale → DAM automatici</p>
+          <p className="text-xs text-gray-500 mt-0.5">Subappalto → contratto sub automatico · SAM → usa flusso RDO per approvazione DL</p>
         </div>
         <button onClick={() => setModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
           <Plus className="w-4 h-4" /> Nuovo ODA
@@ -357,7 +358,17 @@ export default function ODAPage() {
               ))}
             </div>
             {tipo === 'subappalto' && <p className="text-xs p-2 bg-yellow-50 text-yellow-700 rounded-lg">→ Genera contratto sub automatico (D.Lgs. 36/2023)</p>}
-            {tipo === 'materiali' && <p className="text-xs p-2 bg-blue-50 text-blue-700 rounded-lg">→ Genera DAM per Direzione Lavori automatico</p>}
+            {damId && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+                <span className="text-xs font-semibold text-green-700">✅ SAM approvata</span>
+                <span className="text-xs text-green-600 font-mono">{damId.slice(0,8)}…</span>
+              </div>
+            )}
+            {rdoId && richiedeSam && !damId && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
+                <span className="text-xs font-semibold text-red-600">⛔ SAM obbligatoria — approva prima dalla RDO</span>
+              </div>
+            )}
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Oggetto *</label>
               <input value={oggetto} onChange={e => setOggetto(e.target.value)}

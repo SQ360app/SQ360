@@ -64,6 +64,11 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
   const [fResults, setFResults] = useState<Fornitore[]>([])
   const [pdfLoading, setPdfLoading] = useState<string | null>(null)
   const [aziendaDoc, setAziendaDoc] = useState<any>({})
+  const [rdoTipoAffidamento, setRdoTipoAffidamento] = useState<string>('')
+  const [fornitoreDati, setFornitoreDati] = useState<{durc_scadenza?:string;patente_crediti?:number}|null>(null)
+  const [compliance, setCompliance] = useState<Record<string,boolean>>({})
+  const [complianceOpen, setComplianceOpen] = useState(false)
+  const [blockModal, setBlockModal] = useState(false)
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
@@ -94,6 +99,28 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
     }, 300)
     return () => clearTimeout(t)
   }, [fSearch])
+
+  // Carica dati fornitore (DURC, patente) quando cambia fornitore_id nel form
+  useEffect(() => {
+    if (!editDam?.fornitore_id) { setFornitoreDati(null); return }
+    ;(supabase as any).from('professionisti_fornitori').select('durc_scadenza,patente_crediti')
+      .eq('id', editDam.fornitore_id).maybeSingle()
+      .then(({ data }: any) => {
+        setFornitoreDati(data || null)
+        if (data) {
+          const durcOk = data.durc_scadenza && new Date(data.durc_scadenza) > new Date()
+          const patenteOk = (data.patente_crediti || 0) >= 15
+          setCompliance(prev => ({ ...prev, durc: !!durcOk, patente: !!patenteOk }))
+        }
+      })
+  }, [editDam?.fornitore_id])
+
+  // Carica tipo_affidamento dalla RDO collegata
+  useEffect(() => {
+    if (!editDam?.rdo_id) { setRdoTipoAffidamento(''); return }
+    ;(supabase as any).from('rdo').select('tipo_affidamento').eq('id', editDam.rdo_id).maybeSingle()
+      .then(({ data }: any) => setRdoTipoAffidamento(data?.tipo_affidamento || ''))
+  }, [editDam?.rdo_id])
 
   useEffect(() => {
     const rdoId = searchParams.get('rdo_id')
@@ -302,12 +329,23 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
                     </td>
                     <td style={(styleObj as any).td as React.CSSProperties}>
                       <button style={{ ...(styleObj as any).btn('#3b82f6'), padding:'4px 10px', fontSize:11 }}
-                        onClick={() => { setEditDam(d); setFSearch(''); setForm(true) }}>✎</button>
+                        onClick={() => { setEditDam(d); setFSearch(''); setCompliance({}); setComplianceOpen(false); setForm(true) }}>✎</button>
                       <button style={{ ...(styleObj as any).btn('#6366f1'), padding:'4px 8px', fontSize:11, marginLeft:4 }}
                         disabled={pdfLoading === d.id}
                         onClick={() => downloadPdf(d)}>
                         {pdfLoading === d.id ? '⏳' : '📄'}
                       </button>
+                      {d.stato === 'approvata' && (
+                        <button style={{ ...(styleObj as any).btn('#10b981'), padding:'4px 10px', fontSize:11, marginLeft:4 }}
+                          onClick={() => {
+                            const base = window.location.pathname.replace('/dam', '/oda')
+                            const params = new URLSearchParams()
+                            params.set('dam_id', d.id)
+                            if (d.rdo_id) params.set('rdo_id', d.rdo_id)
+                            if (d.fornitore_id) params.set('fornitore_id', d.fornitore_id)
+                            window.location.href = base + '?' + params.toString()
+                          }}>✅ → ODA</button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -440,10 +478,105 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
                 <label style={(styleObj as any).lbl as React.CSSProperties}>Note interne</label>
                 <textarea style={{ ...(styleObj as any).inp, resize:'vertical' as const, minHeight:50 }} value={editDam.note_interne||''} onChange={e=>setEditDam({...editDam, note_interne:e.target.value})} />
               </div>
+              {/* Sezione compliance — visibile quando c'è un tipo_affidamento dalla RDO */}
+              {(rdoTipoAffidamento || editDam?.fornitore_id) && (() => {
+                const ta = rdoTipoAffidamento || 'fornitore_materiali'
+                const items: { key:string; label:string; required?:boolean; note?:string }[] = []
+                if (['fornitore_materiali','nolo_freddo'].includes(ta)) {
+                  items.push({ key:'durc', label:'DURC valido', note: fornitoreDati?.durc_scadenza ? `scad. ${fornitoreDati.durc_scadenza}` : undefined })
+                  items.push({ key:'cciaa', label:'CCIAA verificata' })
+                } else if (['nolo_caldo','posa_opera'].includes(ta)) {
+                  items.push({ key:'durc', label:'DURC valido', note: fornitoreDati?.durc_scadenza ? `scad. ${fornitoreDati.durc_scadenza}` : undefined })
+                  items.push({ key:'patente', label:'Patente a crediti (≥15 punti)', note: fornitoreDati?.patente_crediti != null ? `${fornitoreDati.patente_crediti} pt` : undefined })
+                  items.push({ key:'abilitazione', label:'Abilitazione operatore' })
+                } else if (['subappalto','fornitura_posa','subaffidamento'].includes(ta)) {
+                  items.push({ key:'durc', label:'DURC valido', required:true, note: fornitoreDati?.durc_scadenza ? `scad. ${fornitoreDati.durc_scadenza}` : undefined })
+                  items.push({ key:'patente', label:'Patente a crediti', required:true, note: fornitoreDati?.patente_crediti != null ? `${fornitoreDati.patente_crediti} pt` : undefined })
+                  items.push({ key:'cciaa', label:'CCIAA con oggetto coerente', required:true })
+                  items.push({ key:'pos', label:'POS subappaltatore', required:true })
+                  items.push({ key:'iban', label:'IBAN dedicato comunicato (L.136/2010)', required:true })
+                  items.push({ key:'comunicazione_sa', label:'Comunicazione SA (appalti pubblici)' })
+                  items.push({ key:'attestati', label:'Attestati formazione lavoratori', required:true })
+                  items.push({ key:'polizza', label:'Polizza RC valida', required:true })
+                } else if (ta === 'lavoratore_autonomo') {
+                  items.push({ key:'piva', label:'P.IVA attiva' })
+                  items.push({ key:'contributiva', label:'Regolarità contributiva' })
+                  items.push({ key:'patente', label:'Patente a crediti', note: fornitoreDati?.patente_crediti != null ? `${fornitoreDati.patente_crediti} pt` : undefined })
+                  items.push({ key:'attestati', label:'Attestati formazione sicurezza' })
+                }
+                if (items.length === 0) return null
+                const isSubappalto = ['subappalto','fornitura_posa','subaffidamento'].includes(ta)
+                const requiredKeys = items.filter(x => x.required).map(x => x.key)
+                const allRequiredOk = requiredKeys.every(k => compliance[k])
+                return (
+                  <div style={{ border:'1px solid var(--border)', borderRadius:8, overflow:'hidden' }}>
+                    <button type="button" style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', background:'var(--bg)', border:'none', cursor:'pointer', fontSize:12, color:'var(--t1)', fontWeight:600 }}
+                      onClick={() => setComplianceOpen(v => !v)}>
+                      <span>🔍 Verifica requisiti fornitore</span>
+                      <span style={{ fontSize:10, color: allRequiredOk ? '#10b981' : isSubappalto ? '#ef4444' : '#f59e0b' }}>
+                        {compliance && Object.keys(compliance).filter(k=>compliance[k]).length}/{items.length} ✓ {complianceOpen ? '▲' : '▼'}
+                      </span>
+                    </button>
+                    {complianceOpen && (
+                      <div style={{ padding:'10px 12px', display:'flex', flexDirection:'column', gap:6 }}>
+                        {isSubappalto && !allRequiredOk && (
+                          <div style={{ padding:'6px 10px', background:'#ef444410', border:'1px solid #ef444430', borderRadius:6, fontSize:11, color:'#ef4444', marginBottom:4 }}>
+                            ⛔ Tutti i requisiti obbligatori devono essere soddisfatti prima di emettere l&apos;ODA (subappalto)
+                          </div>
+                        )}
+                        {items.map(item => (
+                          <label key={item.key} style={{ display:'flex', alignItems:'center', gap:8, fontSize:12, cursor:'pointer' }}>
+                            <input type="checkbox" checked={!!compliance[item.key]} onChange={e => setCompliance(p=>({...p,[item.key]:e.target.checked}))}
+                              style={{ width:14, height:14, accentColor:'var(--accent)', flexShrink:0 }} />
+                            <span style={{ color: item.required ? 'var(--t1)' : 'var(--t2)' }}>
+                              {item.label}
+                              {item.required && <span style={{ color:'#ef4444', marginLeft:3 }}>*</span>}
+                            </span>
+                            {item.note && <span style={{ fontSize:10, color:'var(--t3)', marginLeft:'auto' }}>{item.note}</span>}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
               <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8, position:'sticky' as const, bottom:0, background:'var(--panel)', paddingTop:12, borderTop:'1px solid var(--border)' }}>
                 <button style={(styleObj as any).btn('#6b7280')} onClick={()=>{setForm(false);setEditDam(null)}}>Annulla</button>
                 <button style={(styleObj as any).btn('var(--accent)')} onClick={salva} disabled={saving}>{saving ? '...' : 'Salva DAM'}</button>
+                {editDam?.stato === 'approvata' && editDam?.id && (() => {
+                  const ta = rdoTipoAffidamento || ''
+                  const isSubappalto = ['subappalto','fornitura_posa','subaffidamento'].includes(ta)
+                  const requiredKeys = ['durc','patente','cciaa','pos','iban','attestati','polizza']
+                  const allRequiredOk = !isSubappalto || requiredKeys.every(k => compliance[k])
+                  return (
+                    <button style={(styleObj as any).btn('#10b981')} onClick={() => {
+                      if (isSubappalto && !allRequiredOk) { setBlockModal(true); return }
+                      const base = window.location.pathname.replace('/dam', '/oda')
+                      const params = new URLSearchParams()
+                      params.set('dam_id', editDam.id!)
+                      if (editDam.rdo_id) params.set('rdo_id', editDam.rdo_id)
+                      if (editDam.fornitore_id) params.set('fornitore_id', editDam.fornitore_id)
+                      setForm(false); setEditDam(null)
+                      window.location.href = base + '?' + params.toString()
+                    }}>✅ Emetti ODA →</button>
+                  )
+                })()}
               </div>
+
+              {/* Modal blocco compliance subappalto */}
+              {blockModal && (
+                <div style={{ position:'fixed', inset:0, zIndex:200, background:'rgba(0,0,0,.5)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  <div style={{ background:'var(--panel)', borderRadius:12, padding:24, maxWidth:400, width:'90%', boxShadow:'var(--shadow-lg)' }}>
+                    <h4 style={{ fontSize:14, fontWeight:700, color:'#ef4444', marginBottom:12 }}>⛔ Verifica incompleta</h4>
+                    <p style={{ fontSize:12, color:'var(--t2)', marginBottom:16 }}>
+                      Per un contratto di subappalto tutti i requisiti obbligatori devono essere verificati prima di emettere l&apos;ODA.
+                      Torna alla checklist e completa la verifica.
+                    </p>
+                    <button style={(styleObj as any).btn('#6b7280')} onClick={() => setBlockModal(false)}>Chiudi</button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
