@@ -118,10 +118,10 @@ const V3_CSS = `
 .cmp-tscroll{flex:1 1 0%;overflow-x:auto;overflow-y:scroll;min-height:0;min-width:0;width:100%;contain:strict}
 .cmp-tscroll::-webkit-scrollbar{width:6px;height:6px}.cmp-tscroll::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}
 table.cmp-t{width:100%;min-width:860px;border-collapse:collapse;table-layout:fixed}
-col.cc2{width:34px}col.cc3{width:96px}col.cc4{width:220px;min-width:220px}
-col.cc5,col.cc6,col.cc7,col.cc8{width:52px}
-col.cc9{width:66px}col.cc10{width:68px}col.cc11{width:82px}
-col.cc12,col.cc13,col.cc14{width:36px}col.cc15{width:44px}
+col.cc2{width:40px}col.cc3{width:120px}col.cc4{width:auto}
+col.cc5,col.cc6,col.cc7,col.cc8{width:60px}
+col.cc9{width:80px}col.cc10{width:80px}col.cc11{width:90px}
+col.cc12,col.cc13,col.cc14{width:44px}col.cc15{width:50px}
 table.cmp-t thead{position:sticky;top:0;z-index:10;background:#4ade80}
 table.cmp-t th{padding:3px;font-size:10px;font-weight:700;background:#4ade80;color:#14532d;border-right:1px solid #16a34a;text-align:center;white-space:nowrap}
 table.cmp-t th.thl{text-align:left;padding-left:6px}
@@ -864,6 +864,12 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
                 </>
               )}
             </div>
+            {/* Font size — footer sidebar */}
+            <div style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 8px', background:'#f0fdf4', borderTop:'1px solid #bbf7d0', flexShrink:0 }}>
+              <button className="cmp-tbtn" style={{ fontSize:10, padding:'2px 6px', opacity: fontSize<=9 ? 0.4 : 1 }} onClick={() => changeFontSize(-1)} disabled={fontSize<=9} title="Riduci testo">A-</button>
+              <span style={{ fontSize:9, color:'#065f46', minWidth:24, textAlign:'center' }}>{fontSize}px</span>
+              <button className="cmp-tbtn" style={{ fontSize:11, padding:'2px 6px', opacity: fontSize>=13 ? 0.4 : 1 }} onClick={() => changeFontSize(1)} disabled={fontSize>=13} title="Aumenta testo">A+</button>
+            </div>
             <div className="cmp-sfoot">
               <div className="cmp-sft"><span>Totale computo</span><span>{fi(totale)} €</span></div>
               {(wbsSel || catFilter.sc) ? (
@@ -899,9 +905,6 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
                   <button style={{ fontSize: 9, padding: '1px 6px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }} onClick={() => setCatFilter({ sc: null, c: null })}>✕</button></>
               ) : <span style={{ fontSize: 10, color: '#9ca3af', whiteSpace: 'nowrap' }}>SAL Attivi · seleziona voce per il dettaglio</span>}
             </div>
-            <button className="cmp-tbtn" style={{ fontSize: 11, padding: '3px 8px', opacity: fontSize <= 9 ? 0.4 : 1 }} onClick={() => changeFontSize(-1)} disabled={fontSize <= 9} title="Riduci testo">A-</button>
-            <span style={{ fontSize: 10, color: '#6b7280', minWidth: 26, textAlign: 'center' }}>{fontSize}px</span>
-            <button className="cmp-tbtn" style={{ fontSize: 12, padding: '3px 8px', opacity: fontSize >= 13 ? 0.4 : 1 }} onClick={() => changeFontSize(1)} disabled={fontSize >= 13} title="Aumenta testo">A+</button>
           </div>
 
           {/* SAL CONTROLS — barra isolata, non influenza la tabella */}
