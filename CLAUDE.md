@@ -409,6 +409,9 @@
 43. Knowledge base AI edile (normativa D.Lgs. 36/2023, prezzari regionali) 📋
 44. Billing e piani tariffari (Stripe integration) 📋
 
+## Architettura moduli specifici
+- **Mappa cantieri**: Mapbox (`react-map-gl`) stile `satellite-streets-v12`. Pin SVG colorati per avanzamento SAL (blu 0% / giallo 1-33% / arancio 34-66% / verde 67-99% / grigio 100% / rosso in_ritardo). Dati da view `v_commesse_kpi`. Token: `NEXT_PUBLIC_MAPBOX_TOKEN=pk.xxx` in `.env.local` (da aggiungere manualmente — senza token mostra banner di errore, non crasha). Implementazione completa in `src/app/dashboard/mappa/page.tsx` (commit 9a2fa6a).
+
 ## Note implementazione
 - `getAziendaId()` in `src/lib/supabase.ts` — helper condiviso: `auth.uid() → utenti.azienda_id`
 - `supabase` è esportato come `any` in `src/lib/supabase.ts` — nessun tipo generato Supabase, cast necessario per evitare TS2769 su tutte le tabelle
