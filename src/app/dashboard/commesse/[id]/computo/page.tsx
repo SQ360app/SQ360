@@ -133,8 +133,9 @@ table.cmp-t td{padding:2px 3px;vertical-align:top;border-right:1px solid #e5e7eb
 .cmp-rvo:hover td{background:#d1fae5}
 .cmp-rvo.sel td{background:#bfdbfe!important;font-weight:600}
 .cmp-rvo.msel td{background:#c7d2fe!important;font-weight:600}
-.cmp-rmi{background:#f9fafb;cursor:default}
-.cmp-rmi:hover td{background:#f0fdf4}
+.cmp-rmi{background:#f0fdf4;cursor:default}
+.cmp-rmi td{min-height:24px;padding-top:3px;padding-bottom:3px;font-size:11px;border-bottom:1px dotted #d1fae5}
+.cmp-rmi:hover td{background:#dcfce7}
 .cmp-rsom td{background:#ecfdf5;color:#065f46;border-top:1px solid #6ee7b7;border-bottom:2px solid #6ee7b7}
 .cmp-fi{text-align:center;font-size:13px;cursor:pointer;padding:0}
 .cmp-fi-ok{color:#16a34a}.cmp-fi-bozza{color:#f59e0b}.cmp-fi-no{color:#d1d5db}.cmp-fi-rdo{color:#2563eb}.cmp-fi-oda{color:#7c3aed}
@@ -1124,7 +1125,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                         <tr key={`mi_${v.id}`} className={`cmp-rmi${isSel ? ' sel' : ''}`}>
                           <td />
                           <td />
-                          <td /><td style={{ paddingLeft: 28, color: '#6b7280', fontSize: 10, fontStyle: 'italic' }}>
+                          <td /><td style={{ paddingLeft: 28, color: '#374151', fontSize: 11, fontStyle: 'italic' }}>
                             {v.note?.split('>').pop()?.trim() || 'misura da XPWE'}
                           </td>
                           <td><span className="cmp-edt">1</span></td>
