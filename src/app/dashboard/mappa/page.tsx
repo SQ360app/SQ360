@@ -297,10 +297,19 @@ export default function MappaCantieri() {
       }
 
       // ── Carica commesse ───────────────────────────────────────────────────
-      const { data: kpiData, error: dbErr } = await (supabase as any)
+      let r1 = await (supabase as any)
         .from('v_commesse_kpi')
         .select('id,codice,nome,stato,importo_contratto,avanzamento_pct,residuo,giorni_rimanenti,in_ritardo,lat,lng,responsabile_nome')
         .eq('azienda_id', aziendaId)
+
+      // Graceful fallback se responsabile_nome non è ancora nella view
+      if (r1.error?.message?.includes('responsabile_nome')) {
+        r1 = await (supabase as any)
+          .from('v_commesse_kpi')
+          .select('id,codice,nome,stato,importo_contratto,avanzamento_pct,residuo,giorni_rimanenti,in_ritardo,lat,lng')
+          .eq('azienda_id', aziendaId)
+      }
+      const { data: kpiData, error: dbErr } = r1
 
       if (dbErr) { setError('Errore caricamento dati: ' + dbErr.message); setLoading(false); return }
       console.log('[Mappa] KPI da view:', kpiData?.length, 'commesse')
@@ -550,7 +559,7 @@ export default function MappaCantieri() {
             </div>
 
             {/* Avanzamento */}
-            <div style={{ marginBottom: province.length > 0 ? 10 : 0 }}>
+            <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.45)', letterSpacing: '.8px', textTransform: 'uppercase', marginBottom: 6 }}>
                 Avanzamento
               </div>
@@ -571,24 +580,22 @@ export default function MappaCantieri() {
             </div>
 
             {/* Responsabile */}
-            {responsabili.length > 0 && (
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.45)', letterSpacing: '.8px', textTransform: 'uppercase', marginBottom: 6 }}>
-                  Responsabile
-                </div>
-                <select
-                  value={filtri.responsabile}
-                  onChange={e => handleFiltri({ ...filtri, responsabile: e.target.value })}
-                  style={{
-                    width: '100%', background: 'rgba(255,255,255,.12)',
-                    border: '1px solid rgba(255,255,255,.2)', borderRadius: 5,
-                    color: '#fff', padding: '5px 8px', fontSize: 11,
-                  }}>
-                  <option value="">Tutti i responsabili</option>
-                  {responsabili.map(r => <option key={r} value={r} style={{ color: '#111' }}>{r}</option>)}
-                </select>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.45)', letterSpacing: '.8px', textTransform: 'uppercase', marginBottom: 6 }}>
+                Responsabile
               </div>
-            )}
+              <select
+                value={filtri.responsabile}
+                onChange={e => handleFiltri({ ...filtri, responsabile: e.target.value })}
+                style={{
+                  width: '100%', background: 'rgba(255,255,255,.12)',
+                  border: '1px solid rgba(255,255,255,.2)', borderRadius: 5,
+                  color: '#fff', padding: '5px 8px', fontSize: 11,
+                }}>
+                <option value="">Tutti i responsabili</option>
+                {responsabili.map(r => <option key={r} value={r} style={{ color: '#111' }}>{r}</option>)}
+              </select>
+            </div>
 
             {/* Provincia */}
             {province.length > 0 && (

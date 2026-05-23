@@ -16,6 +16,26 @@ const STATI_CFG: Record<string, { label: string; color: string; bg: string; icon
   RESCISSA:       { label: 'Rescissa',       color: '#dc2626', bg: '#fef2f2', icon: XCircle },
 }
 
+const STAZIONI_APPALTANTI = [
+  { v: 'COM',  l: 'COM — Comune/Unione Comuni' },
+  { v: 'PRO',  l: 'PRO — Provincia/Città Metropolitana' },
+  { v: 'REG',  l: 'REG — Regione' },
+  { v: 'ANAS', l: 'ANAS — ANAS S.p.A.' },
+  { v: 'RFI',  l: 'RFI — Rete Ferroviaria Italiana' },
+  { v: 'POR',  l: 'POR — Porto/Autorità Portuale' },
+  { v: 'AER',  l: 'AER — Aeroporto/ENAC' },
+  { v: 'CON',  l: 'CON — Consorzio/ASL/Ente' },
+  { v: 'ATO',  l: 'ATO — ATO/Gestore idrico' },
+  { v: 'INV',  l: 'INV — Invitalia/Sogesid' },
+  { v: 'CDP',  l: 'CDP — Cassa Depositi e Prestiti' },
+  { v: 'SIS',  l: 'SIS — Sisma bonus/Ricostruzione' },
+  { v: 'ELC',  l: 'ELC — Ente Locale/Camera' },
+  { v: 'PRI',  l: 'PRI — Privato' },
+  { v: 'PPP',  l: 'PPP — Partenariato Pubblico-Privato' },
+  { v: 'SUB',  l: 'SUB — Subappalto' },
+  { v: 'COO',  l: 'COO — Cooperativa/Consorzio' },
+]
+
 // ====================================================
 // FORM CREAZIONE — wizard con 3 step
 // ====================================================
@@ -27,6 +47,7 @@ function NuovaCommessaModal({ onClose, onCreated }: { onClose: () => void; onCre
   const [err, setErr] = useState('')
   const [form, setForm] = useState({
     // STEP 1 — Identificativi
+    sa: 'COM',
     codice: '26.' + new Date().getFullYear().toString().slice(-2) + '.GE.001',
     stato: 'AGGIUDICATA',
     nome: '',
@@ -128,6 +149,7 @@ function NuovaCommessaModal({ onClose, onCreated }: { onClose: () => void; onCre
           p_azienda_id: aziendaId,
           p_categoria: form.categoria_lavoro,
           p_provincia: form.provincia.toUpperCase().slice(0, 2),
+          p_sa: form.sa || null,
         })
         if (codiceRPC) codiceFinale = codiceRPC as string
       }
@@ -217,8 +239,8 @@ function NuovaCommessaModal({ onClose, onCreated }: { onClose: () => void; onCre
 
   const anno = new Date().getFullYear().toString().slice(-2)
   const provinciaPreview = (form.provincia || 'XX').toUpperCase().slice(0, 2)
-  const codiceAnteprima = `${anno}-${form.categoria_lavoro || 'OG1'}-${provinciaPreview}-NNN`
-  const isSemantico = /^\d\d-[A-Z0-9]+-[A-Z]{2}-\d{3}$/.test(form.codice)
+  const codiceAnteprima = `${anno}-${form.sa}-${provinciaPreview}-${form.categoria_lavoro || 'OG1'}-NNN`
+  const isSemantico = /^\d\d-[A-Z0-9]+-[A-Z]{2}-[A-Z0-9]+-\d{3}$|^\d\d-[A-Z0-9]+-[A-Z]{2}-\d{3}$/.test(form.codice)
 
   const inputStyle = { width: '100%', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 10px', boxSizing: 'border-box' as const }
   const labelStyle = { fontSize: 11, color: '#6b7280', display: 'block' as const, marginBottom: 3, fontWeight: 500 as const }
@@ -256,6 +278,14 @@ function NuovaCommessaModal({ onClose, onCreated }: { onClose: () => void; onCre
           {/* STEP 0 — Identificativi */}
           {step === 0 && (
             <>
+              {/* Stazione Appaltante → inclusa nel codice semantico */}
+              <div style={{ marginBottom: 12 }}>
+                <label style={labelStyle}>Stazione Appaltante *</label>
+                <select value={form.sa} onChange={e => set('sa', e.target.value)} style={inputStyle}>
+                  {STAZIONI_APPALTANTI.map(s => <option key={s.v} value={s.v}>{s.l}</option>)}
+                </select>
+              </div>
+
               {/* Categoria lavoro + Provincia → genera codice semantico */}
               <div style={grid2}>
                 <div>
@@ -709,7 +739,7 @@ export default function CommessePage() {
                 onMouseOut={e => (e.currentTarget.style.boxShadow = 'none')}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    {/^\d\d-[A-Z0-9]+-[A-Z]{2}-\d{3}$/.test(c.codice)
+                    {(/^\d\d-[A-Z0-9]+-[A-Z]{2}-[A-Z0-9]+-\d{3}$|^\d\d-[A-Z0-9]+-[A-Z]{2}-\d{3}$/).test(c.codice)
                       ? <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#1d4ed8', background: '#dbeafe', padding: '2px 8px', borderRadius: 6, letterSpacing: 0.5 }}>{c.codice}</span>
                       : <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#9ca3af', background: '#f3f4f6', padding: '1px 6px', borderRadius: 4 }}>{c.codice}</span>
                     }
@@ -730,7 +760,7 @@ export default function CommessePage() {
                     EUR {fmt(c.importo_contratto || 0)}
                   </div>
                   <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>importo contratto</div>
-                </div>h
+                </div>
               </div>
             )
           })}
