@@ -210,7 +210,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
         showToast('RDA aggiornata')
       } else {
         const anno = new Date().getFullYear().toString().slice(2)
-        const { data: rdaCodici } = await supabase.from('rda').select('codice').eq('commessa_id', id).eq('azienda_id', aziendaId).like('codice', `RDA-${anno}-%`)
+        const { data: rdaCodici } = await supabase.from('rda').select('codice').eq('commessa_id', id).like('codice', `RDA-${anno}-%`)
         let maxNum = 0
         rdaCodici?.forEach((r: any) => { const n = parseInt(r.codice?.split('-')?.[2] || '0'); if (!isNaN(n) && n > maxNum) maxNum = n })
         const codice = `RDA-${anno}-${String(maxNum + 1).padStart(3, '0')}`

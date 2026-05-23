@@ -392,7 +392,7 @@ ${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;
         showToast('RDO aggiornata')
       } else {
         const anno = new Date().getFullYear().toString().slice(2)
-        const { data: rdoCodici } = await supabase.from('rdo').select('codice').eq('commessa_id', id).eq('azienda_id', aziendaId).like('codice', `RDO-${anno}-%`)
+        const { data: rdoCodici } = await supabase.from('rdo').select('codice').eq('commessa_id', id).like('codice', `RDO-${anno}-%`)
         let maxNum = 0
         rdoCodici?.forEach((r: any) => { const n = parseInt(r.codice?.split('-')?.[2] || '0'); if (!isNaN(n) && n > maxNum) maxNum = n })
         const codice = `RDO-${anno}-${String(maxNum + 1).padStart(3, '0')}`
