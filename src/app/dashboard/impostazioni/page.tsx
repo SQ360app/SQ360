@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Building2, Users, Bell, Shield, Plus, Save, CheckCircle, Edit2, Upload, Image as ImageIcon, FileImage, Loader2 } from 'lucide-react'
+import { Building2, Users, Bell, Shield, Plus, Save, CheckCircle, Edit2, Upload, Image as ImageIcon, FileImage, Loader2, Trash2 } from 'lucide-react'
 import { supabase, getAziendaId } from '@/lib/supabase'
 import { AddressAutocomplete } from '@/components/AddressAutocomplete'
 
@@ -74,6 +74,33 @@ interface AziendaInfo {
   patente_crediti: string
 }
 
+interface Sede {
+  id: string
+  tipo: string
+  nome: string | null
+  indirizzo: string | null
+  comune: string | null
+  cap: string | null
+  provincia: string | null
+  lat: number | null
+  lng: number | null
+  telefono: string | null
+  email: string | null
+  referente: string | null
+  note: string | null
+  attiva: boolean
+}
+
+const TIPO_SEDE: Record<string, { label: string; color: string; emoji: string }> = {
+  operativa:       { label: 'Operativa',      color: '#2563eb', emoji: '🏭' },
+  amministrativa:  { label: 'Amministrativa', color: '#7c3aed', emoji: '🏢' },
+  magazzino:       { label: 'Magazzino',      color: '#6b7280', emoji: '📦' },
+  deposito:        { label: 'Deposito',       color: '#4b5563', emoji: '🏗️' },
+  ufficio_tecnico: { label: 'Uff. Tecnico',   color: '#4f46e5', emoji: '💼' },
+  filiale:         { label: 'Filiale',        color: '#0891b2', emoji: '🏢' },
+  altro:           { label: 'Altro',          color: '#9ca3af', emoji: '⬡' },
+}
+
 // ─── Componente ───────────────────────────────────────────────────────────────
 export default function ImpostazioniPage() {
   const [tab, setTab] = useState<'azienda' | 'utenti' | 'ruoli' | 'notifiche'>('azienda')
@@ -96,6 +123,10 @@ export default function ImpostazioniPage() {
   const headerRef = useRef<HTMLInputElement>(null)
   const footerRef = useRef<HTMLInputElement>(null)
 
+  const [sedi,         setSedi]         = useState<Sede[]>([])
+  const [nuovaSede,    setNuovaSede]    = useState<Partial<Sede> | null>(null)
+  const [salvandoSede, setSalvandoSede] = useState(false)
+
   useEffect(() => {
     getAziendaId().then(async id => {
       if (!id) return
@@ -107,6 +138,9 @@ export default function ImpostazioniPage() {
         if (d.carta_intestata_header_url)   { setHeaderUrl(d.carta_intestata_header_url); setHeaderPreview(d.carta_intestata_header_url) }
         if (d.carta_intestata_footer_url)   { setFooterUrl(d.carta_intestata_footer_url); setFooterPreview(d.carta_intestata_footer_url) }
       }
+      const { data: sediData } = await (supabase as any)
+        .from('azienda_sedi').select('*').eq('azienda_id', id).order('created_at', { ascending: true })
+      if (sediData) setSedi(sediData)
     })
   }, [])
 
@@ -164,6 +198,50 @@ export default function ImpostazioniPage() {
 
   function toggleAttivo(uid: string) {
     setUtenti(prev => prev.map(u => u.id === uid ? { ...u, attivo: !u.attivo } : u))
+  }
+
+  async function saveSede() {
+    if (!aziendaId || !nuovaSede) return
+    setSalvandoSede(true)
+    let lat = nuovaSede.lat ?? null
+    let lng = nuovaSede.lng ?? null
+    if ((!lat || !lng) && nuovaSede.indirizzo) {
+      const q = [nuovaSede.indirizzo, nuovaSede.comune, nuovaSede.provincia, 'Italia'].filter(Boolean).join(', ')
+      try {
+        const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=it`, { headers: { 'Accept-Language': 'it' } })
+        const j = await r.json()
+        if (j[0]) { lat = parseFloat(j[0].lat); lng = parseFloat(j[0].lon) }
+      } catch { /* non bloccante */ }
+    }
+    const payload = {
+      azienda_id: aziendaId,
+      tipo: nuovaSede.tipo || 'operativa',
+      nome: nuovaSede.nome || null,
+      indirizzo: nuovaSede.indirizzo || null,
+      comune: nuovaSede.comune || null,
+      cap: nuovaSede.cap || null,
+      provincia: nuovaSede.provincia || null,
+      lat, lng,
+      telefono: nuovaSede.telefono || null,
+      email: nuovaSede.email || null,
+      referente: nuovaSede.referente || null,
+      note: nuovaSede.note || null,
+      attiva: nuovaSede.attiva !== false,
+    }
+    if (nuovaSede.id) {
+      await (supabase as any).from('azienda_sedi').update(payload).eq('id', nuovaSede.id)
+    } else {
+      await (supabase as any).from('azienda_sedi').insert(payload)
+    }
+    const { data } = await (supabase as any).from('azienda_sedi').select('*').eq('azienda_id', aziendaId).order('created_at', { ascending: true })
+    if (data) setSedi(data)
+    setNuovaSede(null)
+    setSalvandoSede(false)
+  }
+
+  async function deleteSede(id: string) {
+    await (supabase as any).from('azienda_sedi').delete().eq('id', id)
+    setSedi(prev => prev.filter(s => s.id !== id))
   }
 
   return (
@@ -371,6 +449,166 @@ export default function ImpostazioniPage() {
                   <Save size={14} /> Salva modifiche
                 </button>
               </div>
+            </div>
+
+            {/* ── Sedi e Unità Locali ── */}
+            <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12, padding: '24px 28px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+                <div>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--t1)', margin: 0 }}>Sedi e Unità Locali</h3>
+                  <p style={{ fontSize: 12, color: 'var(--t3)', margin: '4px 0 0', lineHeight: 1.5 }}>
+                    Sedi operative, magazzini, depositi e filiali — appariranno come pin sulla mappa cantieri
+                  </p>
+                </div>
+                <button
+                  onClick={() => setNuovaSede({ tipo: 'operativa', attiva: true })}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--accent)', border: 'none', borderRadius: 8, padding: '8px 14px', color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+                  <Plus size={13} /> Aggiungi sede
+                </button>
+              </div>
+
+              {sedi.length === 0 && !nuovaSede && (
+                <div style={{ padding: '24px', textAlign: 'center', color: 'var(--t3)', fontSize: 13, background: 'var(--bg)', borderRadius: 8, border: '1px dashed var(--border)' }}>
+                  Nessuna sede — le sedi aggiuntive appariranno come pin sulla mappa
+                </div>
+              )}
+
+              {sedi.map(s => {
+                const meta = TIPO_SEDE[s.tipo] || TIPO_SEDE.altro
+                return (
+                  <div key={s.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 14px', background: 'var(--bg)', borderRadius: 10, border: '1px solid var(--border)', marginBottom: 10, opacity: s.attiva ? 1 : 0.55 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: meta.color + '22', border: `2px solid ${meta.color}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
+                      {meta.emoji}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--t1)' }}>{s.nome || meta.label}</span>
+                        <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 10, background: meta.color + '22', color: meta.color, fontWeight: 600 }}>{meta.label}</span>
+                        {!s.attiva && <span style={{ fontSize: 10, color: '#6b7280', background: '#1e293b', padding: '1px 7px', borderRadius: 10 }}>Inattiva</span>}
+                      </div>
+                      {(s.indirizzo || s.comune) && (
+                        <div style={{ fontSize: 12, color: 'var(--t3)' }}>
+                          📍 {[s.indirizzo, s.cap && s.comune ? `${s.cap} ${s.comune}` : s.comune, s.provincia].filter(Boolean).join(', ')}
+                        </div>
+                      )}
+                      {s.referente && <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 2 }}>👤 {s.referente}</div>}
+                      {s.telefono  && <div style={{ fontSize: 11, color: 'var(--t3)' }}>📞 {s.telefono}</div>}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      <button onClick={() => setNuovaSede({ ...s })}
+                        style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 8px', cursor: 'pointer', color: 'var(--t3)' }}>
+                        <Edit2 size={12} />
+                      </button>
+                      <button onClick={() => { if (confirm('Eliminare questa sede?')) deleteSede(s.id) }}
+                        style={{ background: 'none', border: '1px solid #374151', borderRadius: 6, padding: '5px 8px', cursor: 'pointer', color: '#ef4444' }}>
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+
+              {nuovaSede !== null && (
+                <div style={{ marginTop: 16, padding: '20px', background: 'var(--bg)', borderRadius: 10, border: '1px solid var(--accent)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)', marginBottom: 16 }}>
+                    {nuovaSede.id ? 'Modifica sede' : 'Nuova sede'}
+                  </div>
+
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ display: 'block', fontSize: 11, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6, fontWeight: 600 }}>Tipo sede</label>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {Object.entries(TIPO_SEDE).map(([k, v]) => (
+                        <button key={k} onClick={() => setNuovaSede(prev => ({ ...prev!, tipo: k }))}
+                          style={{ padding: '5px 10px', borderRadius: 20, border: `1px solid ${nuovaSede.tipo === k ? v.color : 'var(--border)'}`, background: nuovaSede.tipo === k ? v.color + '22' : 'transparent', color: nuovaSede.tipo === k ? v.color : 'var(--t3)', fontSize: 11, fontWeight: nuovaSede.tipo === k ? 700 : 400, cursor: 'pointer' }}>
+                          {v.emoji} {v.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ display: 'block', fontSize: 11, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6, fontWeight: 600 }}>Nome sede (opzionale)</label>
+                    <input value={nuovaSede.nome || ''} onChange={e => setNuovaSede(prev => ({ ...prev!, nome: e.target.value }))}
+                      placeholder="es. Cantiere Nord, Magazzino Centrale…"
+                      style={{ width: '100%', boxSizing: 'border-box', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', color: 'var(--t1)', fontSize: 13 }} />
+                  </div>
+
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ display: 'block', fontSize: 11, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6, fontWeight: 600 }}>Indirizzo</label>
+                    <AddressAutocomplete
+                      value={nuovaSede.indirizzo || ''}
+                      onChange={v => setNuovaSede(prev => ({ ...prev!, indirizzo: v }))}
+                      onSelect={parsed => setNuovaSede(prev => ({
+                        ...prev!,
+                        indirizzo: parsed.indirizzo,
+                        comune:    parsed.comune,
+                        cap:       parsed.cap,
+                        provincia: parsed.provincia,
+                        lat:       parsed.lat,
+                        lng:       parsed.lng,
+                      }))}
+                      inputStyle={{ width: '100%', boxSizing: 'border-box' as const, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', color: 'var(--t1)', fontSize: 13 }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px', gap: 10, marginBottom: 12 }}>
+                    {([
+                      { key: 'comune', label: 'Comune', placeholder: 'es. Roma' },
+                      { key: 'cap',    label: 'CAP',    placeholder: '00100' },
+                      { key: 'provincia', label: 'Prov.', placeholder: 'RM' },
+                    ] as { key: keyof Sede; label: string; placeholder: string }[]).map(f => (
+                      <div key={String(f.key)}>
+                        <label style={{ display: 'block', fontSize: 11, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4, fontWeight: 600 }}>{f.label}</label>
+                        <input value={(nuovaSede as any)[f.key] || ''} onChange={e => setNuovaSede(prev => ({ ...prev!, [f.key]: e.target.value }))}
+                          placeholder={f.placeholder}
+                          style={{ width: '100%', boxSizing: 'border-box', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 10px', color: 'var(--t1)', fontSize: 13 }} />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                    {([
+                      { key: 'telefono', label: 'Telefono', placeholder: '+39 06 …' },
+                      { key: 'email',    label: 'Email',    placeholder: 'sede@azienda.it' },
+                      { key: 'referente',label: 'Referente',placeholder: 'Nome cognome' },
+                    ] as { key: keyof Sede; label: string; placeholder: string }[]).map(f => (
+                      <div key={String(f.key)}>
+                        <label style={{ display: 'block', fontSize: 11, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4, fontWeight: 600 }}>{f.label}</label>
+                        <input value={(nuovaSede as any)[f.key] || ''} onChange={e => setNuovaSede(prev => ({ ...prev!, [f.key]: e.target.value }))}
+                          placeholder={f.placeholder}
+                          style={{ width: '100%', boxSizing: 'border-box', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', color: 'var(--t1)', fontSize: 13 }} />
+                      </div>
+                    ))}
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4, fontWeight: 600 }}>Stato</label>
+                      <button onClick={() => setNuovaSede(prev => ({ ...prev!, attiva: !prev!.attiva }))}
+                        style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--panel)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--t1)', justifyContent: 'center' }}>
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: nuovaSede.attiva !== false ? '#10b981' : '#6b7280' }} />
+                        {nuovaSede.attiva !== false ? 'Attiva' : 'Inattiva'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: 'block', fontSize: 11, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4, fontWeight: 600 }}>Note</label>
+                    <textarea value={nuovaSede.note || ''} onChange={e => setNuovaSede(prev => ({ ...prev!, note: e.target.value }))}
+                      rows={2} placeholder="Note aggiuntive…"
+                      style={{ width: '100%', boxSizing: 'border-box', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', color: 'var(--t1)', fontSize: 13, resize: 'vertical' }} />
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                    <button onClick={() => setNuovaSede(null)}
+                      style={{ padding: '9px 16px', border: '1px solid var(--border)', borderRadius: 8, background: 'transparent', color: 'var(--t3)', fontSize: 13, cursor: 'pointer' }}>
+                      Annulla
+                    </button>
+                    <button onClick={saveSede} disabled={salvandoSede}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--accent)', border: 'none', borderRadius: 8, padding: '9px 18px', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                      {salvandoSede ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                      {salvandoSede ? 'Salvataggio…' : 'Salva sede'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

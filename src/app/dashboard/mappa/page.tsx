@@ -127,15 +127,46 @@ function buildPopupHTML(p: Record<string, any>, lat: number, lng: number): strin
           style="flex:1;padding:6px 10px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">
           Apri commessa
         </button>
+        <button onclick="window.__sq360_mostra_team('${p.id}')"
+          style="padding:6px 8px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;cursor:pointer;font-size:11px;color:#16a34a;font-weight:600">
+          👥 Team
+        </button>
         <a href="${gmUrl}" target="_blank" rel="noreferrer"
-          style="flex:1;display:flex;align-items:center;justify-content:center;padding:6px 10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;color:#374151;text-decoration:none;font-size:11px;font-weight:500">
-          📍 Google Maps
+          style="display:flex;align-items:center;justify-content:center;padding:6px 8px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;color:#374151;text-decoration:none;font-size:11px">
+          📍
         </a>
       </div>
     </div>`
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
+
+const SEDE_TIPI: Record<string, { label: string; color: string; emoji: string }> = {
+  operativa:       { label: 'Operativa',      color: '#2563eb', emoji: '🏭' },
+  amministrativa:  { label: 'Amministrativa', color: '#7c3aed', emoji: '🏢' },
+  magazzino:       { label: 'Magazzino',      color: '#6b7280', emoji: '📦' },
+  deposito:        { label: 'Deposito',       color: '#4b5563', emoji: '🏗️' },
+  ufficio_tecnico: { label: 'Uff. Tecnico',   color: '#4f46e5', emoji: '💼' },
+  filiale:         { label: 'Filiale',        color: '#0891b2', emoji: '🏢' },
+  altro:           { label: 'Altro',          color: '#9ca3af', emoji: '⬡' },
+}
+
+const TEAM_COLORS: Record<string, string> = {
+  direttore_lavori: '#1d4ed8', rup: '#7c3aed', collaudatore: '#0891b2',
+  csp: '#dc2626', cse: '#ea580c', geologo: '#16a34a', strutturista: '#ca8a04',
+  impiantista: '#0d9488',
+}
+const TEAM_LABELS: Record<string, string> = {
+  direttore_lavori: 'DL', rup: 'RUP', collaudatore: 'Col.',
+  csp: 'CSP', cse: 'CSE', geologo: 'Geo', strutturista: 'Str.', impiantista: 'Imp.',
+}
+
+function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371, d2r = Math.PI / 180
+  const dLat = (lat2 - lat1) * d2r, dLng = (lng2 - lng1) * d2r
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*d2r)*Math.cos(lat2*d2r)*Math.sin(dLng/2)**2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+}
 
 const LEGENDA = [
   { color: '#3b82f6', label: '0% — Non iniziata' },
@@ -158,21 +189,28 @@ const AVZ_LABELS: Record<string, string> = {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function MappaCantieri() {
-  const mapContainer  = useRef<HTMLDivElement>(null)
-  const mapRef        = useRef<mapboxgl.Map | null>(null)
-  const sedeMarker    = useRef<mapboxgl.Marker | null>(null)
-  const allDataRef    = useRef<CommessaKPI[]>([])
-  const filtriRef     = useRef<Filtri>(FILTRI_DEFAULT)
-  const router        = useRouter()
+  const mapContainer        = useRef<HTMLDivElement>(null)
+  const mapRef              = useRef<mapboxgl.Map | null>(null)
+  const sedeMarker          = useRef<mapboxgl.Marker | null>(null)
+  const sediMarkersRef      = useRef<mapboxgl.Marker[]>([])
+  const teamMarkersRef      = useRef<mapboxgl.Marker[]>([])
+  const fornitorMarkersRef  = useRef<mapboxgl.Marker[]>([])
+  const aziendaIdRef        = useRef<string>('')
+  const allDataRef          = useRef<CommessaKPI[]>([])
+  const filtriRef           = useRef<Filtri>(FILTRI_DEFAULT)
+  const router              = useRouter()
 
-  const [loading, setLoading]             = useState(true)
-  const [count, setCount]                 = useState(0)
-  const [error, setError]                 = useState<string | null>(null)
-  const [geocodingInfo, setGeocodingInfo] = useState<string | null>(null)
-  const [filtri, setFiltri]               = useState<Filtri>(FILTRI_DEFAULT)
-  const [filtriOpen, setFiltriOpen]       = useState(false)
-  const [province, setProvince]           = useState<string[]>([])
-  const [responsabili, setResponsabili]   = useState<string[]>([])
+  const [loading, setLoading]               = useState(true)
+  const [count, setCount]                   = useState(0)
+  const [error, setError]                   = useState<string | null>(null)
+  const [geocodingInfo, setGeocodingInfo]   = useState<string | null>(null)
+  const [filtri, setFiltri]                 = useState<Filtri>(FILTRI_DEFAULT)
+  const [filtriOpen, setFiltriOpen]         = useState(false)
+  const [province, setProvince]             = useState<string[]>([])
+  const [responsabili, setResponsabili]     = useState<string[]>([])
+  const [mostraSedi, setMostraSedi]         = useState(true)
+  const [mostraFornitori, setMostraFornitori] = useState(false)
+  const [ragioFornitori, setRagioFornitori] = useState<25 | 50 | 100>(50)
 
   // Keep ref in sync so closures always see the latest filters
   filtriRef.current = filtri
@@ -224,6 +262,27 @@ export default function MappaCantieri() {
       const aziendaId = profile?.azienda_id
       console.log('[Mappa] user.id:', user.id, '→ azienda_id:', aziendaId)
       if (!aziendaId) { setError('Profilo utente non trovato'); setLoading(false); return }
+      aziendaIdRef.current = aziendaId
+
+      // ── Sedi azienda (pin colorati per tipo) ──────────────────────────────
+      const { data: sediAz } = await (supabase as any)
+        .from('azienda_sedi').select('*').eq('azienda_id', aziendaId).eq('attiva', true)
+      for (const s of sediAz || []) {
+        if (!s.lat || !s.lng) continue
+        const meta = SEDE_TIPI[s.tipo] || SEDE_TIPI.altro
+        const el = document.createElement('div')
+        el.innerHTML = `<div style="width:38px;height:38px;border-radius:50%;background:${meta.color};border:2.5px solid #fff;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.45)">${meta.emoji}</div>`
+        const addrLine = [s.indirizzo, s.cap && s.comune ? `${s.cap} ${s.comune}` : s.comune, s.provincia].filter(Boolean).join(', ')
+        const sedeP = new mapboxgl.Popup({ offset: 22, maxWidth: '230px' })
+          .setHTML(`<div style="font-family:'Segoe UI',sans-serif;font-size:12px">
+            <div style="font-weight:700;font-size:13px;color:${meta.color};margin-bottom:4px">${meta.emoji} ${s.nome || meta.label}</div>
+            ${addrLine ? `<div style="color:#374151;margin-bottom:2px">📍 ${addrLine}</div>` : ''}
+            ${s.referente ? `<div style="color:#6b7280;font-size:11px">👤 ${s.referente}</div>` : ''}
+            ${s.telefono  ? `<div style="color:#6b7280;font-size:11px">📞 ${s.telefono}</div>` : ''}
+          </div>`)
+        const marker = new mapboxgl.Marker({ element: el }).setLngLat([s.lng, s.lat]).setPopup(sedeP).addTo(map)
+        sediMarkersRef.current.push(marker)
+      }
 
       // ── Sede impresa ──────────────────────────────────────────────────────
       const { data: az, error: azErr } = await (supabase as any)
@@ -479,19 +538,115 @@ export default function MappaCantieri() {
           setGeocodingInfo(null)
         }
       }
+
+      // ── Geocodifica retroattiva contatti (max 5 senza coordinate) ─────────
+      const { data: contattiSenzaCoord } = await (supabase as any)
+        .from('professionisti_fornitori')
+        .select('id,nome,cognome,ragione_sociale,indirizzo,comune,provincia')
+        .eq('azienda_id', aziendaId)
+        .is('lat', null).limit(5)
+      for (let i = 0; i < (contattiSenzaCoord || []).length; i++) {
+        const ct = contattiSenzaCoord[i]
+        if (i > 0) await new Promise(r => setTimeout(r, 1100))
+        const q = [ct.indirizzo, ct.comune, ct.provincia, 'Italia'].filter(Boolean).join(', ')
+        if (!q.trim()) continue
+        try {
+          const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`, { headers: { 'Accept-Language': 'it' } })
+          const j = await r.json()
+          if (j[0]) {
+            await (supabase as any).from('professionisti_fornitori')
+              .update({ lat: parseFloat(j[0].lat), lng: parseFloat(j[0].lon) }).eq('id', ct.id).then()
+          }
+        } catch { /* non bloccante */ }
+      }
     })
 
     ;(window as any).__sq360_open = (id: string) => {
       router.push(`/dashboard/commesse/${id}/anagrafica`)
     }
 
+    ;(window as any).__sq360_mostra_team = async (commessaId: string) => {
+      teamMarkersRef.current.forEach(m => m.remove())
+      teamMarkersRef.current = []
+      const map = mapRef.current
+      if (!map) return
+      const { data } = await (supabase as any)
+        .from('commessa_figure')
+        .select('ruolo, professionista:professionisti_fornitori(nome,cognome,ragione_sociale,lat,lng)')
+        .eq('commessa_id', commessaId)
+      for (const fig of data || []) {
+        const pf = fig.professionista
+        if (!pf?.lat || !pf?.lng) continue
+        const nome  = pf.ragione_sociale || [pf.nome, pf.cognome].filter(Boolean).join(' ') || '—'
+        const color = TEAM_COLORS[fig.ruolo] || '#6b7280'
+        const label = TEAM_LABELS[fig.ruolo] || (fig.ruolo || '?').slice(0, 3).toUpperCase()
+        const el = document.createElement('div')
+        el.innerHTML = `<div style="width:36px;height:36px;border-radius:50%;background:${color};border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.4)">${label}</div>`
+        const pop = new mapboxgl.Popup({ offset: 20, maxWidth: '200px' })
+          .setHTML(`<div style="font-family:'Segoe UI',sans-serif;font-size:12px"><div style="font-weight:700;margin-bottom:2px">${nome}</div><div style="color:${color}">${(fig.ruolo || '').replace(/_/g, ' ')}</div></div>`)
+        const m = new mapboxgl.Marker({ element: el }).setLngLat([pf.lng, pf.lat]).setPopup(pop).addTo(map)
+        teamMarkersRef.current.push(m)
+      }
+    }
+
+    ;(window as any).__sq360_nascondi_team = () => {
+      teamMarkersRef.current.forEach(m => m.remove())
+      teamMarkersRef.current = []
+    }
+
     return () => {
       sedeMarker.current?.remove()
       sedeMarker.current = null
+      sediMarkersRef.current.forEach(m => m.remove())
+      sediMarkersRef.current = []
+      teamMarkersRef.current.forEach(m => m.remove())
+      teamMarkersRef.current = []
+      fornitorMarkersRef.current.forEach(m => m.remove())
+      fornitorMarkersRef.current = []
       map.remove()
       delete (window as any).__sq360_open
+      delete (window as any).__sq360_mostra_team
+      delete (window as any).__sq360_nascondi_team
     }
   }, [router])
+
+  // Show/hide sedi markers when toggle changes
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    sediMarkersRef.current.forEach(m => mostraSedi ? m.addTo(map) : m.remove())
+  }, [mostraSedi])
+
+  // Load/clear fornitori nel raggio when toggle or raggio changes
+  useEffect(() => {
+    fornitorMarkersRef.current.forEach(m => m.remove())
+    fornitorMarkersRef.current = []
+    const map = mapRef.current
+    if (!mostraFornitori || !map || !aziendaIdRef.current) return
+    const center = map.getCenter()
+    ;(supabase as any)
+      .from('professionisti_fornitori')
+      .select('id,nome,cognome,ragione_sociale,tipo,lat,lng')
+      .eq('azienda_id', aziendaIdRef.current)
+      .in('tipo', ['fornitore', 'subappaltatore'])
+      .not('lat', 'is', null)
+      .not('lng', 'is', null)
+      .then(({ data }: any) => {
+        for (const f of data || []) {
+          const dist = haversine(center.lat, center.lng, f.lat, f.lng)
+          if (dist > ragioFornitori) continue
+          const nome  = f.ragione_sociale || [f.nome, f.cognome].filter(Boolean).join(' ') || '—'
+          const color = f.tipo === 'subappaltatore' ? '#8b5cf6' : '#10b981'
+          const emoji = f.tipo === 'subappaltatore' ? '🔧' : '🏗️'
+          const el = document.createElement('div')
+          el.innerHTML = `<div style="width:32px;height:32px;border-radius:50%;background:${color};border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.4)">${emoji}</div>`
+          const pop = new mapboxgl.Popup({ offset: 18, maxWidth: '220px' })
+            .setHTML(`<div style="font-family:'Segoe UI',sans-serif;font-size:12px"><div style="font-weight:700;margin-bottom:2px">${nome}</div><div style="color:#6b7280">${f.tipo} · ${Math.round(dist)} km dal centro mappa</div></div>`)
+          const m = new mapboxgl.Marker({ element: el }).setLngLat([f.lng, f.lat]).setPopup(pop).addTo(map)
+          fornitorMarkersRef.current.push(m)
+        }
+      })
+  }, [mostraFornitori, ragioFornitori])
 
   // ─── JSX ──────────────────────────────────────────────────────────────────
 
@@ -616,6 +771,38 @@ export default function MappaCantieri() {
                 </select>
               </div>
             )}
+
+            {/* Sedi azienda */}
+            <div style={{ marginBottom: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,.1)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,.45)', letterSpacing: '.8px', textTransform: 'uppercase' }}>Sedi azienda</span>
+                <button onClick={() => setMostraSedi(v => !v)}
+                  style={{ width: 36, height: 20, borderRadius: 10, border: 'none', cursor: 'pointer', position: 'relative', background: mostraSedi ? '#3b82f6' : 'rgba(255,255,255,.2)', transition: 'background .2s' }}>
+                  <div style={{ width: 14, height: 14, borderRadius: '50%', background: 'white', position: 'absolute', top: 3, left: mostraSedi ? 19 : 3, transition: 'left .2s' }} />
+                </button>
+              </div>
+            </div>
+
+            {/* Fornitori nel raggio */}
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,.45)', letterSpacing: '.8px', textTransform: 'uppercase' }}>Fornitori/Sub nel raggio</span>
+                <button onClick={() => setMostraFornitori(v => !v)}
+                  style={{ width: 36, height: 20, borderRadius: 10, border: 'none', cursor: 'pointer', position: 'relative', background: mostraFornitori ? '#10b981' : 'rgba(255,255,255,.2)', transition: 'background .2s' }}>
+                  <div style={{ width: 14, height: 14, borderRadius: '50%', background: 'white', position: 'absolute', top: 3, left: mostraFornitori ? 19 : 3, transition: 'left .2s' }} />
+                </button>
+              </div>
+              {mostraFornitori && (
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {([25, 50, 100] as const).map(v => (
+                    <button key={v} onClick={() => setRagioFornitori(v)}
+                      style={{ flex: 1, padding: '4px 6px', borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: ragioFornitori === v ? 700 : 400, background: ragioFornitori === v ? '#10b981' : 'rgba(255,255,255,.12)', color: '#fff' }}>
+                      {v} km
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Reset */}
             {filtriAttivi && (
