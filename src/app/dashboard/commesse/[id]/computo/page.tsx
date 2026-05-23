@@ -116,7 +116,7 @@ const V3_CSS = `
 .cmp-vtab{font-size:10px;padding:2px 8px;background:transparent;border:1px solid rgba(0,0,0,.15);border-radius:10px;cursor:pointer;color:#6b7280}
 .cmp-vtab.on{background:#14532d;color:#fff;border-color:#14532d}
 .cmp-vcnt{color:#9ca3af;margin-left:auto;font-size:9px;white-space:nowrap}
-.cmp-tscroll{flex:1 1 0%;overflow-x:auto;overflow-y:scroll;width:100%;min-width:0;min-height:0;contain:strict}
+.cmp-tscroll{flex:1 1 0%;overflow-x:auto;overflow-y:scroll;width:100%;min-width:0;min-height:0}
 .cmp-tscroll::-webkit-scrollbar{width:6px;height:6px}.cmp-tscroll::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}
 table.cmp-t{width:100%;border-collapse:collapse;table-layout:fixed}
 col.cc2{width:40px}col.cc3{width:120px}col.cc4{width:auto}
