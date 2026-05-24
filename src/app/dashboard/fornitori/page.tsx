@@ -41,6 +41,8 @@ const TIPO_PRO = ['architetto','ingegnere','geometra','geologo','perito_industri
 const ISO_LIST = ['ISO 9001','ISO 14001','ISO 45001','SA 8000']
 const SOA_CAT  = ['OG1','OG2','OG3','OG4','OG6','OG8','OG11','OS3','OS6','OS12','OS18','OS19','OS21','OS28','OS30']
 const SOA_CLS  = ['I','II','III','IV','V','VI','VII','VIII']
+const TIPI_STANDARD = new Set(['professionista','fornitore','subappaltatore','committente','ente_pubblico','nolo','altro'])
+
 const FILTER_TABS = [
   { v: 'tutti',          l: 'Tutti' },
   { v: 'professionista', l: 'Professionisti' },
@@ -48,6 +50,7 @@ const FILTER_TABS = [
   { v: 'subappaltatore', l: 'Subappaltatori' },
   { v: 'committente',    l: 'Committenti' },
   { v: 'ente_pubblico',  l: 'Enti Pubblici' },
+  { v: 'altro',          l: 'Altro' },
 ]
 
 /* ── Helpers ──────────────────────────────────────────────────────────────── */
@@ -714,8 +717,11 @@ export default function ContattiPage() {
     setConfirmDel(null)
   }
 
+  const isAltro = (c: Contatto) => !c.tipo || !TIPI_STANDARD.has(c.tipo) || c.tipo === 'altro'
+
   const filtrati = lista.filter(c => {
-    if (filtroTipo !== 'tutti' && c.tipo !== filtroTipo) return false
+    if (filtroTipo === 'altro' && !isAltro(c)) return false
+    if (filtroTipo !== 'tutti' && filtroTipo !== 'altro' && c.tipo !== filtroTipo) return false
     if (search) {
       const q = search.toLowerCase()
       return fNome(c).toLowerCase().includes(q)
@@ -745,7 +751,7 @@ export default function ContattiPage() {
       {/* Filter tabs */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {FILTER_TABS.map(t => {
-          const cnt = t.v === 'tutti' ? lista.length : lista.filter(c => c.tipo === t.v).length
+          const cnt = t.v === 'tutti' ? lista.length : t.v === 'altro' ? lista.filter(isAltro).length : lista.filter(c => c.tipo === t.v).length
           const col = t.v === 'tutti' ? '#3b82f6' : (TMAP[t.v]?.c || '#6b7280')
           const active = filtroTipo === t.v
           return (
