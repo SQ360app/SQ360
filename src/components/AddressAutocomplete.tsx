@@ -32,14 +32,9 @@ interface Props {
   onSelect: (parsed: ParsedAddress) => void
   placeholder?: string
   inputStyle?: React.CSSProperties
-  // Contesto opzionale per query Nominatim migliori
   comuneCorrente?: string
   provinciaCorrente?: string
-  // Tipo indirizzo iniziale
   tipoDefault?: string
-  // Campo Int./Scala/Piano (default false per backward compat)
-  showInterno?: boolean
-  onInternoChange?: (interno: string) => void
 }
 
 // ─── Configurazione tipi indirizzo italiani ────────────────────────────────────
@@ -160,20 +155,14 @@ export function AddressAutocomplete({
   placeholder, inputStyle,
   comuneCorrente, provinciaCorrente,
   tipoDefault = 'via',
-  showInterno = false,
-  onInternoChange,
 }: Props) {
-  const [tipo,         setTipo]         = useState(tipoDefault)
-  const [results,      setResults]      = useState<NominatimResult[]>([])
-  const [open,         setOpen]         = useState(false)
-  const [loading,      setLoading]      = useState(false)
-  const [noResults,    setNoResults]    = useState(false)
-  const [interno,      setInterno]      = useState('')
-  const [civico,       setCivico]       = useState('')
-  const [viaSelezionata, setViaSelezionata] = useState('')
-  const [lastParsed,   setLastParsed]   = useState<Omit<ParsedAddress, 'indirizzo'> | null>(null)
-  const [dropPos,      setDropPos]      = useState({ top: 0, left: 0, width: 300 })
-  const [mounted,      setMounted]      = useState(false)
+  const [tipo,      setTipo]      = useState(tipoDefault)
+  const [results,   setResults]   = useState<NominatimResult[]>([])
+  const [open,      setOpen]      = useState(false)
+  const [loading,   setLoading]   = useState(false)
+  const [noResults, setNoResults] = useState(false)
+  const [dropPos,   setDropPos]   = useState({ top: 0, left: 0, width: 300 })
+  const [mounted,   setMounted]   = useState(false)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const portalRef    = useRef<HTMLDivElement | null>(null)
@@ -262,22 +251,12 @@ export function AddressAutocomplete({
     return () => { if (timerRef.current) clearTimeout(timerRef.current) }
   }, [value, search])
 
-  // Reset viaSelezionata se l'utente modifica il campo via dopo la selezione
-  useEffect(() => {
-    if (viaSelezionata && value !== viaSelezionata) {
-      setViaSelezionata('')
-      setLastParsed(null)
-    }
-  }, [value, viaSelezionata])
-
   // ─── Selezione risultato ──────────────────────────────────────────────────
 
   const select = (r: NominatimResult) => {
     const a      = r.address
-    // Usa solo il nome via (senza civico API) — il civico viene inserito manualmente
-    const road   = a.road || value
+    const road   = [a.road, a.house_number].filter(Boolean).join(' ') || value
     const comune = a.city || a.town || a.village || a.municipality || a.county || ''
-    // Fallback postcode: estrai CAP italiano (5 cifre) dal display_name
     const capFallback = a.postcode ? '' : (r.display_name.match(/\b(\d{5})\b/)?.[1] || '')
     const parsed: Omit<ParsedAddress, 'indirizzo'> = {
       cap:      a.postcode || capFallback,
@@ -285,25 +264,13 @@ export function AddressAutocomplete({
       provincia: getProvince(a),
       lat:      parseFloat(r.lat),
       lng:      parseFloat(r.lon),
-      interno:  interno || undefined,
     }
-    const indirizzoFull = [road, civico].filter(Boolean).join(' ')
     onChange(road)
-    setViaSelezionata(road)
-    setLastParsed(parsed)
-    onSelect({ indirizzo: indirizzoFull, ...parsed })
+    onSelect({ indirizzo: road, ...parsed })
     setOpen(false)
     setResults([])
     setNoResults(false)
   }
-
-  const handleCivicoChange = useCallback((v: string) => {
-    setCivico(v)
-    if (viaSelezionata && lastParsed) {
-      const indirizzoFull = [viaSelezionata, v].filter(Boolean).join(' ')
-      onSelect({ indirizzo: indirizzoFull, ...lastParsed })
-    }
-  }, [viaSelezionata, lastParsed, onSelect])
 
   // ─── Stili derivati dall'inputStyle del caller ────────────────────────────
 
@@ -324,44 +291,6 @@ export function AddressAutocomplete({
     cursor: 'pointer',
     outline: 'none',
     appearance: 'auto' as React.CSSProperties['appearance'],
-  }
-
-  const civicoMissing = !!viaSelezionata && !civico
-
-  const borderColor = typeof inputStyle?.borderColor === 'string' ? inputStyle.borderColor : '#d1d5db'
-  const padding     = typeof inputStyle?.padding === 'string' ? inputStyle.padding : '7px 8px'
-  const radius      = typeof inputStyle?.borderRadius === 'number'
-    ? inputStyle.borderRadius
-    : typeof inputStyle?.borderRadius === 'string' ? inputStyle.borderRadius : 6
-
-  const civicoStyle: React.CSSProperties = {
-    width: 70,
-    flexShrink: 0,
-    padding,
-    border: civicoMissing ? '1.5px solid #f59e0b' : `1px solid ${borderColor}`,
-    borderRadius: radius,
-    fontSize: typeof inputStyle?.fontSize === 'string' ? inputStyle.fontSize : (typeof inputStyle?.fontSize === 'number' ? inputStyle.fontSize : 13),
-    fontFamily: 'inherit',
-    background: inputStyle?.background ?? '#fff',
-    color: inputStyle?.color ?? '#111827',
-    outline: 'none',
-    boxSizing: 'border-box',
-  }
-
-  const internoStyle: React.CSSProperties = {
-    marginTop: 5,
-    width: '100%',
-    boxSizing: 'border-box',
-    padding: '5px 10px',
-    border: `1px solid ${typeof inputStyle?.borderColor === 'string' ? inputStyle.borderColor : '#e5e7eb'}`,
-    borderRadius: typeof inputStyle?.borderRadius === 'number'
-      ? inputStyle.borderRadius
-      : 6,
-    fontSize: 11,
-    color: '#9ca3af',
-    background: 'transparent',
-    outline: 'none',
-    fontFamily: 'inherit',
   }
 
   // ─── Portal dropdown (position:fixed, zIndex 9999) ────────────────────────
@@ -425,7 +354,6 @@ export function AddressAutocomplete({
 
   return (
     <div ref={containerRef}>
-      {/* Riga 1: Tipo via ▼ | Nome via (autocomplete) | N° civ. */}
       <div style={{ display: 'flex', gap: 6, alignItems: 'stretch' }}>
         <select
           value={tipo}
@@ -463,40 +391,7 @@ export function AddressAutocomplete({
             </span>
           )}
         </div>
-
-        {/* Numero civico — sempre manuale */}
-        <input
-          type="text"
-          value={civico}
-          onChange={e => handleCivicoChange(e.target.value)}
-          placeholder="N°"
-          title={civicoMissing ? 'Inserisci il numero civico' : 'N° civico (es. 14, 14/A, SNC)'}
-          style={civicoStyle}
-        />
       </div>
-
-      {/* Hint numero civico mancante */}
-      {civicoMissing && (
-        <div style={{ fontSize: 10, color: '#f59e0b', marginTop: 3, paddingLeft: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
-          ⚠ Inserisci il numero civico
-        </div>
-      )}
-
-
-      {/* Campo Int./Scala/Piano opzionale */}
-      {showInterno && (
-        <input
-          type="text"
-          value={interno}
-          onChange={e => {
-            setInterno(e.target.value)
-            onInternoChange?.(e.target.value)
-          }}
-          placeholder="Int./Scala/Piano — es. Sc. B Int. 4 P. 2 (opzionale)"
-          style={internoStyle}
-        />
-      )}
-
       {portal}
     </div>
   )

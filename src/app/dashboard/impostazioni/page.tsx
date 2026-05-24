@@ -265,7 +265,7 @@ export default function ImpostazioniPage() {
     }).eq('id', aziendaId)
     if (error) { alert('Errore salvataggio: ' + error.message); return }
     setSavedOk(true)
-    setTimeout(() => setSavedOk(false), 3000)
+    setTimeout(() => setSavedOk(false), 2000)
   }
 
   async function saveEmailConfig() {
@@ -575,17 +575,13 @@ export default function ImpostazioniPage() {
                 </div>
               </div>
               <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                {savedOk && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#10b981', fontSize: 13 }}>
-                    <CheckCircle size={15} /> Salvato
-                  </div>
-                )}
                 <button onClick={saveAzienda} style={{
                   display: 'flex', alignItems: 'center', gap: 6,
-                  background: 'var(--accent)', border: 'none', borderRadius: 8,
-                  padding: '10px 20px', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer'
+                  background: savedOk ? '#10b981' : 'var(--accent)', border: 'none', borderRadius: 8,
+                  padding: '10px 20px', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  transition: 'background .2s',
                 }}>
-                  <Save size={14} /> Salva modifiche
+                  {savedOk ? '✅ Salvato' : <><Save size={14} /> Salva modifiche</>}
                 </button>
               </div>
             </div>

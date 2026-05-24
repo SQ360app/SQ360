@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getAziendaId } from '@/lib/supabase'
 import { AddressAutocomplete } from '@/components/AddressAutocomplete'
 
 /* ── Types ────────────────────────────────────────────────────────────────── */
@@ -673,8 +673,14 @@ export default function ContattiPage() {
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
   const carica = useCallback(async () => {
+    const azId = await getAziendaId()
+    if (!azId) return
     setLoading(true)
-    const { data } = await (supabase as any).from('professionisti_fornitori').select('*').order('created_at', { ascending: false })
+    const { data } = await (supabase as any)
+      .from('professionisti_fornitori')
+      .select('*')
+      .eq('azienda_id', azId)
+      .order('nome')
     setLista(data || [])
     setLoading(false)
   }, [])
@@ -687,7 +693,8 @@ export default function ContattiPage() {
       showToast('Contatto aggiornato')
       if (detail?.id === form.id) setDetail({ ...detail, ...form } as Contatto)
     } else {
-      await (supabase as any).from('professionisti_fornitori').insert({ ...form, attivo: true })
+      const azId = await getAziendaId()
+      await (supabase as any).from('professionisti_fornitori').insert({ ...form, azienda_id: azId, attivo: true })
       showToast('Contatto aggiunto')
     }
     setShowForm(false)
