@@ -1,19 +1,116 @@
 export type WbsVoce = [string, string]
 
+// ── Flat node format (editor + DB) ────────────────────────────────────────
+export interface WbsNode {
+  id: string
+  parent_id: string | null
+  etichetta: string
+  ordine: number
+  codice?: string  // computed by ricalcolaCodici, never stored in DB
+}
+
+// ── DEFAULT WBS numerica gerarchica ───────────────────────────────────────
 export const DEFAULT_WBS_FLAT: WbsVoce[] = [
-  ['F01','FASE PRELIMINARE'],['F01.01','Apertura commessa'],
-  ['F02','PROGETTAZIONE'],['F02.01','Progett. architettonica'],['F02.02','Strutturale'],['F02.03','Impianti'],
-  ['F03','APPROVVIGIONAMENTI'],['F03.01','Materiali strutturali'],['F03.02','Finiture'],['F03.03','Noleggi'],['F03.04','Contratti sub'],
-  ['F04','CANTIERE'],['F04.01','Opere preliminari'],['F04.02','Demolizioni'],['F04.03','Scavi'],
-  ['F04.04','Fondazioni'],['F04.05','Struttura in elevazione'],['F04.06','Solaio e copertura'],
-  ['F04.07','Tamponamenti'],['F04.08','Intonaci'],['F04.09','Massetti e pavimenti'],
-  ['F04.10','Serramenti'],['F04.11','Tinteggiature'],
-  ['F05','IMPIANTI'],['F05.01','Impianto elettrico'],['F05.02','Idro-sanitario'],['F05.03','Termico'],
-  ['F06','OPERE ESTERNE'],['F06.01','Pavimentazioni esterne'],['F06.02','Recinzioni'],
-  ['F07','SICUREZZA'],['F07.01','DPI'],['F07.02','Apprestamenti'],
-  ['F08','GESTIONE ECONOMICA'],['F08.01','Controllo budget'],['F08.02','Fatturazione'],
+  ['1',   'STRUTTURE'],
+  ['1.1', 'Fondazioni'],
+  ['1.2', 'Struttura in elevazione'],
+  ['1.3', 'Solai e coperture'],
+  ['2',   'FINITURE'],
+  ['2.1', 'Intonaci e rasature'],
+  ['2.2', 'Massetti e pavimenti'],
+  ['2.3', 'Rivestimenti'],
+  ['2.4', 'Controsoffitti'],
+  ['2.5', 'Serramenti'],
+  ['2.6', 'Tinteggiature'],
+  ['3',   'IMPIANTI'],
+  ['3.1', 'Impianto elettrico'],
+  ['3.2', 'Impianto idro-sanitario'],
+  ['3.3', 'Impianto termico'],
+  ['3.4', 'Impianti speciali'],
+  ['4',   'OPERE ESTERNE'],
+  ['4.1', 'Sistemazioni esterne'],
+  ['4.2', 'Recinzioni e cancelli'],
+  ['5',   'SICUREZZA'],
+  ['5.1', 'DPI e apprestamenti'],
+  ['5.2', 'Oneri sicurezza'],
+  ['6',   'PRELIMINARI'],
+  ['6.1', 'Opere provvisionali'],
+  ['6.2', 'Demolizioni e rimozioni'],
+  ['6.3', 'Scavi e movimenti terra'],
+  ['7',   'PROGETTAZIONE'],
+  ['7.1', 'Architettonico'],
+  ['7.2', 'Strutturale'],
+  ['7.3', 'Impiantistico'],
+  ['8',   'GESTIONE COMMESSA'],
+  ['8.1', 'Controllo costi'],
+  ['8.2', 'Subappalti e noli'],
 ]
 
+// ── Ricalcola codici dalla posizione nell'albero ───────────────────────────
+// Il codice NON viene mai salvato nel DB — viene ricalcolato al caricamento
+// e dopo ogni modifica/spostamento nell'editor.
+export function ricalcolaCodici(voci: WbsNode[]): WbsNode[] {
+  const radici = voci
+    .filter(v => !v.parent_id)
+    .sort((a, b) => a.ordine - b.ordine)
+
+  let risultato: WbsNode[] = []
+
+  radici.forEach((radice, i) => {
+    const codice = String(i + 1)
+    risultato.push({ ...radice, codice })
+    risultato = risultato.concat(ricalcolaFigli(voci, radice.id, codice))
+  })
+
+  return risultato
+}
+
+function ricalcolaFigli(
+  tutte: WbsNode[],
+  parentId: string,
+  prefisso: string
+): WbsNode[] {
+  const figli = tutte
+    .filter(v => v.parent_id === parentId)
+    .sort((a, b) => a.ordine - b.ordine)
+
+  let risultato: WbsNode[] = []
+  figli.forEach((figlio, i) => {
+    const codice = `${prefisso}.${i + 1}`
+    risultato.push({ ...figlio, codice })
+    risultato = risultato.concat(ricalcolaFigli(tutte, figlio.id, codice))
+  })
+  return risultato
+}
+
+// ── Conversione WbsVoce[] → WbsNode[] ─────────────────────────────────────
+// genId: iniettare crypto.randomUUID in componenti client; lasciare default per il loader
+export function wbsFlatToNodes(
+  flat: WbsVoce[],
+  genId: () => string = () => Math.random().toString(36).slice(2)
+): WbsNode[] {
+  const idMap: Record<string, string> = {}
+  flat.forEach(([code]) => { idMap[code] = genId() })
+
+  const ordinePerParent: Record<string, number> = {}
+  return flat.map(([code, etichetta]) => {
+    const parts = code.split('.')
+    parts.pop()
+    const parentCode = parts.join('.')
+    const parent_id = parentCode ? (idMap[parentCode] || null) : null
+    const key = parent_id ?? 'root'
+    const ordine = ordinePerParent[key] || 0
+    ordinePerParent[key] = ordine + 1
+    return { id: idMap[code], parent_id, etichetta, ordine }
+  })
+}
+
+// ── Conversione WbsNode[] → WbsVoce[] ─────────────────────────────────────
+export function wbsNodesToFlat(nodes: WbsNode[]): WbsVoce[] {
+  return ricalcolaCodici(nodes).map(n => [n.codice!, n.etichetta] as WbsVoce)
+}
+
+// ── Helpers per WbsVoce[] (dropdown computo/sal/rda/oda) ──────────────────
 export function wbsLabel(flat: WbsVoce[], code: string): string {
   return Object.fromEntries(flat)[code] || code
 }
@@ -40,24 +137,24 @@ export function wbsParent(code: string): string | null {
 
 export function nextChildCode(flat: WbsVoce[], parent: string): string {
   const children = wbsChildren(flat, parent)
-  if (children.length === 0) return `${parent}.01`
+  if (children.length === 0) return `${parent}.1`
   const nums = children.map(c => {
     const parts = c.split('.')
     return parseInt(parts[parts.length - 1], 10)
   })
-  const next = Math.max(...nums) + 1
-  return `${parent}.${String(next).padStart(2, '0')}`
+  return `${parent}.${Math.max(...nums) + 1}`
 }
 
-export interface WbsNode {
+// ── Albero annidato (per computo sidebar) ─────────────────────────────────
+export interface WbsTreeNode {
   code: string
   label: string
-  children: WbsNode[]
+  children: WbsTreeNode[]
 }
 
-export function buildWbsTree(flat: WbsVoce[]): WbsNode[] {
+export function buildWbsTree(flat: WbsVoce[]): WbsTreeNode[] {
   const roots = wbsRoots(flat)
-  function buildNode(code: string): WbsNode {
+  function buildNode(code: string): WbsTreeNode {
     const label = wbsLabel(flat, code)
     const childCodes = wbsChildren(flat, code)
     return { code, label, children: childCodes.map(buildNode) }

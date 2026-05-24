@@ -8,8 +8,8 @@ import {
 } from 'lucide-react'
 import { supabase, getAziendaId } from '@/lib/supabase'
 import { AddressAutocomplete } from '@/components/AddressAutocomplete'
-import { DEFAULT_WBS_FLAT, WbsVoce, wbsRoots, wbsChildren } from '@/lib/wbs'
-import { loadWbs } from '@/lib/wbsLoader'
+import { DEFAULT_WBS_FLAT, WbsNode, ricalcolaCodici, wbsFlatToNodes } from '@/lib/wbs'
+import { loadWbsNodes } from '@/lib/wbsLoader'
 
 // ─── Tipi ─────────────────────────────────────────────────────────────────────
 
@@ -399,7 +399,7 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
   const [commessa, setCommessa] = useState<Partial<CommessaDati>>({ sicurezza_interna_esclusa_ribasso: true, sam_obbligatoria: false })
   const [figure, setFigure] = useState<Figure>({})
   const [aziendaId, setAziendaId] = useState('')
-  const [wbsFlat, setWbsFlat] = useState<WbsVoce[]>(DEFAULT_WBS_FLAT)
+  const [wbsNodes, setWbsNodes] = useState<WbsNode[]>(() => wbsFlatToNodes(DEFAULT_WBS_FLAT))
   const [wbsOpen, setWbsOpen] = useState(false)
   const [wbsSaving, setWbsSaving] = useState(false)
   const [wbsEdited, setWbsEdited] = useState(false)
@@ -422,7 +422,12 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
           setCommessa(comm)
           const azId = comm.azienda_id || ''
           setAziendaId(azId)
-          if (azId) loadWbs(supabase, id, azId).then(setWbsFlat)
+          if (azId) {
+            loadWbsNodes(supabase, 'wbs_commessa', { commessa_id: id, azienda_id: azId }).then(nodes => {
+              if (nodes.length > 0) setWbsNodes(nodes)
+              else setWbsNodes(wbsFlatToNodes(DEFAULT_WBS_FLAT, () => crypto.randomUUID()))
+            })
+          }
         }
 
         const { data: figDB } = await supabase
@@ -785,15 +790,19 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
 
         {/* ── WBS PERSONALIZZATA ── */}
         {(() => {
+          // Ordered display with auto-computed codes
+          const wbsOrdered = ricalcolaCodici(wbsNodes)
+
           const saveWbs = async () => {
             setWbsSaving(true)
             try {
               const db = supabase as any
               await db.from('wbs_commessa').delete().eq('commessa_id', id)
-              if (wbsFlat.length > 0) {
+              if (wbsNodes.length > 0) {
                 await db.from('wbs_commessa').insert(
-                  wbsFlat.map(([codice, etichetta], i) => ({
-                    commessa_id: id, azienda_id: aziendaId, codice, etichetta, ordine: i
+                  wbsNodes.map(n => ({
+                    id: n.id, commessa_id: id, azienda_id: aziendaId,
+                    parent_id: n.parent_id, etichetta: n.etichetta, ordine: n.ordine
                   }))
                 )
               }
@@ -801,51 +810,54 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
             } finally { setWbsSaving(false) }
           }
 
-          const moveRow = (idx: number, dir: -1 | 1) => {
-            const next = [...wbsFlat]
-            const swap = idx + dir
-            if (swap < 0 || swap >= next.length) return
-            ;[next[idx], next[swap]] = [next[swap], next[idx]]
-            setWbsFlat(next); setWbsEdited(true)
+          const moveUp = (nodeId: string) => {
+            const node = wbsNodes.find(n => n.id === nodeId)!
+            const siblings = wbsNodes.filter(n => n.parent_id === node.parent_id).sort((a,b) => a.ordine - b.ordine)
+            const sibIdx = siblings.findIndex(s => s.id === nodeId)
+            if (sibIdx === 0) return
+            const prev = siblings[sibIdx - 1]
+            setWbsNodes(ns => ns.map(n => n.id === nodeId ? { ...n, ordine: prev.ordine } : n.id === prev.id ? { ...n, ordine: node.ordine } : n))
+            setWbsEdited(true)
           }
 
-          const updateLabel = (idx: number, label: string) => {
-            const next = [...wbsFlat]
-            next[idx] = [next[idx][0], label]
-            setWbsFlat(next); setWbsEdited(true)
+          const moveDown = (nodeId: string) => {
+            const node = wbsNodes.find(n => n.id === nodeId)!
+            const siblings = wbsNodes.filter(n => n.parent_id === node.parent_id).sort((a,b) => a.ordine - b.ordine)
+            const sibIdx = siblings.findIndex(s => s.id === nodeId)
+            if (sibIdx === siblings.length - 1) return
+            const next = siblings[sibIdx + 1]
+            setWbsNodes(ns => ns.map(n => n.id === nodeId ? { ...n, ordine: next.ordine } : n.id === next.id ? { ...n, ordine: node.ordine } : n))
+            setWbsEdited(true)
           }
 
-          const updateCode = (idx: number, code: string) => {
-            const next = [...wbsFlat]
-            next[idx] = [code, next[idx][1]]
-            setWbsFlat(next); setWbsEdited(true)
+          const editLabel = (nodeId: string, etichetta: string) => {
+            setWbsNodes(ns => ns.map(n => n.id === nodeId ? { ...n, etichetta } : n))
+            setWbsEdited(true)
           }
 
-          const deleteRow = (idx: number) => {
-            setWbsFlat(prev => prev.filter((_, i) => i !== idx))
+          const deleteNode = (nodeId: string) => {
+            const toDelete = new Set([nodeId])
+            let changed = true
+            while (changed) {
+              changed = false
+              wbsNodes.forEach(n => { if (n.parent_id && toDelete.has(n.parent_id) && !toDelete.has(n.id)) { toDelete.add(n.id); changed = true } })
+            }
+            setWbsNodes(ns => ns.filter(n => !toDelete.has(n.id)))
             setWbsEdited(true)
           }
 
           const addRoot = () => {
-            const roots = wbsRoots(wbsFlat)
-            const nums = roots.map(c => parseInt(c.replace(/\D/g, ''), 10)).filter(n => !isNaN(n))
-            const next = nums.length ? Math.max(...nums) + 1 : 1
-            const code = `F${String(next).padStart(2, '0')}`
-            setWbsFlat(prev => [...prev, [code, 'Nuova fase']])
+            const roots = wbsNodes.filter(n => !n.parent_id)
+            const maxOrdine = roots.length > 0 ? Math.max(...roots.map(n => n.ordine)) + 1 : 0
+            setWbsNodes(ns => [...ns, { id: crypto.randomUUID(), parent_id: null, etichetta: 'Nuova fase', ordine: maxOrdine }])
             setWbsEdited(true)
           }
 
-          const addChild = (parentCode: string) => {
-            const parentIdx = wbsFlat.findIndex(([c]) => c === parentCode)
-            const siblings = wbsChildren(wbsFlat, parentCode)
-            const nums = siblings.map(c => { const p = c.split('.'); return parseInt(p[p.length - 1], 10) }).filter(n => !isNaN(n))
-            const nextN = nums.length ? Math.max(...nums) + 1 : 1
-            const code = `${parentCode}.${String(nextN).padStart(2, '0')}`
-            const next = [...wbsFlat]
-            // insert after last child of this parent or after parent itself
-            const lastChildIdx = wbsFlat.reduce((last, [c], i) => (c.startsWith(parentCode + '.') ? i : last), parentIdx)
-            next.splice(lastChildIdx + 1, 0, [code, 'Nuova voce'])
-            setWbsFlat(next); setWbsEdited(true)
+          const addChild = (parentId: string) => {
+            const children = wbsNodes.filter(n => n.parent_id === parentId)
+            const maxOrdine = children.length > 0 ? Math.max(...children.map(n => n.ordine)) + 1 : 0
+            setWbsNodes(ns => [...ns, { id: crypto.randomUUID(), parent_id: parentId, etichetta: 'Nuova voce', ordine: maxOrdine }])
+            setWbsEdited(true)
           }
 
           return (
@@ -857,7 +869,7 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
                   {wbsEdited && <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 700 }}>● modificata</span>}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 11, color: 'var(--t3)' }}>{wbsFlat.length} voci</span>
+                  <span style={{ fontSize: 11, color: 'var(--t3)' }}>{wbsNodes.length} voci</span>
                   {wbsOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 </div>
               </button>
@@ -873,37 +885,35 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
                       </button>
                     )}
                     <button style={{ fontSize: 11, padding: '4px 10px', background: 'transparent', color: 'var(--t3)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}
-                      onClick={() => { setWbsFlat(DEFAULT_WBS_FLAT); setWbsEdited(true) }}>↩ Ripristina default</button>
+                      onClick={() => { setWbsNodes(wbsFlatToNodes(DEFAULT_WBS_FLAT, () => crypto.randomUUID())); setWbsEdited(true) }}>↩ Ripristina default</button>
                   </div>
                   <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-                    {wbsFlat.map(([code, label], idx) => {
-                      const depth = (code.match(/\./g) || []).length
+                    {wbsOrdered.map(node => {
+                      const depth = (node.codice!.match(/\./g) || []).length
                       const isRoot = depth === 0
+                      const siblings = wbsNodes.filter(n => n.parent_id === node.parent_id).sort((a,b) => a.ordine - b.ordine)
+                      const sibIdx = siblings.findIndex(s => s.id === node.id)
                       return (
-                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', paddingLeft: 8 + depth * 16, borderBottom: '1px solid var(--border)', background: isRoot ? '#f0fdf4' : '#fff' }}>
-                          <span style={{ fontSize: 10, color: 'var(--t3)', flexShrink: 0, width: 8 }}>
-                            {isRoot ? '▶' : '└'}
-                          </span>
-                          <input style={{ fontSize: 11, fontFamily: 'monospace', width: 72, padding: '2px 4px', border: '1px solid var(--border)', borderRadius: 4, fontWeight: isRoot ? 700 : 400 }}
-                            value={code}
-                            onChange={e => updateCode(idx, e.target.value)} />
+                        <div key={node.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', paddingLeft: 8 + depth * 16, borderBottom: '1px solid var(--border)', background: isRoot ? '#f0fdf4' : '#fff' }}>
+                          <span style={{ fontSize: 10, color: 'var(--t3)', flexShrink: 0, width: 8 }}>{isRoot ? '▶' : '└'}</span>
+                          <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#2563eb', minWidth: 40, flexShrink: 0 }}>{node.codice}</span>
                           <input style={{ fontSize: 11, flex: 1, padding: '2px 6px', border: '1px solid var(--border)', borderRadius: 4 }}
-                            value={label}
-                            onChange={e => updateLabel(idx, e.target.value)} />
+                            value={node.etichetta}
+                            onChange={e => editLabel(node.id, e.target.value)} />
                           {isRoot && (
                             <button style={{ fontSize: 10, padding: '2px 6px', background: '#dcfce7', color: '#14532d', border: 'none', borderRadius: 4, cursor: 'pointer', flexShrink: 0 }}
-                              onClick={() => addChild(code)} title="Aggiungi sotto-voce">+voce</button>
+                              onClick={() => addChild(node.id)}>+voce</button>
                           )}
                           <button style={{ fontSize: 10, padding: '2px 4px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--t3)' }}
-                            onClick={() => moveRow(idx, -1)} disabled={idx === 0}>↑</button>
+                            onClick={() => moveUp(node.id)} disabled={sibIdx === 0}>↑</button>
                           <button style={{ fontSize: 10, padding: '2px 4px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--t3)' }}
-                            onClick={() => moveRow(idx, 1)} disabled={idx === wbsFlat.length - 1}>↓</button>
+                            onClick={() => moveDown(node.id)} disabled={sibIdx === siblings.length - 1}>↓</button>
                           <button style={{ fontSize: 10, padding: '2px 4px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444' }}
-                            onClick={() => deleteRow(idx)}>✕</button>
+                            onClick={() => deleteNode(node.id)}>✕</button>
                         </div>
                       )
                     })}
-                    {wbsFlat.length === 0 && (
+                    {wbsNodes.length === 0 && (
                       <div style={{ padding: 16, textAlign: 'center', color: 'var(--t3)', fontSize: 12 }}>
                         Nessuna voce WBS — clicca "Fase radice" per aggiungere
                       </div>

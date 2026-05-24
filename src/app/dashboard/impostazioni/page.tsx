@@ -4,8 +4,8 @@ import { useState, useEffect, useRef } from 'react'
 import { Building2, Users, Bell, Shield, Plus, Save, CheckCircle, Edit2, Upload, Image as ImageIcon, FileImage, Loader2, Trash2 } from 'lucide-react'
 import { supabase, getAziendaId } from '@/lib/supabase'
 import { AddressAutocomplete } from '@/components/AddressAutocomplete'
-import { DEFAULT_WBS_FLAT, WbsVoce, wbsRoots, wbsChildren } from '@/lib/wbs'
-import { loadWbs } from '@/lib/wbsLoader'
+import { DEFAULT_WBS_FLAT, WbsNode, ricalcolaCodici, wbsFlatToNodes } from '@/lib/wbs'
+import { loadWbsNodes } from '@/lib/wbsLoader'
 
 // ─── Tipi ────────────────────────────────────────────────────────────────────
 type Ruolo = 'admin' | 'direttore_tecnico' | 'responsabile_commessa' | 'operatore' | 'contabilita' | 'viewer'
@@ -137,7 +137,7 @@ export default function ImpostazioniPage() {
   const [nuovaSede,    setNuovaSede]    = useState<Partial<Sede> | null>(null)
   const [salvandoSede, setSalvandoSede] = useState(false)
 
-  const [wbsTemplate, setWbsTemplate] = useState<WbsVoce[]>(DEFAULT_WBS_FLAT)
+  const [wbsTemplate, setWbsTemplate] = useState<WbsNode[]>(() => wbsFlatToNodes(DEFAULT_WBS_FLAT))
   const [wbsTemplateEdited, setWbsTemplateEdited] = useState(false)
   const [wbsTemplateSaving, setWbsTemplateSaving] = useState(false)
 
@@ -146,17 +146,18 @@ export default function ImpostazioniPage() {
       if (!id) return
       setAziendaId(id)
 
-      // Load WBS template — auto-init with DEFAULT_WBS_FLAT if empty
-      const db = supabase as any
-      const { data: tmpl } = await db.from('wbs_template').select('codice,etichetta').eq('azienda_id', id).order('ordine', { ascending: true })
-      if (tmpl && tmpl.length > 0) {
-        setWbsTemplate(tmpl.map((r: any) => [r.codice, r.etichetta] as WbsVoce))
-      } else if (tmpl !== null) {
-        // Auto-init template with default
+      // Load WBS template — auto-init con DEFAULT_WBS_FLAT se vuoto
+      const nodes = await loadWbsNodes(supabase, 'wbs_template', { azienda_id: id })
+      if (nodes.length > 0) {
+        setWbsTemplate(nodes)
+      } else {
+        // Auto-init: genera UUIDs lato client e inserisce in una sola batch
+        const db = supabase as any
+        const initNodes = wbsFlatToNodes(DEFAULT_WBS_FLAT, () => crypto.randomUUID())
         await db.from('wbs_template').insert(
-          DEFAULT_WBS_FLAT.map(([codice, etichetta], i) => ({ azienda_id: id, codice, etichetta, ordine: i }))
+          initNodes.map(n => ({ id: n.id, azienda_id: id, parent_id: n.parent_id, etichetta: n.etichetta, ordine: n.ordine }))
         )
-        setWbsTemplate(DEFAULT_WBS_FLAT)
+        setWbsTemplate(initNodes)
       }
       const { data } = await (supabase as any).from('azienda').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', id).single()
       if (data) {
@@ -784,6 +785,8 @@ export default function ImpostazioniPage() {
 
             {/* ── WBS Template aziendale ── */}
             {(() => {
+              const wbsOrdered = ricalcolaCodici(wbsTemplate)
+
               const saveTemplate = async () => {
                 if (!aziendaId) return
                 setWbsTemplateSaving(true)
@@ -792,7 +795,7 @@ export default function ImpostazioniPage() {
                   await db.from('wbs_template').delete().eq('azienda_id', aziendaId)
                   if (wbsTemplate.length > 0) {
                     await db.from('wbs_template').insert(
-                      wbsTemplate.map(([codice, etichetta], i) => ({ azienda_id: aziendaId, codice, etichetta, ordine: i }))
+                      wbsTemplate.map(n => ({ id: n.id, azienda_id: aziendaId, parent_id: n.parent_id, etichetta: n.etichetta, ordine: n.ordine }))
                     )
                   }
                   setWbsTemplateEdited(false)
@@ -807,41 +810,67 @@ export default function ImpostazioniPage() {
                 try {
                   const { data: commesse } = await db.from('commesse').select('id').eq('azienda_id', aziendaId)
                   for (const c of commesse || []) {
+                    // Genera nuovi UUIDs per ogni commessa (no parent_id cross-commessa)
+                    const newNodes = wbsFlatToNodes(
+                      wbsOrdered.map(n => [n.codice!, n.etichetta] as [string, string]),
+                      () => crypto.randomUUID()
+                    )
                     await db.from('wbs_commessa').delete().eq('commessa_id', c.id)
                     await db.from('wbs_commessa').insert(
-                      wbsTemplate.map(([codice, etichetta], i) => ({ commessa_id: c.id, azienda_id: aziendaId, codice, etichetta, ordine: i }))
+                      newNodes.map(n => ({ id: n.id, commessa_id: c.id, azienda_id: aziendaId, parent_id: n.parent_id, etichetta: n.etichetta, ordine: n.ordine }))
                     )
                   }
                 } finally { setWbsTemplateSaving(false) }
               }
 
-              const moveRow = (idx: number, dir: -1 | 1) => {
-                const next = [...wbsTemplate]
-                const swap = idx + dir
-                if (swap < 0 || swap >= next.length) return
-                ;[next[idx], next[swap]] = [next[swap], next[idx]]
-                setWbsTemplate(next); setWbsTemplateEdited(true)
-              }
-
-              const addRoot = () => {
-                const roots = wbsRoots(wbsTemplate)
-                const nums = roots.map(c => parseInt(c.replace(/\D/g, ''), 10)).filter(n => !isNaN(n))
-                const next = nums.length ? Math.max(...nums) + 1 : 1
-                const code = `F${String(next).padStart(2, '0')}`
-                setWbsTemplate(prev => [...prev, [code, 'Nuova fase']])
+              const moveUp = (nodeId: string) => {
+                const node = wbsTemplate.find(n => n.id === nodeId)!
+                const siblings = wbsTemplate.filter(n => n.parent_id === node.parent_id).sort((a,b) => a.ordine - b.ordine)
+                const sibIdx = siblings.findIndex(s => s.id === nodeId)
+                if (sibIdx === 0) return
+                const prev = siblings[sibIdx - 1]
+                setWbsTemplate(ns => ns.map(n => n.id === nodeId ? { ...n, ordine: prev.ordine } : n.id === prev.id ? { ...n, ordine: node.ordine } : n))
                 setWbsTemplateEdited(true)
               }
 
-              const addChild = (parentCode: string) => {
-                const parentIdx = wbsTemplate.findIndex(([c]) => c === parentCode)
-                const siblings = wbsChildren(wbsTemplate, parentCode)
-                const nums = siblings.map(c => { const p = c.split('.'); return parseInt(p[p.length - 1], 10) }).filter(n => !isNaN(n))
-                const nextN = nums.length ? Math.max(...nums) + 1 : 1
-                const code = `${parentCode}.${String(nextN).padStart(2, '0')}`
-                const next = [...wbsTemplate]
-                const lastChildIdx = wbsTemplate.reduce((last, [c], i) => (c.startsWith(parentCode + '.') ? i : last), parentIdx)
-                next.splice(lastChildIdx + 1, 0, [code, 'Nuova voce'])
-                setWbsTemplate(next); setWbsTemplateEdited(true)
+              const moveDown = (nodeId: string) => {
+                const node = wbsTemplate.find(n => n.id === nodeId)!
+                const siblings = wbsTemplate.filter(n => n.parent_id === node.parent_id).sort((a,b) => a.ordine - b.ordine)
+                const sibIdx = siblings.findIndex(s => s.id === nodeId)
+                if (sibIdx === siblings.length - 1) return
+                const next = siblings[sibIdx + 1]
+                setWbsTemplate(ns => ns.map(n => n.id === nodeId ? { ...n, ordine: next.ordine } : n.id === next.id ? { ...n, ordine: node.ordine } : n))
+                setWbsTemplateEdited(true)
+              }
+
+              const editLabel = (nodeId: string, etichetta: string) => {
+                setWbsTemplate(ns => ns.map(n => n.id === nodeId ? { ...n, etichetta } : n))
+                setWbsTemplateEdited(true)
+              }
+
+              const deleteNode = (nodeId: string) => {
+                const toDelete = new Set([nodeId])
+                let changed = true
+                while (changed) {
+                  changed = false
+                  wbsTemplate.forEach(n => { if (n.parent_id && toDelete.has(n.parent_id) && !toDelete.has(n.id)) { toDelete.add(n.id); changed = true } })
+                }
+                setWbsTemplate(ns => ns.filter(n => !toDelete.has(n.id)))
+                setWbsTemplateEdited(true)
+              }
+
+              const addRoot = () => {
+                const roots = wbsTemplate.filter(n => !n.parent_id)
+                const maxOrdine = roots.length > 0 ? Math.max(...roots.map(n => n.ordine)) + 1 : 0
+                setWbsTemplate(ns => [...ns, { id: crypto.randomUUID(), parent_id: null, etichetta: 'Nuova fase', ordine: maxOrdine }])
+                setWbsTemplateEdited(true)
+              }
+
+              const addChild = (parentId: string) => {
+                const children = wbsTemplate.filter(n => n.parent_id === parentId)
+                const maxOrdine = children.length > 0 ? Math.max(...children.map(n => n.ordine)) + 1 : 0
+                setWbsTemplate(ns => [...ns, { id: crypto.randomUUID(), parent_id: parentId, etichetta: 'Nuova voce', ordine: maxOrdine }])
+                setWbsTemplateEdited(true)
               }
 
               return (
@@ -860,7 +889,7 @@ export default function ImpostazioniPage() {
                       </button>
                     )}
                     <button style={{ fontSize: 12, padding: '5px 12px', background: 'transparent', color: 'var(--t3)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}
-                      onClick={() => { setWbsTemplate(DEFAULT_WBS_FLAT); setWbsTemplateEdited(true) }}>
+                      onClick={() => { setWbsTemplate(wbsFlatToNodes(DEFAULT_WBS_FLAT, () => crypto.randomUUID())); setWbsTemplateEdited(true) }}>
                       ↩ Ripristina WBS standard SQ360
                     </button>
                     <button style={{ fontSize: 12, padding: '5px 12px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
@@ -869,30 +898,28 @@ export default function ImpostazioniPage() {
                     </button>
                   </div>
                   <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-                    {wbsTemplate.map(([code, label], idx) => {
-                      const depth = (code.match(/\./g) || []).length
+                    {wbsOrdered.map(node => {
+                      const depth = (node.codice!.match(/\./g) || []).length
                       const isRoot = depth === 0
+                      const siblings = wbsTemplate.filter(n => n.parent_id === node.parent_id).sort((a,b) => a.ordine - b.ordine)
+                      const sibIdx = siblings.findIndex(s => s.id === node.id)
                       return (
-                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', paddingLeft: 8 + depth * 16, borderBottom: '1px solid var(--border)', background: isRoot ? '#f0fdf4' : '#fff' }}>
-                          <span style={{ fontSize: 10, color: 'var(--t3)', flexShrink: 0, width: 8 }}>
-                            {isRoot ? '▶' : '└'}
-                          </span>
-                          <input style={{ fontSize: 11, fontFamily: 'monospace', width: 72, padding: '2px 4px', border: '1px solid var(--border)', borderRadius: 4, fontWeight: isRoot ? 700 : 400 }}
-                            value={code}
-                            onChange={e => { const n = [...wbsTemplate]; n[idx] = [e.target.value, n[idx][1]]; setWbsTemplate(n); setWbsTemplateEdited(true) }} />
+                        <div key={node.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', paddingLeft: 8 + depth * 16, borderBottom: '1px solid var(--border)', background: isRoot ? '#f0fdf4' : '#fff' }}>
+                          <span style={{ fontSize: 10, color: 'var(--t3)', flexShrink: 0, width: 8 }}>{isRoot ? '▶' : '└'}</span>
+                          <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#2563eb', minWidth: 40, flexShrink: 0 }}>{node.codice}</span>
                           <input style={{ fontSize: 11, flex: 1, padding: '2px 6px', border: '1px solid var(--border)', borderRadius: 4 }}
-                            value={label}
-                            onChange={e => { const n = [...wbsTemplate]; n[idx] = [n[idx][0], e.target.value]; setWbsTemplate(n); setWbsTemplateEdited(true) }} />
+                            value={node.etichetta}
+                            onChange={e => editLabel(node.id, e.target.value)} />
                           {isRoot && (
                             <button style={{ fontSize: 10, padding: '2px 6px', background: '#dcfce7', color: '#14532d', border: 'none', borderRadius: 4, cursor: 'pointer', flexShrink: 0 }}
-                              onClick={() => addChild(code)}>+voce</button>
+                              onClick={() => addChild(node.id)}>+voce</button>
                           )}
                           <button style={{ fontSize: 10, padding: '2px 4px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--t3)' }}
-                            onClick={() => moveRow(idx, -1)} disabled={idx === 0}>↑</button>
+                            onClick={() => moveUp(node.id)} disabled={sibIdx === 0}>↑</button>
                           <button style={{ fontSize: 10, padding: '2px 4px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--t3)' }}
-                            onClick={() => moveRow(idx, 1)} disabled={idx === wbsTemplate.length - 1}>↓</button>
+                            onClick={() => moveDown(node.id)} disabled={sibIdx === siblings.length - 1}>↓</button>
                           <button style={{ fontSize: 10, padding: '2px 4px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444' }}
-                            onClick={() => { setWbsTemplate(prev => prev.filter((_, i) => i !== idx)); setWbsTemplateEdited(true) }}>✕</button>
+                            onClick={() => deleteNode(node.id)}>✕</button>
                         </div>
                       )
                     })}
