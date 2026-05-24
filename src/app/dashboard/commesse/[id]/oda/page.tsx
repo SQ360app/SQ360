@@ -6,6 +6,8 @@ import { useParams, useSearchParams } from 'next/navigation'
 import { supabase, getAziendaId } from '@/lib/supabase'
 import { Plus, FileText, Loader2, ChevronDown, ChevronRight, Package, Wrench, Truck, ShoppingCart, Receipt } from 'lucide-react'
 import { emailOdaCreato } from '@/lib/emailTemplates'
+import { DEFAULT_WBS_FLAT } from '@/lib/wbs'
+import { loadWbs } from '@/lib/wbsLoader'
 
 const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -33,19 +35,6 @@ const STATI_CONSEGNA: Record<string, { label: string; color: string; next?: stri
   consegnato:  { label: '✅ Consegnato',  color: 'bg-green-50 text-green-700',  next: undefined },
 }
 
-const WBS_FLAT: [string, string][] = [
-  ['F01','FASE PRELIMINARE'],['F01.01','Apertura commessa'],
-  ['F02','PROGETTAZIONE'],['F02.01','Progett. architettonica'],['F02.02','Strutturale'],['F02.03','Impianti'],
-  ['F03','APPROVVIGIONAMENTI'],['F03.01','Materiali strutturali'],['F03.02','Finiture'],['F03.03','Noleggi'],['F03.04','Contratti sub'],
-  ['F04','CANTIERE'],['F04.01','Opere preliminari'],['F04.02','Demolizioni'],['F04.03','Scavi'],
-  ['F04.04','Fondazioni'],['F04.05','Struttura in elevazione'],['F04.06','Solaio e copertura'],
-  ['F04.07','Tamponamenti'],['F04.08','Intonaci'],['F04.09','Massetti e pavimenti'],
-  ['F04.10','Serramenti'],['F04.11','Tinteggiature'],
-  ['F05','IMPIANTI'],['F05.01','Impianto elettrico'],['F05.02','Idro-sanitario'],['F05.03','Termico'],
-  ['F06','OPERE ESTERNE'],['F06.01','Pavimentazioni esterne'],['F06.02','Recinzioni'],
-  ['F07','SICUREZZA'],['F07.01','DPI'],['F07.02','Apprestamenti'],
-  ['F08','GESTIONE ECONOMICA'],['F08.01','Controllo budget'],['F08.02','Fatturazione'],
-]
 
 function VociRdaSection({ rdoId, supabase }: { rdoId?: string; supabase: any }) {
   const [voci,setVoci]=useState<any[]>([])
@@ -115,6 +104,7 @@ export default function ODAPage() {
   const [revModal, setRevModal] = useState<{doc: any; motivo: string} | null>(null)
   const [odaStorico, setOdaStorico] = useState<Record<string, any[]>>({})
   const [storicoOpen, setStoricoOpen] = useState<Record<string,boolean>>({})
+  const [wbsFlat, setWbsFlat] = useState(DEFAULT_WBS_FLAT)
 
   const importoNum = parseFloat(importoNetto) || 0
   const totale = importoNum * (1 + parseFloat(ivaPct) / 100)
@@ -143,6 +133,12 @@ export default function ODAPage() {
   }
 
   useEffect(() => { load(0) }, [commessaId])
+  useEffect(() => {
+    if (!commessaId) return
+    getAziendaId().then(aziendaId => {
+      if (aziendaId) loadWbs(supabase, commessaId, aziendaId).then(setWbsFlat)
+    })
+  }, [commessaId])
   useEffect(() => { setRitenuta(String(TIPI_ODA.find(x => x.value === tipo)?.ritenuta || 0)) }, [tipo])
   useEffect(() => {
     const rdo = searchParams.get('rdo_id')
@@ -554,7 +550,7 @@ export default function ODAPage() {
               <select value={wbsRef} onChange={e => setWbsRef(e.target.value)}
                 className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2">
                 <option value="">— Nessuna WBS —</option>
-                {WBS_FLAT.map(([code, label]) => <option key={code} value={code}>{code} — {label}</option>)}
+                {wbsFlat.map(([code, label]) => <option key={code} value={code}>{code} — {label}</option>)}
               </select>
             </div>
             <div>

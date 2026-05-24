@@ -2,29 +2,8 @@
 
 import React, { useState, useEffect, useRef, useCallback, use, useMemo } from 'react'
 import { supabase, getAziendaId } from '@/lib/supabase'
-
-// ─── WBS FLAT (codice → label) ──────────────────────────────────────────────
-const WBS_FLAT: [string, string][] = [
-  ['F01','FASE PRELIMINARE'],['F01.01','Apertura commessa'],
-  ['F02','PROGETTAZIONE'],['F02.01','Progett. architettonica'],['F02.02','Strutturale'],['F02.03','Impianti'],
-  ['F03','APPROVVIGIONAMENTI'],['F03.01','Materiali strutturali'],['F03.02','Finiture'],['F03.03','Noleggi'],['F03.04','Contratti sub'],
-  ['F04','CANTIERE'],['F04.01','Opere preliminari'],['F04.02','Demolizioni'],['F04.03','Scavi'],
-  ['F04.04','Fondazioni'],['F04.05','Struttura in elevazione'],['F04.06','Solaio e copertura'],
-  ['F04.07','Tamponamenti'],['F04.08','Intonaci'],['F04.09','Massetti e pavimenti'],
-  ['F04.10','Serramenti'],['F04.11','Tinteggiature'],
-  ['F05','IMPIANTI'],['F05.01','Impianto elettrico'],['F05.02','Idro-sanitario'],['F05.03','Termico'],
-  ['F06','OPERE ESTERNE'],['F06.01','Pavimentazioni esterne'],['F06.02','Recinzioni'],
-  ['F07','SICUREZZA'],['F07.01','DPI'],['F07.02','Apprestamenti'],
-  ['F08','GESTIONE ECONOMICA'],['F08.01','Controllo budget'],['F08.02','Fatturazione'],
-]
-const WBS_MAP = Object.fromEntries(WBS_FLAT)
-const WBS_ROOTS = WBS_FLAT.filter(([c]) => !c.includes('.')).map(([c]) => c)
-const WBS_CHILDREN = (parent: string) => WBS_FLAT.filter(([c]) => {
-  const p = c.split('.')
-  if (p.length === 1) return false
-  p.pop()
-  return p.join('.') === parent
-}).map(([c]) => c)
+import { DEFAULT_WBS_FLAT, WbsVoce } from '@/lib/wbs'
+import { loadWbs } from '@/lib/wbsLoader'
 
 // ─── Tipi ───────────────────────────────────────────────────────────────────
 interface VoceDB {
@@ -224,6 +203,16 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
   const [extraExpanded, setExtraExpanded] = useState<Record<string, boolean>>({})
   const [copiaSource, setCopiaSource] = useState('')
   const [rdaModal, setRdaModal] = useState<{ rows: RdaModalRow[]; senzaAnalisi: string[]; generaFallback: boolean } | null>(null)
+  const [wbsFlat, setWbsFlat] = useState<WbsVoce[]>(DEFAULT_WBS_FLAT)
+
+  const WBS_MAP      = useMemo(() => Object.fromEntries(wbsFlat), [wbsFlat])
+  const WBS_ROOTS    = useMemo(() => wbsFlat.filter(([c]) => !c.includes('.')).map(([c]) => c), [wbsFlat])
+  const WBS_CHILDREN = useCallback((parent: string) => wbsFlat.filter(([c]) => {
+    const p = c.split('.')
+    if (p.length === 1) return false
+    p.pop()
+    return p.join('.') === parent
+  }).map(([c]) => c), [wbsFlat])
 
   // ─── SAL Attivi state ─────────────────────────────────────────────────────
   const [salList, setSalList] = useState<Array<{id:string;numero:number;stato:string;data_emissione:string}>>([])
@@ -342,6 +331,13 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
   }, [id])
 
   useEffect(() => { caricaDati() }, [caricaDati])
+
+  useEffect(() => {
+    if (!id) return
+    getAziendaId().then(aziendaId => {
+      if (aziendaId) loadWbs(supabase, id, aziendaId).then(setWbsFlat)
+    })
+  }, [id])
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -771,7 +767,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
         📐 Assegna nodo WBS
         {currentWbs && <button className="cmp-wbs-picker-clr" onClick={() => assegnaWBSVoce(voceId, null)}>✕ Rimuovi</button>}
       </div>
-      {WBS_FLAT.map(([code, label]) => {
+      {wbsFlat.map(([code, label]) => {
         const indent = (code.match(/\./g) || []).length
         return (
           <div key={code} className={`cmp-wbs-pi${currentWbs === code ? ' active' : ''}`}
@@ -796,7 +792,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
           📐 Assegna WBS a {multiSel.size} voci
         </div>
         <div style={{ overflowY: 'auto', flex: 1 }}>
-          {WBS_FLAT.map(([code, label]) => {
+          {wbsFlat.map(([code, label]) => {
             const indent = (code.match(/\./g) || []).length
             return (
               <div key={code} className="cmp-wbs-pi" style={{ paddingLeft: 8 + indent * 14 }}
