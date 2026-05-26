@@ -348,8 +348,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Cancella sempre le vecchie misurazioni (evita orfane se il nuovo XPWE non ha <Misure>)
+    await db.from('voci_computo_misurazioni').delete().eq('commessa_id', commessaId)
     if (misurazioniAll.length > 0) {
-      await db.from('voci_computo_misurazioni').delete().eq('commessa_id', commessaId)
       for (let i = 0; i < misurazioniAll.length; i += BATCH) {
         const { error: errMis } = await db
           .from('voci_computo_misurazioni')

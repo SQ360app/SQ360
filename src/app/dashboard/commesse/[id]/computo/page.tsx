@@ -1290,8 +1290,8 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                       return (
                         <tr key={`mi_${v.id}`} className="cmp-rmi">
                           <td /><td /><td />
-                          <td style={{ paddingLeft: 28, color: '#9ca3af', fontSize: 10, fontStyle: 'italic' }}>
-                            {v.note?.split('>').pop()?.trim() || '—'}
+                          <td style={{ paddingLeft: 28, color: '#6b7280', fontSize: 10, fontStyle: 'italic' }}>
+                            misura da XPWE
                           </td>
                           <td><span className="cmp-edt">1</span></td>
                           <td><span className="cmp-edt cmp-mono">{f3(v.quantita)}</span></td>
