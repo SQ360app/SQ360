@@ -11,6 +11,8 @@ interface RDO {
   id: string; codice: string; oggetto: string; fornitore: string
   data_scadenza: string; note: string; stato_offerta: string
   rda_id?: string; commessa_id?: string; azienda_id?: string
+  token_offerta?: string
+  note_tecniche?: string; specifiche?: string; condizioni_particolari?: string
 }
 interface Commessa { codice: string; nome: string; committente: string }
 
@@ -57,6 +59,9 @@ export default function OffertaPage({ params: p }: { params: Promise<{ token: st
   const [luogoConsegna, setLuogoConsegna] = useState('franco_cantiere')
   const [noteOfferta, setNoteOfferta] = useState('')
   const [osservazioni, setOsservazioni] = useState('')
+  const [pdfAllegato, setPdfAllegato] = useState<File | null>(null)
+  const [uploadingPdf, setUploadingPdf] = useState(false)
+  const [pdfCaricato, setPdfCaricato] = useState(false)
 
   // ── Load ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -64,7 +69,7 @@ export default function OffertaPage({ params: p }: { params: Promise<{ token: st
     ;(async () => {
       const { data: rdoData } = await supabase
         .from('rdo')
-        .select('id,codice,oggetto,fornitore,data_scadenza,note,stato_offerta,rda_id,commessa_id,azienda_id')
+        .select('id,codice,oggetto,fornitore,data_scadenza,note,stato_offerta,rda_id,commessa_id,azienda_id,token_offerta,note_tecniche,specifiche,condizioni_particolari')
         .eq('token_offerta', token)
         .maybeSingle()
 
@@ -111,6 +116,21 @@ export default function OffertaPage({ params: p }: { params: Promise<{ token: st
     if (!rdo) return
     setSending(true)
     try {
+      // Upload PDF allegato se presente
+      let pdfUrl: string | undefined
+      if (pdfAllegato && rdo.token_offerta) {
+        setUploadingPdf(true)
+        const fd = new FormData()
+        fd.append('file', pdfAllegato)
+        fd.append('rdo_id', rdo.id)
+        fd.append('token', rdo.token_offerta)
+        try {
+          const res = await fetch('/api/upload-offerta-pdf', { method: 'POST', body: fd })
+          const json = await res.json()
+          if (json.ok) pdfUrl = json.url
+        } catch { /* non bloccante */ } finally { setUploadingPdf(false) }
+      }
+
       const offertaVoci = voci.map(v => ({
         voce_id: v.id, codice: v.codice, descrizione: v.descrizione,
         um: v.um, quantita: v.quantita,
@@ -134,6 +154,7 @@ export default function OffertaPage({ params: p }: { params: Promise<{ token: st
         luogo_consegna: luogoConsegna,
         note_offerta: noteOfferta + (osservazioni ? '\n\nOsservazioni tecniche:\n' + osservazioni : ''),
         stato: 'risposta_ricevuta',
+        ...(pdfUrl ? { offerta_pdf_url: pdfUrl } : {}),
       }).eq('id', rdo.id)
 
       if (error) { setErrore('Errore invio: ' + error.message); return }
@@ -228,6 +249,33 @@ export default function OffertaPage({ params: p }: { params: Promise<{ token: st
             </div>
           )}
         </div>
+
+        {/* Note del committente */}
+        {(rdo.note_tecniche || rdo.specifiche || rdo.condizioni_particolari) && (
+          <div style={SEC}>
+            <div style={SEC_HDR}>📋 Specifiche del committente</div>
+            <div style={{ ...SEC_BODY, display:'flex', flexDirection:'column', gap:12 }}>
+              {rdo.note_tecniche && (
+                <div>
+                  <p style={{ fontSize:11, fontWeight:700, color:'#374151', margin:'0 0 4px', textTransform:'uppercase' as const, letterSpacing:'0.04em' }}>Note tecniche / Capitolato</p>
+                  <p style={{ fontSize:12, color:'#374151', margin:0, lineHeight:1.6, whiteSpace:'pre-wrap' as const }}>{rdo.note_tecniche}</p>
+                </div>
+              )}
+              {rdo.specifiche && (
+                <div>
+                  <p style={{ fontSize:11, fontWeight:700, color:'#374151', margin:'0 0 4px', textTransform:'uppercase' as const, letterSpacing:'0.04em' }}>Specifiche materiali</p>
+                  <p style={{ fontSize:12, color:'#374151', margin:0, lineHeight:1.6, whiteSpace:'pre-wrap' as const }}>{rdo.specifiche}</p>
+                </div>
+              )}
+              {rdo.condizioni_particolari && (
+                <div>
+                  <p style={{ fontSize:11, fontWeight:700, color:'#374151', margin:'0 0 4px', textTransform:'uppercase' as const, letterSpacing:'0.04em' }}>Condizioni particolari</p>
+                  <p style={{ fontSize:12, color:'#374151', margin:0, lineHeight:1.6, whiteSpace:'pre-wrap' as const }}>{rdo.condizioni_particolari}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* SEZIONE 1 — Prezzi per voce */}
         {voci.length > 0 && (
@@ -375,6 +423,37 @@ export default function OffertaPage({ params: p }: { params: Promise<{ token: st
                 onChange={e => setOsservazioni(e.target.value)}
                 placeholder="Specifiche tecniche del materiale offerto, certificazioni, varianti proposte..." />
             </div>
+          </div>
+        </div>
+
+        {/* SEZIONE 6 — Allega PDF preventivo */}
+        <div style={SEC}>
+          <div style={SEC_HDR}>6 — Allega PDF preventivo (opzionale)</div>
+          <div style={SEC_BODY}>
+            {pdfCaricato ? (
+              <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'#f0fdf4', border:'1px solid #6ee7b7', borderRadius:8 }}>
+                <span style={{ fontSize:16 }}>✅</span>
+                <span style={{ fontSize:13, color:'#065f46', fontWeight:600 }}>PDF caricato con successo</span>
+                <button onClick={() => { setPdfAllegato(null); setPdfCaricato(false) }}
+                  style={{ marginLeft:'auto', background:'none', border:'1px solid #6ee7b7', borderRadius:6, padding:'3px 8px', fontSize:11, cursor:'pointer', color:'#065f46' }}>
+                  Cambia
+                </button>
+              </div>
+            ) : (
+              <div>
+                <input type="file" accept=".pdf" id="pdf-allegato-input" style={{ display:'none' }}
+                  onChange={e => setPdfAllegato(e.target.files?.[0] || null)} />
+                <label htmlFor="pdf-allegato-input" style={{ display:'block', border:'2px dashed #d1d5db', borderRadius:10, padding:'20px', textAlign:'center' as const, cursor:'pointer', background: pdfAllegato ? '#eff6ff' : '#fff' }}>
+                  {pdfAllegato
+                    ? <span style={{ fontSize:13, color:'#1d4ed8', fontWeight:600 }}>📄 {pdfAllegato.name} ({Math.round(pdfAllegato.size/1024)} KB)</span>
+                    : <span style={{ fontSize:13, color:'#6b7280' }}>📂 Scegli PDF preventivo da allegare</span>
+                  }
+                </label>
+                <p style={{ fontSize:11, color:'#9ca3af', margin:'6px 0 0', textAlign:'center' as const }}>
+                  Il PDF verrà allegato automaticamente all'invio dell'offerta
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

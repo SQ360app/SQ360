@@ -43,6 +43,10 @@ interface RDO {
   email_inviata_at?: string
   email_destinatario?: string
   wbs_ref?: string
+  note_tecniche?: string
+  specifiche?: string
+  condizioni_particolari?: string
+  offerta_pdf_url?: string
   revisione?: number
   doc_padre_id?: string
   is_vigente?: boolean
@@ -320,6 +324,32 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
   }, [])
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      Notification.requestPermission().catch(() => {})
+    }
+    const channel = (supabase as any).channel(`rdo-live-${id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rdo', filter: `commessa_id=eq.${id}` },
+        (payload: any) => {
+          const rec = payload.new
+          const old = payload.old || {}
+          if (rec.stato === 'risposta_ricevuta' && old.stato !== 'risposta_ricevuta') {
+            setToast(`📬 Offerta ricevuta da ${rec.fornitore}`)
+            setTimeout(() => setToast(''), 4000)
+            if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+              new Notification('SQ360 — Nuova offerta ricevuta', {
+                body: `${rec.fornitore} ha inviato la propria offerta`,
+                icon: '/icons/icon-192.png',
+              })
+            }
+            carica()
+          }
+        }
+      )
+      .subscribe()
+    return () => { (supabase as any).removeChannel(channel) }
+  }, [id, carica])
+
+  useEffect(() => {
     if (!fSearch || fSearch.length < 2) { setFResults([]); return }
     const t = setTimeout(async () => {
       const { data } = await supabase.from('professionisti_fornitori')
@@ -391,6 +421,9 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
         pct_manodopera: editRdo.pct_manodopera != null ? editRdo.pct_manodopera : null,
         richiede_sam: editRdo.richiede_sam ?? defaultSam,
         wbs_ref: editRdo.wbs_ref || null,
+        note_tecniche: editRdo.note_tecniche || null,
+        specifiche: editRdo.specifiche || null,
+        condizioni_particolari: editRdo.condizioni_particolari || null,
       }
       if (editRdo.id) {
         await supabase.from('rdo').update({ ...payload, codice: editRdo.codice || '' }).eq('id', editRdo.id)
@@ -758,6 +791,12 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
                         {r.stato === 'inviata' && (
                           <button style={{...styleBtn('#6366f1'),fontSize:11,marginLeft:4}} onClick={() => setPdfRdo(r)}>📎 Preventivo</button>
                         )}
+                        {r.offerta_pdf_url && (
+                          <a href={r.offerta_pdf_url} target="_blank" rel="noopener noreferrer"
+                            style={{...styleBtn('#0ea5e9'),fontSize:11,marginLeft:4,textDecoration:'none',display:'inline-block'}}>
+                            📄 PDF offerta
+                          </a>
+                        )}
                         {r.stato === 'aggiudicata' && (
                           <button style={{...styleBtn('#0d9488'),fontSize:11,marginLeft:4}} onClick={() => window.location.href = buildSamUrl(r)}>📋 SAM</button>
                         )}
@@ -919,6 +958,18 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
               <div>
                 <label style={styleLbl}>Note</label>
                 <textarea style={{ ...styleInp, resize:'vertical', minHeight:60 }} value={editRdo.note || ''} onChange={e => setEditRdo({ ...editRdo, note: e.target.value })} />
+              </div>
+              <div>
+                <label style={styleLbl}>Note tecniche / Capitolato</label>
+                <textarea style={{ ...styleInp, resize:'vertical', minHeight:60 }} value={editRdo.note_tecniche || ''} onChange={e => setEditRdo({ ...editRdo, note_tecniche: e.target.value })} placeholder="Specifiche tecniche richieste, riferimenti normativi, norme UNI..." />
+              </div>
+              <div>
+                <label style={styleLbl}>Specifiche materiali</label>
+                <textarea style={{ ...styleInp, resize:'vertical', minHeight:60 }} value={editRdo.specifiche || ''} onChange={e => setEditRdo({ ...editRdo, specifiche: e.target.value })} placeholder="Marca, modello, certificazioni, dimensioni, classe..." />
+              </div>
+              <div>
+                <label style={styleLbl}>Condizioni particolari</label>
+                <textarea style={{ ...styleInp, resize:'vertical', minHeight:60 }} value={editRdo.condizioni_particolari || ''} onChange={e => setEditRdo({ ...editRdo, condizioni_particolari: e.target.value })} placeholder="Modalità consegna, accesso cantiere, tempi massimi..." />
               </div>
               <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
                 <button style={styleBtn('#6b7280')} onClick={() => { setForm(false); setEditRdo(null) }}>Annulla</button>

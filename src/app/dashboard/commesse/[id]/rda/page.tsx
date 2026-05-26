@@ -26,6 +26,7 @@ interface RDA {
   is_vigente?: boolean
   motivo_rev?: string
   revised_at?: string
+  rda_origine_id?: string
 }
 interface VoceComputo { id: string; descrizione: string; um?: string; quantita?: number }
 
@@ -34,6 +35,14 @@ interface Fornitore {
   categoria_soa?: string; specializzazione?: string
   pec?: string; email?: string; telefono?: string
   ordine_professionale?: string; numero_iscrizione?: string
+}
+
+function simScore(a: string, b: string): number {
+  const wa = a.toLowerCase().split(/\W+/).filter(w => w.length > 3)
+  const wb = b.toLowerCase().split(/\W+/).filter(w => w.length > 3)
+  if (!wa.length || !wb.length) return 0
+  const matches = wa.filter(w => wb.some(x => x.includes(w) || w.includes(x)))
+  return Math.round((matches.length / Math.max(wa.length, wb.length)) * 100)
 }
 
 function FornitoreCard({ nome }: { nome: string }) {
@@ -136,6 +145,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
   const [storicoOpen, setStoricoOpen] = useState<Record<string,boolean>>({})
   const [allRda, setAllRda] = useState<RDA[]>([])
   const [wbsFlat, setWbsFlat] = useState(DEFAULT_WBS_FLAT)
+  const [pendingSalva, setPendingSalva] = useState<{duplicati: RDA[]} | null>(null)
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
@@ -182,7 +192,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
     return () => clearTimeout(t)
   }, [wizardSearch])
 
-  const salva = async () => {
+  const salva = async (origineId?: string | null) => {
     if (!editRda?.oggetto || !editRda?.tipo) { showToast('Compila oggetto e tipo'); return }
     setSaving(true)
     try {
@@ -199,12 +209,25 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
         fornitore_sugg: editRda.fornitore_sugg || '',
         note: editRda.note || '',
         wbs_id: editRda.wbs_id || null,
-      wbs_ref: editRda.wbs_ref || null,
+        wbs_ref: editRda.wbs_ref || null,
+        rda_origine_id: origineId !== undefined ? origineId : null,
       }
       if (editRda.id) {
         await supabase.from('rda').update(payload).eq('id', editRda.id)
         showToast('RDA aggiornata')
       } else {
+        // Check duplicates only when called without explicit origineId
+        if (origineId === undefined) {
+          const simili = rdaList.filter(r =>
+            r.tipo === editRda.tipo &&
+            !['annullata'].includes(r.stato) &&
+            simScore(r.oggetto || '', editRda.oggetto || '') > 40
+          )
+          if (simili.length > 0) {
+            setPendingSalva({ duplicati: simili })
+            return
+          }
+        }
         const anno = new Date().getFullYear().toString().slice(2)
         const { data: rdaCodici } = await supabase.from('rda').select('codice').eq('commessa_id', id).like('codice', `RDA-${anno}-%`)
         let maxNum = 0
@@ -213,7 +236,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
         await supabase.from('rda').insert({ ...payload, codice })
         showToast('RDA creata')
       }
-      setForm(false); setEditRda(null); carica()
+      setForm(false); setEditRda(null); setPendingSalva(null); carica()
     } finally { setSaving(false) }
   }
 
@@ -420,6 +443,12 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
                       {displayCodice(r)}
                       {!r.wbs_ref && <span style={{ display:'inline-block', fontSize:9, fontWeight:700, padding:'1px 5px', borderRadius:4, background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', marginLeft:4 }}>⚠️ WBS</span>}
                       {r.wbs_ref && <span style={{ display:'block', fontSize:9, color:'var(--t3)', marginTop:1 }}>WBS: {r.wbs_ref}</span>}
+                      {r.rda_origine_id && (() => {
+                        const parent = allRda.find(x => x.id === r.rda_origine_id)
+                        return parent ? (
+                          <span style={{ display:'block', fontSize:9, color:'#7c3aed', marginTop:1 }}>🔗 ↳ {parent.codice}</span>
+                        ) : null
+                      })()}
                     </td>
                     <td style={(styleObj as any).td as React.CSSProperties}><span style={(styleObj as any).badge('#3b82f6')}>{r.tipo}</span></td>
                     <td style={{ ...(styleObj as any).td, maxWidth:300, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{r.oggetto}</td>
@@ -502,6 +531,41 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
         )}
       </div>
 
+      {/* Modal duplicati RDA */}
+      {pendingSalva && (
+        <div className="modal-overlay" onClick={e => { if(e.target===e.currentTarget) setPendingSalva(null) }}>
+          <div className="modal-box" style={{ maxWidth:540, width:'92%' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:14 }}>
+              <h3 style={{ fontSize:14, fontWeight:700, color:'var(--t1)' }}>⚠️ RDA simile già esistente</h3>
+              <button onClick={() => setPendingSalva(null)} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'var(--t3)' }}>✕</button>
+            </div>
+            <p style={{ fontSize:12, color:'var(--t3)', marginBottom:14 }}>
+              Esistono già RDA con tipo e oggetto simili in questa commessa. Scegli come procedere:
+            </p>
+            <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:16 }}>
+              {pendingSalva.duplicati.map(r => (
+                <div key={r.id} style={{ padding:'9px 12px', background:'var(--bg)', borderRadius:8, border:'1px solid var(--border)', fontSize:12, display:'flex', alignItems:'center', gap:10 }}>
+                  <span style={{ fontFamily:'monospace', color:'var(--accent)', fontWeight:700, minWidth:110 }}>{r.codice}</span>
+                  <span style={{ color:'var(--t2)', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>{r.oggetto}</span>
+                  <span style={(styleObj as any).badge(STATO_COLOR[r.stato]||'#6b7280')}>{r.stato}</span>
+                  <button
+                    onClick={() => { setPendingSalva(null); salva(r.id) }}
+                    style={{ padding:'4px 10px', borderRadius:6, background:'#7c3aed', color:'#fff', border:'none', cursor:'pointer', fontSize:11, fontWeight:700, whiteSpace:'nowrap' as const }}>
+                    🔗 Collega
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+              <button style={(styleObj as any).btn('#6b7280')} onClick={() => setPendingSalva(null)}>Annulla</button>
+              <button style={(styleObj as any).btn('var(--accent)')} onClick={() => { setPendingSalva(null); salva(null) }}>
+                Crea nuova comunque
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal form */}
       {form && editRda && (
         <div className="modal-overlay" onClick={e => { if(e.target===e.currentTarget){setForm(false);setEditRda(null)} }}>
@@ -575,7 +639,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
               </div>
               <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
                 <button style={(styleObj as any).btn('#6b7280')} onClick={() => { setForm(false); setEditRda(null) }}>Annulla</button>
-                <button style={(styleObj as any).btn('var(--accent)')} onClick={salva} disabled={saving}>{saving ? '...' : 'Salva'}</button>
+                <button style={(styleObj as any).btn('var(--accent)')} onClick={() => salva()} disabled={saving}>{saving ? '...' : 'Salva'}</button>
               </div>
             </div>
           </div>
