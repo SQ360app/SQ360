@@ -21,18 +21,18 @@ const TIPI_ODA = [
 ]
 
 const STATI: Record<string, { label: string; color: string }> = {
-  EMESSO: { label: 'Emesso', color: 'bg-blue-50 text-blue-700' },
-  CONFERMATO: { label: 'Confermato', color: 'bg-indigo-50 text-indigo-700' },
-  PARZ_EVASO: { label: 'Parz. evaso', color: 'bg-yellow-50 text-yellow-700' },
-  EVASO: { label: 'Evaso', color: 'bg-green-50 text-green-700' },
-  ANNULLATO: { label: 'Annullato', color: 'bg-red-50 text-red-700' },
+  EMESSO:     { label: 'Emesso',      color: '#3b82f6' },
+  CONFERMATO: { label: 'Confermato',  color: '#6366f1' },
+  PARZ_EVASO: { label: 'Parz. evaso', color: '#f59e0b' },
+  EVASO:      { label: 'Evaso',       color: '#10b981' },
+  ANNULLATO:  { label: 'Annullato',   color: '#ef4444' },
 }
 
 const STATI_CONSEGNA: Record<string, { label: string; color: string; next?: string }> = {
-  in_attesa:   { label: '⏳ In attesa',   color: 'bg-gray-50 text-gray-500',    next: 'confermato' },
-  confermato:  { label: '✓ Confermato',  color: 'bg-blue-50 text-blue-700',    next: 'in_consegna' },
-  in_consegna: { label: '🚚 In consegna', color: 'bg-amber-50 text-amber-700',  next: 'consegnato' },
-  consegnato:  { label: '✅ Consegnato',  color: 'bg-green-50 text-green-700',  next: undefined },
+  in_attesa:   { label: '⏳ In attesa',   color: '#6b7280', next: 'confermato' },
+  confermato:  { label: '✓ Confermato',  color: '#3b82f6', next: 'in_consegna' },
+  in_consegna: { label: '🚚 In consegna', color: '#f59e0b', next: 'consegnato' },
+  consegnato:  { label: '✅ Consegnato',  color: '#10b981', next: undefined },
 }
 
 
@@ -163,7 +163,6 @@ export default function ODAPage() {
 
   async function handleSave() {
     if (!oggetto.trim() || importoNum <= 0 || !fornitoreId) { setErr('Compila tutti i campi obbligatori'); return }
-    // Validazione SAM: se c'è un rdo_id e la SAM era obbligatoria o tipo = subappalto, richiede dam_id
     const damObbligatorio = rdoId && (richiedeSam || tipo === 'subappalto')
     if (damObbligatorio && !damId) {
       setErr('⛔ SAM non approvata. Torna alla RDO e completa l\'approvazione materiali prima di emettere l\'ODA.')
@@ -287,21 +286,40 @@ export default function ODAPage() {
     setOdaStorico(prev => ({...prev, [odaId]: chain}))
   }
 
+  const styleObj = {
+    page: { minHeight:'100%', background:'var(--bg)', padding:16, display:'flex', flexDirection:'column' as const, gap:12 },
+    card: { background:'var(--panel)', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden', boxShadow:'var(--shadow-sm)' } as React.CSSProperties,
+    hdr:  { display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 16px', borderBottom:'1px solid var(--border)', background:'var(--bg)' },
+    hl:   { fontSize:12, fontWeight:700, color:'var(--t2)', textTransform:'uppercase' as const, letterSpacing:'0.04em' },
+    th:   { padding:'7px 10px', fontSize:10, fontWeight:700, color:'var(--t3)', textTransform:'uppercase' as const, background:'var(--bg)', borderBottom:'1px solid var(--border)', textAlign:'left' as const, whiteSpace:'nowrap' as const },
+    td:   { padding:'10px 10px', fontSize:12, color:'var(--t2)', borderBottom:'1px solid var(--border)' },
+    badge:(c:string) => ({ display:'inline-block', padding:'2px 8px', borderRadius:10, fontSize:10, fontWeight:700, background:c+'22', color:c, border:`1px solid ${c}44` }),
+    inp:  { width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid var(--border)', fontSize:12, outline:'none', background:'var(--panel)', color:'var(--t1)' },
+    row:  { display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 },
+    lbl:  { fontSize:11, fontWeight:600, color:'var(--t2)', marginBottom:4, display:'block' },
+    btn:  (c:string) => ({ padding:'8px 16px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:700, background:c, color:'#fff' }),
+  }
+
   return (
-    <div className="space-y-4" style={{ minHeight: '100%', background: 'var(--bg)', padding: 16 }}>
-      <div className="grid grid-cols-4 gap-3">
+    <div style={styleObj.page as React.CSSProperties} className="fade-in">
+
+      {/* KPI bar */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8 }}>
         {[
-          ['ODA emessi', String(odaVigente.filter((o: any) => o.stato !== 'ANNULLATO').length)],
-          ['Costi impegnati', '€ ' + fmt(totImpegnato)],
-          ['Ritenute accumulate', '€ ' + fmt(totRitenute)],
-          ['Da pagare netto', '€ ' + fmt(totImpegnato - totRitenute)],
-        ].map(([l, v], i) => (
-          <div key={i} className="bg-gray-50 border border-gray-100 rounded-lg p-3">
-            <p className="text-xs text-gray-500 mb-1">{l}</p>
-            <p className="text-base font-semibold text-gray-900">{v}</p>
+          ['ODA emessi',          String(odaVigente.filter((o: any) => o.stato !== 'ANNULLATO').length), 'ordini vigenti'],
+          ['Costi impegnati',     '€ ' + fmt(totImpegnato),             'totale netto'],
+          ['Ritenute accumulate', '€ ' + fmt(totRitenute),              'da svincolare'],
+          ['Da pagare netto',     '€ ' + fmt(totImpegnato - totRitenute), 'importo residuo'],
+        ].map(([l, v, sub]) => (
+          <div key={l as string} style={{ ...styleObj.card, padding:'12px 16px' }}>
+            <p style={{ fontSize:11, fontWeight:700, color:'var(--t3)', textTransform:'uppercase' as const }}>{l}</p>
+            <p style={{ fontSize:20, fontWeight:800, color:'var(--t1)', marginTop:4 }}>{v}</p>
+            <p style={{ fontSize:10, color:'var(--t4)', marginTop:2 }}>{sub}</p>
           </div>
         ))}
       </div>
+
+      {/* Alert WBS */}
       {(() => {
         const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
         const senza = odaVigente.filter((o: any) => !o.wbs_ref && o.created_at < sevenDaysAgo && o.stato !== 'ANNULLATO')
@@ -312,285 +330,357 @@ export default function ODAPage() {
           </div>
         )
       })()}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-gray-900">Ordini di Acquisto (ODA)</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Subappalto → contratto sub automatico · SAM → usa flusso RDO per approvazione DL</p>
+
+      {/* Lista */}
+      <div style={styleObj.card as React.CSSProperties}>
+        <div style={styleObj.hdr as React.CSSProperties}>
+          <div>
+            <span style={styleObj.hl as React.CSSProperties}>Ordini di Acquisto</span>
+            <p style={{ fontSize:11, color:'var(--t3)', margin:'2px 0 0' }}>Subappalto → contratto sub automatico · SAM → usa flusso RDO per approvazione DL</p>
+          </div>
+          <button className="btn-primary" style={{ fontSize:12, padding:'8px 14px', whiteSpace:'nowrap' as const }}
+            onClick={() => setModalOpen(true)}>
+            + Nuovo ODA
+          </button>
         </div>
-        <button onClick={() => setModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
-          <Plus className="w-4 h-4" /> Nuovo ODA
-        </button>
-      </div>
-      {loading
-        ? <div className="flex items-center justify-center h-32 gap-2 text-sm text-gray-400"><Loader2 className="w-4 h-4 animate-spin" /> Caricamento...</div>
-        : oda.length === 0
-        ? <div className="flex flex-col items-center justify-center h-40 text-gray-400"><FileText className="w-10 h-10 text-gray-200 mb-3" /><p className="text-sm">Nessun ordine emesso</p></div>
-        : <div className="space-y-2">
-            {odaVigente.map((o: any) => (
-              <div key={o.id} className="border border-gray-100 rounded-xl overflow-hidden">
-                <div className="flex items-center gap-3 p-3 cursor-pointer hover:bg-gray-50 select-none"
-                  onClick={() => setExpanded(expanded === o.id ? null : o.id)}>
-                  {expanded === o.id
-                    ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
-                    : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
-                  <span className="text-xs font-mono text-gray-400 w-28 shrink-0">{displayCodiceOda(o)}</span>
-                  {(() => { const td = TIPI_ODA.find(x => x.value === (o.tipo_oda || o.tipo)); return (
-                    <span style={{ flexShrink: 0, fontSize: 11, padding: '2px 8px', borderRadius: 4, fontWeight: 500, color: td?.color || '#374151', background: td?.bg || '#f3f4f6' }}>
-                      {td?.label || o.tipo_oda || o.tipo}
+
+        {loading ? (
+          <div style={{ padding:40, textAlign:'center' }}><span className="spinner" /></div>
+        ) : oda.length === 0 ? (
+          <div style={{ padding:40, textAlign:'center', color:'var(--t3)', fontSize:13 }}>Nessun ordine emesso</div>
+        ) : (
+          <div>
+            {odaVigente.map((o: any) => {
+              const td = TIPI_ODA.find(x => x.value === (o.tipo_oda || o.tipo))
+              const statoColor = STATI[o.stato]?.color || '#6b7280'
+              const consColor  = STATI_CONSEGNA[o.stato_consegna || 'in_attesa']?.color || '#6b7280'
+              return (
+                <div key={o.id} style={{ borderBottom:'1px solid var(--border)' }}>
+
+                  {/* Riga collassata */}
+                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 12px', cursor:'pointer', transition:'background .1s' }}
+                    onClick={() => setExpanded(expanded === o.id ? null : o.id)}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--accent-light)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                    {expanded === o.id
+                      ? <ChevronDown size={14} color="var(--t3)" style={{ flexShrink:0 }} />
+                      : <ChevronRight size={14} color="var(--t3)" style={{ flexShrink:0 }} />}
+                    <span style={{ fontFamily:'monospace', fontSize:11, color:'var(--accent)', width:128, flexShrink:0 }}>
+                      {displayCodiceOda(o)}
                     </span>
-                  ) })()}
-                  <span className="flex-1 text-sm text-gray-800 truncate">{o.oggetto}</span>
-                  <span className="text-xs text-gray-500 shrink-0">{o.fornitore?.ragione_sociale || '—'}</span>
-                  <span className="text-sm font-medium text-gray-900 w-32 text-right shrink-0">€ {fmt(o.importo_netto)}</span>
-                  <span className={`shrink-0 text-xs px-2 py-0.5 rounded font-medium ${STATI_CONSEGNA[o.stato_consegna || 'in_attesa']?.color || ''}`}>
-                    {STATI_CONSEGNA[o.stato_consegna || 'in_attesa']?.label}
-                  </span>
-                  <span className={`shrink-0 text-xs px-2 py-0.5 rounded font-medium ${STATI[o.stato]?.color || ''}`}>
-                    {STATI[o.stato]?.label}
-                  </span>
-                </div>
-                {expanded === o.id && (
-                  <div className="border-t border-gray-100 bg-gray-50/50 p-4 space-y-3">
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div><p className="text-xs text-gray-400 mb-0.5">Data</p><p>{o.data_emissione}</p></div>
-                      <div><p className="text-xs text-gray-400 mb-0.5">Consegna</p><p>{o.data_consegna_prevista || '—'}</p></div>
-                      <div><p className="text-xs text-gray-400 mb-0.5">Pagamento</p><p>{o.condizioni_pagamento || '—'}</p></div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div><p className="text-xs text-gray-400 mb-0.5">Totale + IVA</p><p>€ {fmt(o.importo_netto * (1 + o.iva_pct / 100))}</p></div>
-                      <div><p className="text-xs text-gray-400 mb-0.5">Ritenuta {o.ritenuta_pct}%</p><p className="text-purple-700">€ {fmt(o.ritenuta_importo || 0)}</p></div>
-                      <div><p className="text-xs text-gray-400 mb-0.5">Da pagare</p><p className="font-semibold">€ {fmt(o.importo_netto - (o.ritenuta_importo || 0))}</p></div>
-                    </div>
-                    <div className="flex gap-2 flex-wrap">
-                      {o.contratto_sub_id && <span className="text-xs px-2.5 py-1.5 bg-purple-50 text-purple-700 rounded-lg border border-purple-100">✓ Contratto sub generato</span>}
-                      {o.dam_id && <span className="text-xs px-2.5 py-1.5 bg-green-50 text-green-700 rounded-lg border border-green-100">✓ SAM generato</span>}
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs text-gray-500">Consegna →</span>
-                      {Object.entries(STATI_CONSEGNA).filter(([k]) => k !== (o.stato_consegna || 'in_attesa')).map(([k, v]) => (
-                        <button key={k} onClick={() => cambiaConsegna(o.id, k)}
-                          className={`text-xs px-2.5 py-1 rounded border font-medium ${v.color} border-current`}>
-                          {v.label}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs text-gray-500">Stato →</span>
-                      {['CONFERMATO', 'PARZ_EVASO', 'EVASO'].filter(s => s !== o.stato).map(s => (
-                        <button key={s} onClick={() => cambiaStato(o.id, s)}
-                          className="text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-100">
-                          {STATI[s]?.label}
-                        </button>
-                      ))}
-                      <button onClick={() => {
-                        if (!window.confirm(`Annullare l'ODA ${o.numero}? Operazione non reversibile.`)) return
-                        cambiaStato(o.id, 'ANNULLATO')
-                      }}
-                        className="text-xs px-2.5 py-1 rounded border border-red-100 text-red-500 hover:bg-red-50 ml-auto">
-                        Annulla
-                      </button>
-                      <button onClick={() => downloadPdf(o)} disabled={pdfLoading === o.id}
-                        className="text-xs px-2.5 py-1 rounded border border-blue-200 text-blue-600 hover:bg-blue-50 flex items-center gap-1 ml-2">
-                        {pdfLoading === o.id ? '⏳' : '🖨️'} PDF
-                      </button>
-                    </div>
-                    <VociRdaSection rdoId={o.rdo_id} supabase={supabase} />
-                    {o.wbs_ref && (
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <span className="font-medium">WBS:</span>
-                        <span className="font-mono bg-gray-100 px-2 py-0.5 rounded">{o.wbs_ref}</span>
-                      </div>
+                    {td && (
+                      <span style={{ flexShrink:0, fontSize:10, padding:'2px 8px', borderRadius:4, fontWeight:600, color:td.color, background:td.bg, border:`1px solid ${td.color}44` }}>
+                        {td.label}
+                      </span>
                     )}
-                    <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
-                      {o.stato !== 'ANNULLATO' && (
-                        <button onClick={() => setRevModal({doc: o, motivo: ''})}
-                          className="text-xs px-2.5 py-1 rounded border border-purple-200 text-purple-600 hover:bg-purple-50 flex items-center gap-1">
-                          📝 Revisiona
-                        </button>
-                      )}
-                      {o.doc_padre_id && (
-                        <button onClick={() => {
-                          const isOpen = !!storicoOpen[o.id]
-                          setStoricoOpen(prev => ({...prev, [o.id]: !isOpen}))
-                          if (!isOpen && !odaStorico[o.id]) loadStoricoOda(o.id, o.doc_padre_id)
-                        }}
-                          className="text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 flex items-center gap-1">
-                          📜 Storico
-                        </button>
-                      )}
-                    </div>
-                    {storicoOpen[o.id] && odaStorico[o.id] && (
-                      <div className="bg-purple-50 rounded-lg p-3 space-y-2">
-                        <p className="text-xs font-semibold text-purple-700 uppercase tracking-wider">Storico revisioni</p>
-                        {odaStorico[o.id].map((h: any) => (
-                          <div key={h.id} className="flex items-center gap-3 text-xs text-gray-600 py-1 border-b border-purple-100">
-                            <span className="font-mono text-purple-600 w-36">{displayCodiceOda(h)}</span>
-                            <span className={`px-2 py-0.5 rounded font-medium ${STATI[h.stato]?.color || ''}`}>{STATI[h.stato]?.label || h.stato}</span>
-                            {h.motivo_rev && <span className="italic text-gray-400">"{h.motivo_rev}"</span>}
-                            <span className="ml-auto text-gray-400">{h.revised_at ? new Date(h.revised_at).toLocaleDateString('it-IT') : '—'}</span>
+                    <span style={{ flex:1, fontSize:12, color:'var(--t1)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' as const }}>
+                      {o.oggetto}
+                    </span>
+                    <span style={{ fontSize:11, color:'var(--t3)', flexShrink:0, marginRight:4 }}>
+                      {o.fornitore?.ragione_sociale || '—'}
+                    </span>
+                    <span style={{ fontSize:12, fontWeight:600, color:'var(--t1)', width:110, textAlign:'right' as const, flexShrink:0 }}>
+                      € {fmt(o.importo_netto)}
+                    </span>
+                    <span style={styleObj.badge(consColor)}>
+                      {STATI_CONSEGNA[o.stato_consegna || 'in_attesa']?.label}
+                    </span>
+                    <span style={styleObj.badge(statoColor)}>
+                      {STATI[o.stato]?.label || o.stato}
+                    </span>
+                  </div>
+
+                  {/* Pannello espanso */}
+                  {expanded === o.id && (
+                    <div style={{ borderTop:'1px solid var(--border)', background:'var(--bg)', padding:'14px 16px' }}>
+
+                      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginBottom:12 }}>
+                        {[['Data', o.data_emissione], ['Consegna', o.data_consegna_prevista || '—'], ['Pagamento', o.condizioni_pagamento || '—']].map(([l, v]) => (
+                          <div key={l as string}>
+                            <p style={{ fontSize:10, color:'var(--t3)', fontWeight:700, textTransform:'uppercase' as const, margin:'0 0 2px' }}>{l}</p>
+                            <p style={{ fontSize:12, color:'var(--t1)', margin:0 }}>{v}</p>
                           </div>
                         ))}
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
+
+                      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginBottom:12 }}>
+                        <div>
+                          <p style={{ fontSize:10, color:'var(--t3)', fontWeight:700, textTransform:'uppercase' as const, margin:'0 0 2px' }}>Totale + IVA</p>
+                          <p style={{ fontSize:12, color:'var(--t1)', margin:0 }}>€ {fmt(o.importo_netto * (1 + o.iva_pct / 100))}</p>
+                        </div>
+                        <div>
+                          <p style={{ fontSize:10, color:'var(--t3)', fontWeight:700, textTransform:'uppercase' as const, margin:'0 0 2px' }}>Ritenuta {o.ritenuta_pct}%</p>
+                          <p style={{ fontSize:12, color:'#7c3aed', margin:0 }}>€ {fmt(o.ritenuta_importo || 0)}</p>
+                        </div>
+                        <div>
+                          <p style={{ fontSize:10, color:'var(--t3)', fontWeight:700, textTransform:'uppercase' as const, margin:'0 0 2px' }}>Da pagare</p>
+                          <p style={{ fontSize:12, fontWeight:700, color:'var(--t1)', margin:0 }}>€ {fmt(o.importo_netto - (o.ritenuta_importo || 0))}</p>
+                        </div>
+                      </div>
+
+                      {/* Badge contratto/SAM */}
+                      {(o.contratto_sub_id || o.dam_id) && (
+                        <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const, marginBottom:10 }}>
+                          {o.contratto_sub_id && <span style={styleObj.badge('#7c3aed')}>✓ Contratto sub generato</span>}
+                          {o.dam_id           && <span style={styleObj.badge('#10b981')}>✓ SAM generato</span>}
+                        </div>
+                      )}
+
+                      {/* Cambio stato consegna */}
+                      <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' as const, marginBottom:8 }}>
+                        <span style={{ fontSize:11, color:'var(--t3)' }}>Consegna →</span>
+                        {Object.entries(STATI_CONSEGNA).filter(([k]) => k !== (o.stato_consegna || 'in_attesa')).map(([k, v]) => (
+                          <button key={k} onClick={() => cambiaConsegna(o.id, k)}
+                            style={{ padding:'3px 10px', borderRadius:6, background:`${v.color}18`, color:v.color, border:`1px solid ${v.color}44`, cursor:'pointer', fontSize:10, fontWeight:600 }}>
+                            {v.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Cambio stato ODA */}
+                      <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' as const, marginBottom:8 }}>
+                        <span style={{ fontSize:11, color:'var(--t3)' }}>Stato →</span>
+                        {['CONFERMATO','PARZ_EVASO','EVASO'].filter(s => s !== o.stato).map(s => (
+                          <button key={s} onClick={() => cambiaStato(o.id, s)}
+                            style={{ padding:'3px 10px', borderRadius:6, border:'1px solid var(--border)', background:'var(--bg)', color:'var(--t2)', cursor:'pointer', fontSize:10, fontWeight:600 }}>
+                            {STATI[s]?.label}
+                          </button>
+                        ))}
+                        <button onClick={() => {
+                          if (!window.confirm(`Annullare l'ODA ${o.numero}? Operazione non reversibile.`)) return
+                          cambiaStato(o.id, 'ANNULLATO')
+                        }} style={{ padding:'3px 10px', borderRadius:6, border:'1px solid #fca5a5', background:'#fef2f2', color:'#dc2626', cursor:'pointer', fontSize:10, fontWeight:600, marginLeft:'auto' }}>
+                          Annulla
+                        </button>
+                        <button onClick={() => downloadPdf(o)} disabled={pdfLoading === o.id}
+                          style={{ padding:'3px 10px', borderRadius:6, border:'1px solid #bfdbfe', background:'#eff6ff', color:'#2563eb', cursor:'pointer', fontSize:10, fontWeight:600, display:'flex', alignItems:'center', gap:4 }}>
+                          {pdfLoading === o.id ? '⏳' : '🖨️'} PDF
+                        </button>
+                      </div>
+
+                      <VociRdaSection rdoId={o.rdo_id} supabase={supabase} />
+
+                      {o.wbs_ref && (
+                        <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, color:'var(--t3)', marginTop:8 }}>
+                          <span style={{ fontWeight:600 }}>WBS:</span>
+                          <span style={{ fontFamily:'monospace', background:'var(--panel)', border:'1px solid var(--border)', padding:'1px 8px', borderRadius:4 }}>{o.wbs_ref}</span>
+                        </div>
+                      )}
+
+                      {/* Revisioni */}
+                      <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:10, paddingTop:10, borderTop:'1px solid var(--border)' }}>
+                        {o.stato !== 'ANNULLATO' && (
+                          <button onClick={() => setRevModal({doc: o, motivo: ''})}
+                            style={{ ...(styleObj as any).btn('#6d28d9'), padding:'3px 10px', fontSize:10 }}>
+                            📝 Revisiona
+                          </button>
+                        )}
+                        {o.doc_padre_id && (
+                          <button onClick={() => {
+                            const isOpen = !!storicoOpen[o.id]
+                            setStoricoOpen(prev => ({...prev, [o.id]: !isOpen}))
+                            if (!isOpen && !odaStorico[o.id]) loadStoricoOda(o.id, o.doc_padre_id)
+                          }} style={{ ...(styleObj as any).btn('#6b7280'), padding:'3px 10px', fontSize:10 }}>
+                            📜 Storico
+                          </button>
+                        )}
+                      </div>
+
+                      {storicoOpen[o.id] && odaStorico[o.id] && (
+                        <div style={{ background:'#f5f3ff', borderRadius:8, padding:'10px 14px', marginTop:8 }}>
+                          <p style={{ fontSize:10, fontWeight:700, color:'#6d28d9', textTransform:'uppercase' as const, letterSpacing:'.04em', margin:'0 0 8px' }}>Storico revisioni</p>
+                          {odaStorico[o.id].map((h: any) => (
+                            <div key={h.id} style={{ display:'flex', gap:10, alignItems:'center', padding:'5px 0', borderBottom:'1px solid #ede9fe', fontSize:11 }}>
+                              <span style={{ fontFamily:'monospace', color:'#7c3aed', minWidth:140 }}>{displayCodiceOda(h)}</span>
+                              <span style={styleObj.badge(STATI[h.stato]?.color || '#6b7280')}>{STATI[h.stato]?.label || h.stato}</span>
+                              {h.motivo_rev && <span style={{ color:'var(--t3)', fontStyle:'italic' }}>"{h.motivo_rev}"</span>}
+                              <span style={{ color:'var(--t4)', marginLeft:'auto', fontSize:10 }}>{h.revised_at ? new Date(h.revised_at).toLocaleDateString('it-IT') : '—'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+
             {odaHasMore && (
-              <div style={{ textAlign: 'center', padding: '12px', borderTop: '1px solid #f3f4f6' }}>
+              <div style={{ textAlign:'center', padding:'12px', borderTop:'1px solid var(--border)' }}>
                 <button disabled={loading}
                   onClick={() => { const p = odaPagina + 1; setOdaPagina(p); load(p) }}
-                  style={{ padding: '7px 20px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff', color: '#6b7280', fontSize: 12, cursor: 'pointer' }}>
+                  style={{ padding:'7px 20px', borderRadius:8, border:'1px solid var(--border)', background:'var(--bg)', color:'var(--t2)', fontSize:12, cursor:'pointer' }}>
                   {loading ? 'Caricamento…' : 'Carica altri ODA'}
                 </button>
               </div>
             )}
           </div>
-      }
+        )}
+      </div>
+
+      {/* Modal form Nuovo ODA */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 space-y-4">
-            <h2 className="text-base font-semibold">Nuovo ODA</h2>
-            <div className="grid grid-cols-3 gap-2">
-              {TIPI_ODA.map(t => (
-                <button key={t.value} onClick={() => setTipo(t.value)}
-                  style={{ padding: '8px 4px', borderRadius: 8, border: tipo === t.value ? `2px solid ${t.color}` : '1px solid #e5e7eb', background: tipo === t.value ? t.bg : '#fff', color: tipo === t.value ? t.color : '#6b7280', fontSize: 11, cursor: 'pointer', fontWeight: tipo === t.value ? 600 : 400, textAlign: 'center' }}>
-                  {t.label}
-                </button>
-              ))}
+        <div className="modal-overlay" onClick={e => { if(e.target===e.currentTarget){ setModalOpen(false) } }}>
+          <div className="modal-box" style={{ maxWidth:540, width:'90%' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:20 }}>
+              <h3 style={{ fontSize:14, fontWeight:700, color:'var(--t1)' }}>Nuovo ODA</h3>
+              <button onClick={() => setModalOpen(false)} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'var(--t3)' }}>✕</button>
             </div>
-            {tipo === 'subappalto' && <p className="text-xs p-2 bg-yellow-50 text-yellow-700 rounded-lg">→ Genera contratto sub automatico (D.Lgs. 36/2023)</p>}
-            {damId && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
-                <span className="text-xs font-semibold text-green-700">✅ SAM approvata</span>
-                <span className="text-xs text-green-600 font-mono">{damId.slice(0,8)}…</span>
+            <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+
+              {/* Tipo ODA */}
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8 }}>
+                {TIPI_ODA.map(t => (
+                  <button key={t.value} onClick={() => setTipo(t.value)}
+                    style={{ padding:'8px 4px', borderRadius:8, border: tipo === t.value ? `2px solid ${t.color}` : '1px solid var(--border)', background: tipo === t.value ? t.bg : 'var(--panel)', color: tipo === t.value ? t.color : 'var(--t3)', fontSize:11, cursor:'pointer', fontWeight: tipo === t.value ? 700 : 400, textAlign:'center' as const }}>
+                    {t.label}
+                  </button>
+                ))}
               </div>
-            )}
-            {rdoId && richiedeSam && !damId && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
-                <span className="text-xs font-semibold text-red-600">⛔ SAM obbligatoria — approva prima dalla RDO</span>
-              </div>
-            )}
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Oggetto *</label>
-              <input value={oggetto} onChange={e => setOggetto(e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Fornitore *</label>
-              <select value={fornitoreId} onChange={e => setFornitoreId(e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2">
-                <option value="">Seleziona...</option>
-                {fornitori.map((f: any) => <option key={f.id} value={f.id}>{f.ragione_sociale}</option>)}
-              </select>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
+
+              {tipo === 'subappalto' && (
+                <div style={{ padding:'8px 12px', background:'#fef9c3', border:'1px solid #fde68a', borderRadius:8, fontSize:11, color:'#92400e' }}>
+                  → Genera contratto sub automatico (D.Lgs. 36/2023)
+                </div>
+              )}
+
+              {damId && (
+                <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:8 }}>
+                  <span style={{ fontSize:11, fontWeight:700, color:'#15803d' }}>✅ SAM approvata</span>
+                  <span style={{ fontSize:11, color:'#16a34a', fontFamily:'monospace' }}>{damId.slice(0,8)}…</span>
+                </div>
+              )}
+
+              {rdoId && richiedeSam && !damId && (
+                <div style={{ padding:'8px 12px', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:8, fontSize:11, color:'#dc2626', fontWeight:600 }}>
+                  ⛔ SAM obbligatoria — approva prima dalla RDO
+                </div>
+              )}
+
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Importo netto €</label>
-                <input type="number" step="0.01" value={importoNetto} onChange={e => setImportoNetto(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 text-right" />
+                <label style={styleObj.lbl as React.CSSProperties}>Oggetto *</label>
+                <input value={oggetto} onChange={e => setOggetto(e.target.value)}
+                  style={styleObj.inp as React.CSSProperties} />
               </div>
+
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">IVA %</label>
-                <select value={ivaPct} onChange={e => setIvaPct(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2">
-                  <option value="22">22%</option>
-                  <option value="10">10%</option>
-                  <option value="4">4%</option>
-                  <option value="0">0%</option>
+                <label style={styleObj.lbl as React.CSSProperties}>Fornitore *</label>
+                <select value={fornitoreId} onChange={e => setFornitoreId(e.target.value)}
+                  style={styleObj.inp as React.CSSProperties}>
+                  <option value="">Seleziona...</option>
+                  {fornitori.map((f: any) => <option key={f.id} value={f.id}>{f.ragione_sociale}</option>)}
                 </select>
               </div>
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Ritenuta %</label>
-                <input type="number" value={ritenuta} onChange={e => setRitenuta(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 text-right" />
+
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+                <div>
+                  <label style={styleObj.lbl as React.CSSProperties}>Importo netto €</label>
+                  <input type="number" step="0.01" value={importoNetto} onChange={e => setImportoNetto(e.target.value)}
+                    style={{ ...(styleObj as any).inp, textAlign:'right' }} />
+                </div>
+                <div>
+                  <label style={styleObj.lbl as React.CSSProperties}>IVA %</label>
+                  <select value={ivaPct} onChange={e => setIvaPct(e.target.value)}
+                    style={styleObj.inp as React.CSSProperties}>
+                    <option value="22">22%</option>
+                    <option value="10">10%</option>
+                    <option value="4">4%</option>
+                    <option value="0">0%</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={styleObj.lbl as React.CSSProperties}>Ritenuta %</label>
+                  <input type="number" value={ritenuta} onChange={e => setRitenuta(e.target.value)}
+                    style={{ ...(styleObj as any).inp, textAlign:'right' }} />
+                </div>
               </div>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
-              <div className="flex justify-between text-gray-600">
-                <span>Totale + IVA</span>
-                <span className="font-medium">€ {fmt(totale)}</span>
+
+              {/* Quadro importi */}
+              <div style={{ background:'var(--bg)', border:'1px solid var(--border)', borderRadius:8, padding:'10px 14px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'var(--t2)', marginBottom:4 }}>
+                  <span>Totale + IVA</span>
+                  <span style={{ fontWeight:600 }}>€ {fmt(totale)}</span>
+                </div>
+                {ritenutaImporto > 0 && (
+                  <>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:'#7c3aed', marginBottom:4 }}>
+                      <span>Ritenuta {ritenuta}%</span>
+                      <span>- € {fmt(ritenutaImporto)}</span>
+                    </div>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, fontWeight:700, color:'var(--t1)', borderTop:'1px solid var(--border)', paddingTop:6, marginTop:4 }}>
+                      <span>Da pagare</span>
+                      <span>€ {fmt(importoNum - ritenutaImporto)}</span>
+                    </div>
+                  </>
+                )}
               </div>
-              {ritenutaImporto > 0 && (
-                <>
-                  <div className="flex justify-between text-purple-600 text-xs">
-                    <span>Ritenuta {ritenuta}%</span>
-                    <span>- € {fmt(ritenutaImporto)}</span>
-                  </div>
-                  <div className="flex justify-between font-semibold border-t border-gray-200 pt-1 mt-1">
-                    <span>Da pagare</span>
-                    <span>€ {fmt(importoNum - ritenutaImporto)}</span>
-                  </div>
-                </>
+
+              <div style={styleObj.row as React.CSSProperties}>
+                <div>
+                  <label style={styleObj.lbl as React.CSSProperties}>Condizioni pagamento</label>
+                  <input value={condPag} onChange={e => setCondPag(e.target.value)} placeholder="30 gg. data fattura"
+                    style={styleObj.inp as React.CSSProperties} />
+                </div>
+                <div>
+                  <label style={styleObj.lbl as React.CSSProperties}>Consegna prevista</label>
+                  <input type="date" value={dataConsegna} onChange={e => setDataConsegna(e.target.value)}
+                    style={styleObj.inp as React.CSSProperties} />
+                </div>
+              </div>
+
+              {cigCommessa && (
+                <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'var(--bg)', border:'1px solid var(--border)', borderRadius:8 }}>
+                  <span style={{ fontSize:11, color:'var(--t3)' }}>CIG (L. 136/2010):</span>
+                  <span style={{ fontSize:11, fontFamily:'monospace', fontWeight:700, color:'var(--t1)', background:'var(--panel)', border:'1px solid var(--border)', padding:'1px 8px', borderRadius:4 }}>{cigCommessa}</span>
+                  <span style={{ fontSize:10, color:'var(--t4)', fontStyle:'italic' }}>propagato automaticamente</span>
+                </div>
               )}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Condizioni pagamento</label>
-                <input value={condPag} onChange={e => setCondPag(e.target.value)} placeholder="30 gg. data fattura"
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2" />
+                <label style={styleObj.lbl as React.CSSProperties}>WBS / Area di riferimento</label>
+                <select value={wbsRef} onChange={e => setWbsRef(e.target.value)}
+                  style={styleObj.inp as React.CSSProperties}>
+                  <option value="">— Nessuna WBS —</option>
+                  {wbsFlat.map(([code, label]) => <option key={code} value={code}>{code} — {label}</option>)}
+                </select>
               </div>
+
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Consegna prevista</label>
-                <input type="date" value={dataConsegna} onChange={e => setDataConsegna(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2" />
+                <label style={styleObj.lbl as React.CSSProperties}>Note</label>
+                <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
+                  style={{ ...(styleObj as any).inp, resize:'vertical' as const, minHeight:60 }} />
               </div>
-            </div>
-            {cigCommessa && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">
-                <span className="text-xs text-gray-500">CIG (L. 136/2010):</span>
-                <span className="text-xs font-mono font-semibold text-gray-700 bg-gray-200 px-2 py-0.5 rounded">
-                  {cigCommessa}
-                </span>
-                <span className="text-xs text-gray-400 italic">propagato automaticamente</span>
+
+              {err && <p style={{ fontSize:11, color:'#ef4444', margin:0 }}>{err}</p>}
+
+              <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:4 }}>
+                <button style={(styleObj as any).btn('#6b7280')} onClick={() => setModalOpen(false)}>Annulla</button>
+                <button style={(styleObj as any).btn('var(--accent)')} onClick={handleSave} disabled={saving}>
+                  {saving ? '...' : 'Crea ODA'}
+                </button>
               </div>
-            )}
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">WBS / Area di riferimento</label>
-              <select value={wbsRef} onChange={e => setWbsRef(e.target.value)}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2">
-                <option value="">— Nessuna WBS —</option>
-                {wbsFlat.map(([code, label]) => <option key={code} value={code}>{code} — {label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Note</label>
-              <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none" />
-            </div>
-            {err && <p className="text-xs text-red-600">{err}</p>}
-            <div className="flex gap-2">
-              <button onClick={() => setModalOpen(false)}
-                className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
-                Annulla
-              </button>
-              <button onClick={handleSave} disabled={saving}
-                className="flex-1 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
-                {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                Crea ODA
-              </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Modal revisione */}
       {revModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
-            <h2 className="text-base font-semibold">📝 Crea revisione ODA</h2>
-            <p className="text-sm text-gray-500">{displayCodiceOda(revModal.doc)} → <strong>REV.{(revModal.doc.revisione||0)+1}</strong></p>
+        <div className="modal-overlay" onClick={e => { if(e.target===e.currentTarget) setRevModal(null) }}>
+          <div className="modal-box" style={{ maxWidth:420, width:'90%' }}>
+            <h3 style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>📝 Crea revisione ODA</h3>
+            <p style={{ fontSize:12, color:'var(--t3)', marginBottom:14 }}>
+              {displayCodiceOda(revModal.doc)} → <strong>REV.{(revModal.doc.revisione||0)+1}</strong>
+            </p>
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">Motivo revisione (opzionale)</label>
+              <label style={styleObj.lbl as React.CSSProperties}>Motivo revisione (opzionale)</label>
               <textarea value={revModal.motivo} onChange={e => setRevModal({...revModal, motivo:e.target.value})}
                 rows={3} placeholder="es. Aggiornamento importo, cambio condizioni..."
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none" />
+                style={{ ...(styleObj as any).inp, resize:'vertical' as const, minHeight:70 }} />
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => setRevModal(null)}
-                className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
-                Annulla
-              </button>
-              <button onClick={() => creaRevisioneOda(revModal.doc, revModal.motivo)}
-                className="flex-1 px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:14 }}>
+              <button style={(styleObj as any).btn('#6b7280')} onClick={() => setRevModal(null)}>Annulla</button>
+              <button style={(styleObj as any).btn('#6d28d9')} onClick={() => creaRevisioneOda(revModal.doc, revModal.motivo)}>
                 Crea revisione →
               </button>
             </div>
