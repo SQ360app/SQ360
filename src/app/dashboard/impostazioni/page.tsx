@@ -17,18 +17,13 @@ interface Utente {
   email: string
   ruolo: Ruolo
   commesse_assegnate: string[]
-  attivo: boolean
+  attivo?: boolean
   ultimo_accesso: string
+  moduli_abilitati?: Record<string, boolean>
+  solo_lettura_moduli?: Record<string, boolean>
 }
 
-// ─── Dati campione ────────────────────────────────────────────────────────────
-const UTENTI_INIT: Utente[] = [
-  { id:'u1', nome:'Marco', cognome:'Bianchi', email:'m.bianchi@sq360.it', ruolo:'admin', commesse_assegnate:[], attivo:true, ultimo_accesso:'2024-06-01' },
-  { id:'u2', nome:'Laura', cognome:'Verdi', email:'l.verdi@sq360.it', ruolo:'direttore_tecnico', commesse_assegnate:['C-2024-007','C-2024-003'], attivo:true, ultimo_accesso:'2024-05-30' },
-  { id:'u3', nome:'Giovanni', cognome:'Rossi', email:'g.rossi@sq360.it', ruolo:'responsabile_commessa', commesse_assegnate:['C-2024-007'], attivo:true, ultimo_accesso:'2024-06-01' },
-  { id:'u4', nome:'Anna', cognome:'Ferrari', email:'a.ferrari@sq360.it', ruolo:'contabilita', commesse_assegnate:[], attivo:true, ultimo_accesso:'2024-05-28' },
-  { id:'u5', nome:'Stefano', cognome:'Marino', email:'s.marino@sq360.it', ruolo:'operatore', commesse_assegnate:['C-2024-007'], attivo:false, ultimo_accesso:'2024-04-15' },
-]
+const UTENTI_INIT: Utente[] = []
 
 const RUOLO_META: Record<Ruolo, { label: string; color: string; descrizione: string; permessi: string[] }> = {
   admin: {
@@ -62,6 +57,35 @@ const RUOLO_META: Record<Ruolo, { label: string; color: string; descrizione: str
     permessi: ['Lettura commesse assegnate', 'Dashboard (lettura)']
   }
 }
+
+const MODULI_LISTA = [
+  { key: 'gare',          label: 'Analisi Gare',   gruppo: 'Generale' },
+  { key: 'contatti',      label: 'Contatti',        gruppo: 'Generale' },
+  { key: 'scadenzario',   label: 'Scadenzario',     gruppo: 'Generale' },
+  { key: 'documenti',     label: 'Documenti',       gruppo: 'Generale' },
+  { key: 'comunicazioni', label: 'Comunicazioni',   gruppo: 'Generale' },
+  { key: 'computo',       label: 'Computo',         gruppo: 'Contratto' },
+  { key: 'elenco_prezzi', label: 'Elenco Prezzi',  gruppo: 'Contratto' },
+  { key: 'varianti',      label: 'Varianti',        gruppo: 'Contratto' },
+  { key: 'rda',           label: 'RDA',             gruppo: 'Acquisti' },
+  { key: 'rdo',           label: 'RDO',             gruppo: 'Acquisti' },
+  { key: 'sam',           label: 'SAM',             gruppo: 'Acquisti' },
+  { key: 'oda',           label: 'ODA',             gruppo: 'Acquisti' },
+  { key: 'contratti',     label: 'Contratti Sub',   gruppo: 'Acquisti' },
+  { key: 'cantiere',      label: 'Cantiere',        gruppo: 'Cantiere' },
+  { key: 'sicurezza',     label: 'Sicurezza',       gruppo: 'Cantiere' },
+  { key: 'sal_attivi',    label: 'SAL Attivi',      gruppo: 'Economico' },
+  { key: 'sal_passivi',   label: 'SAL Passivi',     gruppo: 'Economico' },
+  { key: 'economico',     label: 'Conto Economico', gruppo: 'Economico' },
+  { key: 'impostazioni',  label: 'Impostazioni',    gruppo: 'Admin' },
+]
+
+const TEMPLATE_PERMESSI = [
+  { nome: 'Admin',             moduli: Object.fromEntries(MODULI_LISTA.map(m => [m.key, true])) },
+  { nome: 'Operatore cantiere', moduli: Object.fromEntries(MODULI_LISTA.map(m => [m.key, ['cantiere','sicurezza','documenti','comunicazioni'].includes(m.key)])) },
+  { nome: 'Contabilità',        moduli: Object.fromEntries(MODULI_LISTA.map(m => [m.key, ['sal_attivi','sal_passivi','economico','scadenzario','comunicazioni'].includes(m.key)])) },
+  { nome: 'Acquisti',           moduli: Object.fromEntries(MODULI_LISTA.map(m => [m.key, ['rda','rdo','sam','oda','contratti','documenti','comunicazioni'].includes(m.key)])) },
+]
 
 interface AziendaInfo {
   ragione_sociale: string
@@ -143,6 +167,15 @@ export default function ImpostazioniPage() {
   const [wbsTemplateEdited, setWbsTemplateEdited] = useState(false)
   const [wbsTemplateSaving, setWbsTemplateSaving] = useState(false)
 
+  const [permessiModal, setPermessiModal]     = useState<Utente | null>(null)
+  const [permessiEdit, setPermessiEdit]       = useState<Record<string, boolean>>({})
+  const [salvandoPermessi, setSalvandoPermessi] = useState(false)
+  const [inviteModal, setInviteModal]         = useState(false)
+  const [inviteEmail, setInviteEmail]         = useState('')
+  const [inviteRuolo, setInviteRuolo]         = useState<Ruolo>('operatore')
+  const [inviteTemplate, setInviteTemplate]   = useState('')
+  const [inviteSending, setInviteSending]     = useState(false)
+
   useEffect(() => {
     getAziendaId().then(async id => {
       if (!id) return
@@ -192,6 +225,14 @@ export default function ImpostazioniPage() {
       const { data: sediData } = await (supabase as any)
         .from('azienda_sedi').select('*').eq('azienda_id', id).order('created_at', { ascending: true })
       if (sediData) setSedi(sediData)
+
+      const { data: utentiData } = await (supabase as any)
+        .from('utenti').select('*').eq('azienda_id', id).order('created_at', { ascending: true })
+      if (utentiData) setUtenti(utentiData.map((u: any) => ({
+        ...u,
+        commesse_assegnate: [],
+        ultimo_accesso: u.created_at ? u.created_at.split('T')[0] : '—',
+      })))
     })
   }, [])
 
@@ -282,8 +323,46 @@ export default function ImpostazioniPage() {
     setTimeout(() => setEmailSaved(false), 3000)
   }
 
-  function toggleAttivo(uid: string) {
-    setUtenti(prev => prev.map(u => u.id === uid ? { ...u, attivo: !u.attivo } : u))
+  async function toggleAttivo(uid: string) {
+    const u = utenti.find(x => x.id === uid)
+    if (!u) return
+    const newVal = !(u.attivo !== false)
+    setUtenti(prev => prev.map(x => x.id === uid ? { ...x, attivo: newVal } : x))
+    ;(supabase as any).from('utenti').update({ attivo: newVal }).eq('id', uid).then(() => {})
+  }
+
+  async function salvaPermessi() {
+    if (!permessiModal) return
+    setSalvandoPermessi(true)
+    await (supabase as any).from('utenti').update({ moduli_abilitati: permessiEdit }).eq('id', permessiModal.id)
+    setUtenti(prev => prev.map(u => u.id === permessiModal.id ? { ...u, moduli_abilitati: permessiEdit } : u))
+    setPermessiModal(null)
+    setSalvandoPermessi(false)
+  }
+
+  async function invitaUtente() {
+    if (!inviteEmail || !aziendaId) return
+    setInviteSending(true)
+    const template = TEMPLATE_PERMESSI.find(t => t.nome === inviteTemplate)
+    const moduliInvite = template
+      ? template.moduli
+      : Object.fromEntries(MODULI_LISTA.map(m => [m.key, true]))
+    try {
+      const res = await fetch('/api/invite-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: inviteEmail, ruolo: inviteRuolo, moduli_abilitati: moduliInvite, azienda_id: aziendaId }),
+      })
+      if (!res.ok) { const e = await res.json(); alert(e.error || 'Errore durante l\'invito'); }
+      else {
+        setInviteModal(false)
+        setInviteEmail('')
+        setInviteTemplate('')
+        const { data } = await (supabase as any).from('utenti').select('*').eq('azienda_id', aziendaId).order('created_at', { ascending: true })
+        if (data) setUtenti(data.map((u: any) => ({ ...u, commesse_assegnate: [], ultimo_accesso: u.created_at?.split('T')[0] || '—' })))
+      }
+    } catch { alert('Errore di rete') }
+    setInviteSending(false)
   }
 
   async function saveSede() {
@@ -975,9 +1054,12 @@ export default function ImpostazioniPage() {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
               <div style={{ fontSize: 13, color: 'var(--t3)' }}>
-                {utenti.filter(u => u.attivo).length} utenti attivi su {utenti.length} totali
+                {utenti.filter(u => u.attivo !== false).length} utenti attivi su {utenti.length} totali
               </div>
-              <button style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--accent)', border: 'none', borderRadius: 8, padding: '9px 16px', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              <button
+                onClick={() => { setInviteModal(true); setInviteEmail(''); setInviteRuolo('operatore'); setInviteTemplate('') }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--accent)', border: 'none', borderRadius: 8, padding: '9px 16px', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+              >
                 <Plus size={14} /> Invita utente
               </button>
             </div>
@@ -985,24 +1067,24 @@ export default function ImpostazioniPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>
-                    {['Utente', 'Email', 'Ruolo', 'Commesse', 'Ultimo accesso', 'Stato', ''].map(h => (
+                    {['Utente', 'Email', 'Ruolo', 'Moduli', 'Stato', ''].map(h => (
                       <th key={h} style={{ padding: '10px 12px', fontSize: 10, fontWeight: 600, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {utenti.map(u => {
-                    const rm = RUOLO_META[u.ruolo]
+                    const rm = RUOLO_META[u.ruolo] || RUOLO_META['operatore']
+                    const attivo = u.attivo !== false
+                    const modCount = u.moduli_abilitati ? Object.values(u.moduli_abilitati).filter(Boolean).length : null
                     return (
-                      <tr key={u.id} style={{ borderBottom: '1px solid var(--border)', opacity: u.attivo ? 1 : 0.5 }}>
+                      <tr key={u.id} style={{ borderBottom: '1px solid var(--border)', opacity: attivo ? 1 : 0.5 }}>
                         <td style={{ padding: '10px 12px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <div style={{ width: 34, height: 34, borderRadius: '50%', background: `${rm.color}20`, border: `1px solid ${rm.color}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: rm.color }}>
-                              {u.nome[0]}{u.cognome[0]}
+                              {(u.nome?.[0] || '?')}{(u.cognome?.[0] || '')}
                             </div>
-                            <div>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--t1)' }}>{u.nome} {u.cognome}</div>
-                            </div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--t1)' }}>{u.nome} {u.cognome}</div>
                           </div>
                         </td>
                         <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--t3)' }}>{u.email}</td>
@@ -1010,26 +1092,38 @@ export default function ImpostazioniPage() {
                           <span style={{ fontSize: 11, background: `${rm.color}15`, color: rm.color, border: `1px solid ${rm.color}40`, borderRadius: 6, padding: '3px 9px', fontWeight: 600 }}>{rm.label}</span>
                         </td>
                         <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--t3)' }}>
-                          {u.commesse_assegnate.length === 0 ? 'Tutte' : u.commesse_assegnate.join(', ')}
+                          {modCount !== null ? `${modCount}/${MODULI_LISTA.length}` : 'Tutti'}
                         </td>
-                        <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--t3)', fontFamily: 'var(--font-mono)' }}>{u.ultimo_accesso}</td>
                         <td style={{ padding: '10px 12px' }}>
                           <button
                             onClick={() => toggleAttivo(u.id)}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, background: u.attivo ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)', color: u.attivo ? '#10b981' : '#ef4444' }}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, background: attivo ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)', color: attivo ? '#10b981' : '#ef4444' }}
                           >
                             <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
-                            {u.attivo ? 'Attivo' : 'Disabilitato'}
+                            {attivo ? 'Attivo' : 'Disabilitato'}
                           </button>
                         </td>
                         <td style={{ padding: '10px 12px' }}>
-                          <button style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 8px', cursor: 'pointer', color: 'var(--t3)' }}>
-                            <Edit2 size={12} />
+                          <button
+                            onClick={() => {
+                              setPermessiModal(u)
+                              setPermessiEdit(u.moduli_abilitati || Object.fromEntries(MODULI_LISTA.map(m => [m.key, true])))
+                            }}
+                            style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 10px', cursor: 'pointer', color: 'var(--t2)', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
+                          >
+                            <Edit2 size={11} /> Permessi
                           </button>
                         </td>
                       </tr>
                     )
                   })}
+                  {utenti.length === 0 && (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '32px', textAlign: 'center', fontSize: 13, color: 'var(--t3)' }}>
+                        Nessun utente — invita il primo collaboratore
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1096,6 +1190,128 @@ export default function ImpostazioniPage() {
           </div>
         )}
       </div>
+
+      {/* ── MODAL PERMESSI ── */}
+      {permessiModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--panel)', borderRadius: 16, padding: '28px 32px', width: 560, maxHeight: '80vh', overflowY: 'auto', border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--t1)', margin: 0 }}>
+                Permessi — {permessiModal.nome} {permessiModal.cognome}
+              </h2>
+              <button onClick={() => setPermessiModal(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--t3)', lineHeight: 1 }}>×</button>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Template rapidi</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {TEMPLATE_PERMESSI.map(t => (
+                  <button
+                    key={t.nome}
+                    onClick={() => setPermessiEdit(Object.fromEntries(MODULI_LISTA.map(m => [m.key, !!(t.moduli as Record<string,boolean>)[m.key]])))}
+                    style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 14px', fontSize: 12, cursor: 'pointer', color: 'var(--t2)' }}
+                  >
+                    {t.nome}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {(['Generale','Contratto','Acquisti','Cantiere','Economico','Admin'] as const).map(gruppo => {
+              const items = MODULI_LISTA.filter(m => m.gruppo === gruppo)
+              return (
+                <div key={gruppo} style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>{gruppo}</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+                    {items.map(m => {
+                      const enabled = permessiEdit[m.key] !== false
+                      return (
+                        <label key={m.key} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '7px 10px', borderRadius: 8, background: enabled ? 'rgba(79,142,247,0.1)' : 'var(--bg)', border: `1px solid ${enabled ? '#4f8ef7' : 'var(--border)'}` }}>
+                          <input
+                            type="checkbox"
+                            checked={enabled}
+                            onChange={e => setPermessiEdit(prev => ({ ...prev, [m.key]: e.target.checked }))}
+                            style={{ width: 14, height: 14, accentColor: '#4f8ef7', flexShrink: 0 }}
+                          />
+                          <span style={{ fontSize: 12, color: enabled ? 'var(--t1)' : 'var(--t3)' }}>{m.label}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
+              <button onClick={() => setPermessiModal(null)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 18px', fontSize: 13, cursor: 'pointer', color: 'var(--t2)' }}>Annulla</button>
+              <button
+                onClick={salvaPermessi}
+                disabled={salvandoPermessi}
+                style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 600, color: 'white', cursor: salvandoPermessi ? 'not-allowed' : 'pointer', opacity: salvandoPermessi ? 0.7 : 1 }}
+              >
+                {salvandoPermessi ? '⏳ Salvo…' : '💾 Salva permessi'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL INVITA UTENTE ── */}
+      {inviteModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--panel)', borderRadius: 16, padding: '28px 32px', width: 420, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--t1)', margin: 0 }}>Invita utente</h2>
+              <button onClick={() => setInviteModal(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--t3)', lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={{ fontSize: 12, color: 'var(--t3)', display: 'block', marginBottom: 6 }}>Email *</label>
+                <input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={e => setInviteEmail(e.target.value)}
+                  placeholder="collaboratore@azienda.it"
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--t1)', fontSize: 13, boxSizing: 'border-box' }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: 'var(--t3)', display: 'block', marginBottom: 6 }}>Ruolo</label>
+                <select
+                  value={inviteRuolo}
+                  onChange={e => setInviteRuolo(e.target.value as Ruolo)}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--t1)', fontSize: 13 }}
+                >
+                  {(Object.entries(RUOLO_META) as [Ruolo, typeof RUOLO_META[Ruolo]][]).map(([ruolo, meta]) => (
+                    <option key={ruolo} value={ruolo}>{meta.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: 'var(--t3)', display: 'block', marginBottom: 6 }}>Template permessi</label>
+                <select
+                  value={inviteTemplate}
+                  onChange={e => setInviteTemplate(e.target.value)}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--t1)', fontSize: 13 }}
+                >
+                  <option value="">— Tutti i moduli attivi —</option>
+                  {TEMPLATE_PERMESSI.map(t => <option key={t.nome} value={t.nome}>{t.nome}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
+              <button onClick={() => setInviteModal(false)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 18px', fontSize: 13, cursor: 'pointer', color: 'var(--t2)' }}>Annulla</button>
+              <button
+                onClick={invitaUtente}
+                disabled={inviteSending || !inviteEmail}
+                style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 600, color: 'white', cursor: (inviteSending || !inviteEmail) ? 'not-allowed' : 'pointer', opacity: (inviteSending || !inviteEmail) ? 0.6 : 1 }}
+              >
+                {inviteSending ? '⏳ Invio…' : '✉️ Invita'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

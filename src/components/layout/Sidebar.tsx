@@ -3,33 +3,43 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { supabase, getCurrentUserModuli } from '@/lib/supabase'
 import {
   LayoutDashboard, Search, FolderOpen, Users,
   Calendar, Settings, CreditCard, Building2, LogOut, Map
 } from 'lucide-react'
 
 const NAV = [
-  { href: '/dashboard',                 icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/dashboard/mappa',           icon: Map,             label: 'Mappa cantieri' },
-  { href: '/dashboard/gare',            icon: Search,          label: 'Analisi Gare' },
-  { href: '/dashboard/commesse',        icon: FolderOpen,      label: 'Commesse' },
-  { href: '/dashboard/fornitori',       icon: Users,           label: 'Contatti' },
-  { href: '/dashboard/scadenzario',     icon: Calendar,        label: 'Scadenzario' },
-  { href: '/dashboard/amministrazione', icon: CreditCard,      label: 'Amministrazione' },
-  { href: '/dashboard/impostazioni',    icon: Settings,        label: 'Impostazioni' },
+  { href: '/dashboard',                 icon: LayoutDashboard, label: 'Dashboard',        modulo: null as null | string },
+  { href: '/dashboard/mappa',           icon: Map,             label: 'Mappa cantieri',   modulo: null },
+  { href: '/dashboard/gare',            icon: Search,          label: 'Analisi Gare',     modulo: 'gare' },
+  { href: '/dashboard/commesse',        icon: FolderOpen,      label: 'Commesse',         modulo: '_commesse' },
+  { href: '/dashboard/fornitori',       icon: Users,           label: 'Contatti',         modulo: 'contatti' },
+  { href: '/dashboard/scadenzario',     icon: Calendar,        label: 'Scadenzario',      modulo: 'scadenzario' },
+  { href: '/dashboard/amministrazione', icon: CreditCard,      label: 'Amministrazione',  modulo: 'economico' },
+  { href: '/dashboard/impostazioni',    icon: Settings,        label: 'Impostazioni',     modulo: 'impostazioni' },
 ]
+
+const SUB_COMMESSE = ['computo','sal_attivi','sal_passivi','rda','rdo','sam','oda','contratti','cantiere','sicurezza','varianti','documenti','comunicazioni']
 
 export function Sidebar() {
   const path = usePathname()
   const router = useRouter()
   const [email, setEmail] = useState('')
+  const [moduli, setModuli] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setEmail(session?.user?.email || '')
     })
+    getCurrentUserModuli().then(({ moduli: m }) => setModuli(m))
   }, [])
+
+  function isVisible(modulo: string | null): boolean {
+    if (modulo === null) return true
+    if (modulo === '_commesse') return SUB_COMMESSE.some(k => moduli[k] !== false)
+    return moduli[modulo] !== false
+  }
 
   async function logout() {
     await supabase.auth.signOut()
@@ -69,7 +79,7 @@ export function Sidebar() {
         flex: 1, height: '100%',
         overflowX: 'auto', scrollbarWidth: 'none',
       }}>
-        {NAV.map(({ href, icon: Icon, label }) => {
+        {NAV.filter(item => isVisible(item.modulo)).map(({ href, icon: Icon, label }) => {
           const active = path === href || (href !== '/dashboard' && path.startsWith(href))
           return (
             <Link key={href} href={href} style={{ textDecoration: 'none', height: '100%', flexShrink: 0 }}>
