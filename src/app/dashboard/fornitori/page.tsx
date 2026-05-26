@@ -697,7 +697,9 @@ export default function ContattiPage() {
       if (detail?.id === form.id) setDetail({ ...detail, ...form } as Contatto)
     } else {
       const azId = await getAziendaId()
-      await (supabase as any).from('professionisti_fornitori').insert({ ...form, azienda_id: azId, attivo: true })
+      const payload = { ...form, azienda_id: azId, attivo: true }
+      console.log('[INSERT contatto]', JSON.stringify(payload, null, 2))
+      await (supabase as any).from('professionisti_fornitori').insert(payload)
       showToast('Contatto aggiunto')
     }
     setShowForm(false)
