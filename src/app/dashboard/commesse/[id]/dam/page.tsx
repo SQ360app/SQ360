@@ -195,7 +195,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
       }
       if (editDam.id) {
         await supabase.from('dam').update(payload).eq('id', editDam.id)
-        showToast('DAM aggiornata')
+        showToast('SAM aggiornata')
       } else {
         const anno = new Date().getFullYear().toString().slice(2)
         const { data: damCodici } = await supabase.from('dam').select('codice').eq('commessa_id', id).like('codice', `DAM-${anno}-%`)
@@ -203,7 +203,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
         damCodici?.forEach((r: any) => { const n = parseInt(r.codice?.split('-')?.[2] || '0'); if (!isNaN(n) && n > maxNum) maxNum = n })
         const codice = `DAM-${anno}-${String(maxNum + 1).padStart(3, '0')}`
         await supabase.from('dam').insert({ ...payload, codice })
-        showToast('DAM creata')
+        showToast('SAM creata')
       }
       setForm(false); setEditDam(null); carica()
     } finally { setSaving(false) }
@@ -237,7 +237,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
 
   const cambiaStato = async (dam: DAM, stato: string) => {
     await supabase.from('dam').update({ stato }).eq('id', dam.id)
-    showToast(`DAM ${dam.codice} → ${STATO_LBL[stato]}`); carica()
+    showToast(`SAM ${dam.codice} → ${STATO_LBL[stato]}`); carica()
   }
 
   const displayCodice = (d: DAM) => d.revisione ? `${d.codice} REV.${d.revisione}` : d.codice
@@ -315,7 +315,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cerca materiale..." style={{ ...(styleObj as any).inp, width:200 }} />
             <button className="btn-primary" style={{ fontSize:12, padding:'8px 14px', whiteSpace:'nowrap' as const }}
               onClick={() => { setEditDam({ stato:'bozza', revisione:0, quantita:1, um:'nr' }); setFSearch(''); setForm(true) }}>
-              + Nuova DAM
+              + Nuova SAM
             </button>
           </div>
         </div>
@@ -323,7 +323,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
         {loading ? (
           <div style={{ padding:40, textAlign:'center' }}><span className="spinner" /></div>
         ) : damFiltrate.length === 0 ? (
-          <div style={{ padding:40, textAlign:'center', color:'var(--t3)', fontSize:13 }}>Nessuna DAM trovata</div>
+          <div style={{ padding:40, textAlign:'center', color:'var(--t3)', fontSize:13 }}>Nessuna SAM trovata</div>
         ) : (
           <div style={{ overflowX:'auto' }}>
             <table style={{ width:'100%', borderCollapse:'collapse' }}>
@@ -459,7 +459,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
         <div className="modal-overlay" onClick={e=>{ if(e.target===e.currentTarget){setForm(false);setEditDam(null)} }}>
           <div className="modal-box" style={{ maxWidth:700, width:'94%', maxHeight:'90vh', overflowY:'auto' as const }}>
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:16, position:'sticky' as const, top:0, background:'var(--panel)', zIndex:1, paddingBottom:12, borderBottom:'1px solid var(--border)' }}>
-              <h3 style={{ fontSize:14, fontWeight:700 }}>DAM — {editDam.id ? `Modifica ${editDam.codice}` : 'Nuova Scheda'}</h3>
+              <h3 style={{ fontSize:14, fontWeight:700 }}>SAM — {editDam.id ? `Modifica ${editDam.codice}` : 'Nuova Scheda'}</h3>
               <button onClick={()=>{setForm(false);setEditDam(null)}} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'var(--t3)' }}>✕</button>
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
@@ -634,7 +634,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
 
               <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8, position:'sticky' as const, bottom:0, background:'var(--panel)', paddingTop:12, borderTop:'1px solid var(--border)' }}>
                 <button style={(styleObj as any).btn('#6b7280')} onClick={()=>{setForm(false);setEditDam(null)}}>Annulla</button>
-                <button style={(styleObj as any).btn('var(--accent)')} onClick={salva} disabled={saving}>{saving ? '...' : 'Salva DAM'}</button>
+                <button style={(styleObj as any).btn('var(--accent)')} onClick={salva} disabled={saving}>{saving ? '...' : 'Salva SAM'}</button>
                 {editDam?.stato === 'approvata' && editDam?.id && (() => {
                   const ta = rdoTipoAffidamento || ''
                   const isSubappalto = ['subappalto','fornitura_posa','subaffidamento'].includes(ta)

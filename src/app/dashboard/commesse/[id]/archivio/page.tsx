@@ -245,7 +245,7 @@ export default function ArchivioPage() {
       // 02_Acquisti — riepilogo
       root.folder('02_Acquisti')!.file('riepilogo.txt', [
         `ACQUISTI — ${commessa?.codice}`, '='.repeat(40),
-        `ODA: ${counts.oda}`, `DAM: ${counts.dam}`, `RDA: ${counts.rda}`, `RDO: ${counts.rdo}`,
+        `ODA: ${counts.oda}`, `SAM: ${counts.dam}`, `RDA: ${counts.rda}`, `RDO: ${counts.rdo}`,
       ].join('\n'))
 
       // 03_Cantiere — riepilogo

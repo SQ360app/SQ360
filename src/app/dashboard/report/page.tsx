@@ -30,7 +30,7 @@ const REPORT_DISPONIBILI: TipoReport[] = [
 const MODULO_COLORS: Record<string, string> = {
   'Commesse': '#3b82f6', 'M5C': '#10b981', 'SAL': '#f59e0b',
   'Fornitori': '#8b5cf6', 'Cantiere': '#6b7280', 'Amministrazione': '#ef4444',
-  'DAM': '#0ea5e9', 'Contratti': '#ec4899', 'M2': '#14b8a6', 'M3': '#f97316'
+  'SAM': '#0ea5e9', 'Contratti': '#ec4899', 'M2': '#14b8a6', 'M3': '#f97316'
 }
 
 interface GenerazioneLog {

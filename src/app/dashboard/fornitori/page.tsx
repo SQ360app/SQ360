@@ -42,6 +42,7 @@ const ISO_LIST = ['ISO 9001','ISO 14001','ISO 45001','SA 8000']
 const SOA_CAT  = ['OG1','OG2','OG3','OG4','OG6','OG8','OG11','OS3','OS6','OS12','OS18','OS19','OS21','OS28','OS30']
 const SOA_CLS  = ['I','II','III','IV','V','VI','VII','VIII']
 const TIPI_STANDARD = new Set(['professionista','fornitore','subappaltatore','committente','ente_pubblico','nolo','altro'])
+const TIPI_TAB = ['professionista','fornitore','subappaltatore','committente','ente_pubblico']
 
 const FILTER_TABS = [
   { v: 'tutti',          l: 'Tutti' },
@@ -702,8 +703,8 @@ export default function ContattiPage() {
       await (supabase as any).from('professionisti_fornitori').insert(payload)
       showToast('Contatto aggiunto')
     }
+    await carica()
     setShowForm(false)
-    carica()
   }
 
   const confermaElimina = async () => {
@@ -719,7 +720,7 @@ export default function ContattiPage() {
     setConfirmDel(null)
   }
 
-  const isAltro = (c: Contatto) => !c.tipo || !TIPI_STANDARD.has(c.tipo) || c.tipo === 'altro'
+  const isAltro = (c: Contatto) => !c.tipo || c.tipo === 'altro' || !TIPI_TAB.includes(c.tipo)
 
   const filtrati = lista.filter(c => {
     if (filtroTipo === 'altro' && !isAltro(c)) return false

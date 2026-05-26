@@ -54,7 +54,7 @@ const RUOLO_META: Record<Ruolo, { label: string; color: string; descrizione: str
   operatore: {
     label: 'Operatore', color: '#10b981',
     descrizione: 'Inserimento dati operativi di cantiere',
-    permessi: ['Giornale lavori', 'Registro accessi', 'DAM (inserimento)']
+    permessi: ['Giornale lavori', 'Registro accessi', 'SAM (inserimento)']
   },
   viewer: {
     label: 'Viewer', color: '#6b7280',
@@ -136,6 +136,8 @@ export default function ImpostazioniPage() {
   const [sedi,         setSedi]         = useState<Sede[]>([])
   const [nuovaSede,    setNuovaSede]    = useState<Partial<Sede> | null>(null)
   const [salvandoSede, setSalvandoSede] = useState(false)
+
+  const [editingAzienda, setEditingAzienda] = useState(false)
 
   const [wbsTemplate, setWbsTemplate] = useState<WbsNode[]>(() => wbsFlatToNodes(DEFAULT_WBS_FLAT))
   const [wbsTemplateEdited, setWbsTemplateEdited] = useState(false)
@@ -265,6 +267,7 @@ export default function ImpostazioniPage() {
     }).eq('id', aziendaId)
     if (error) { alert('Errore salvataggio: ' + error.message); return }
     setSavedOk(true)
+    setEditingAzienda(false)
     setTimeout(() => setSavedOk(false), 2000)
   }
 
@@ -488,7 +491,36 @@ export default function ImpostazioniPage() {
 
             {/* ── Dati aziendali ── */}
             <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12, padding: '24px 28px' }}>
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--t1)', marginBottom: 20, margin: '0 0 20px' }}>Dati aziendali</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--t1)', margin: 0 }}>Dati aziendali</h3>
+                {!editingAzienda && (
+                  <button onClick={() => setEditingAzienda(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 14px', color: 'var(--t2)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    ✏️ Modifica
+                  </button>
+                )}
+              </div>
+
+              {!editingAzienda ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  {[
+                    { label: 'Ragione Sociale', value: azienda.ragione_sociale },
+                    { label: 'Partita IVA', value: azienda.piva },
+                    { label: 'Codice Fiscale', value: azienda.cf },
+                    { label: 'Numero REA', value: azienda.rea },
+                    { label: 'Sede Legale', value: [azienda.indirizzo_sede, azienda.cap_sede, azienda.comune_sede, azienda.provincia_sede].filter(Boolean).join(' ') },
+                    { label: 'PEC', value: azienda.pec },
+                    { label: 'Email', value: azienda.email },
+                    { label: 'Telefono', value: azienda.tel },
+                    { label: 'Categorie SOA', value: azienda.soa_categorie },
+                    { label: 'Patente Crediti', value: azienda.patente_crediti },
+                  ].map(({ label, value }) => (
+                    <div key={label}>
+                      <div style={{ fontSize: 10, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, marginBottom: 3 }}>{label}</div>
+                      <div style={{ fontSize: 13, color: value ? 'var(--t1)' : 'var(--t3)' }}>{value || '—'}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 {([
                   { key: 'ragione_sociale', label: 'Ragione Sociale', full: true },
@@ -574,7 +606,10 @@ export default function ImpostazioniPage() {
                   />
                 </div>
               </div>
+              )}
+              {editingAzienda && (
               <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button onClick={() => setEditingAzienda(false)} style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--t2)', fontSize: 13, cursor: 'pointer' }}>Annulla</button>
                 <button onClick={saveAzienda} style={{
                   display: 'flex', alignItems: 'center', gap: 6,
                   background: savedOk ? '#10b981' : 'var(--accent)', border: 'none', borderRadius: 8,
@@ -584,6 +619,7 @@ export default function ImpostazioniPage() {
                   {savedOk ? '✅ Salvato' : <><Save size={14} /> Salva modifiche</>}
                 </button>
               </div>
+              )}
             </div>
 
             {/* ── Sedi e Unità Locali ── */}

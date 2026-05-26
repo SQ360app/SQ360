@@ -167,14 +167,14 @@ export default function DAMPage() {
           <p style={{ fontSize: 12, color: 'var(--t3)', margin: '4px 0 0' }}>Workflow completo con DL · Senza prezzi verso DL</p>
         </div>
         <button onClick={() => setShowForm(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--accent)', border: 'none', borderRadius: 10, padding: '10px 20px', color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-          <Plus size={16} /> Nuovo DAM
+          <Plus size={16} /> Nuovo SAM
         </button>
       </div>
 
       {inAttesa.length > 0 && (
         <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
           <AlertTriangle size={15} color="#f59e0b" />
-          <span style={{ fontSize: 13, color: '#f59e0b' }}><strong>{inAttesa.length} DAM</strong> in attesa risposta DL da più di 5 giorni: {inAttesa.map(d => d.codice).join(', ')}</span>
+          <span style={{ fontSize: 13, color: '#f59e0b' }}><strong>{inAttesa.length} SAM</strong> in attesa risposta DL da più di 5 giorni: {inAttesa.map(d => d.codice).join(', ')}</span>
         </div>
       )}
 
@@ -239,7 +239,7 @@ export default function DAMPage() {
             })}
             {filtered.length === 0 && !loading && (
               <div style={{ padding: 48, textAlign: 'center', color: 'var(--t3)', fontSize: 13, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12 }}>
-                Nessun DAM. Clicca &quot;Nuovo DAM&quot; per crearne uno.
+                Nessun SAM. Clicca &quot;Nuovo SAM&quot; per crearne uno.
               </div>
             )}
           </div>
@@ -361,7 +361,7 @@ export default function DAMPage() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 20, overflowY: 'auto' }}>
           <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 16, width: '100%', maxWidth: 600, padding: '28px 32px', marginTop: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', margin: 0 }}>Nuovo DAM</h2>
+              <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', margin: 0 }}>Nuovo SAM</h2>
               <button onClick={() => { setShowForm(false); setErrore('') }} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, padding: 8, cursor: 'pointer' }}><X size={15} color="#64748b" /></button>
             </div>
             {errore && <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#ef4444' }}>{errore}</div>}
@@ -383,7 +383,7 @@ export default function DAMPage() {
             <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
               <button onClick={() => { setShowForm(false); setErrore('') }} style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', fontSize: 13, cursor: 'pointer' }}>Annulla</button>
               <button onClick={salva} disabled={saving} style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: saving ? '#93c5fd' : '#3b82f6', color: 'white', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer' }}>
-                {saving ? 'Salvataggio...' : '✓ Crea DAM'}
+                {saving ? 'Salvataggio...' : '✓ Crea SAM'}
               </button>
             </div>
           </div>

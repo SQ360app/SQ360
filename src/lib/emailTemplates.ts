@@ -148,19 +148,19 @@ export function emailDamApprovato(params: {
   dlNome?: string
 }): { subject: string; html: string } {
   return {
-    subject: `✅ DAM approvato — ${params.materiale} — ${params.commessa}`,
+    subject: `✅ SAM approvato — ${params.materiale} — ${params.commessa}`,
     html: base(`
       <div class="alert-box" style="background:#f0fdf4;border:1px solid #bbf7d0">
-        <p style="margin:0 0 4px;font-size:15px;font-weight:700;color:#16a34a">✅ DAM approvato dalla DL</p>
+        <p style="margin:0 0 4px;font-size:15px;font-weight:700;color:#16a34a">✅ SAM approvato dalla DL</p>
         <p style="margin:0;font-size:13px;color:#64748b">Il materiale è stato approvato dalla Direzione Lavori</p>
       </div>
       <div>
-        <div class="kv"><span class="kv-lbl">Codice DAM</span><span class="kv-val" style="font-family:monospace">${params.codice}</span></div>
+        <div class="kv"><span class="kv-lbl">Codice SAM</span><span class="kv-val" style="font-family:monospace">${params.codice}</span></div>
         <div class="kv"><span class="kv-lbl">Materiale</span><span class="kv-val">${params.materiale}</span></div>
         ${params.dlNome ? `<div class="kv"><span class="kv-lbl">Approvato da DL</span><span class="kv-val">${params.dlNome}</span></div>` : ''}
         <div class="kv"><span class="kv-lbl">Commessa</span><span class="kv-val">${params.commessa}</span></div>
       </div>
-      <a href="https://sq360.app/dashboard/dam" class="cta" style="background:#16a34a;color:#fff">Apri DAM</a>
+      <a href="https://sq360.app/dashboard/dam" class="cta" style="background:#16a34a;color:#fff">Apri SAM</a>
     `),
   }
 }

@@ -461,13 +461,13 @@ ${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;
 
   const buildSamUrl = (r: RDO) => {
     const base = window.location.pathname.replace('/rdo', '/dam')
-    const params = new URLSearchParams({ rdo_id: r.id, fornitore: r.fornitore || '', importo: String(r.importo_offerta || 0), rda_id: r.rda_id || '' })
+    const params = new URLSearchParams({ rdo_id: r.id, fornitore: r.fornitore || '', importo: String(r.importo_offerta || 0), rda_id: r.rda_id || '', wbs_ref: r.wbs_ref || '' })
     return base + '?' + params.toString()
   }
 
   const buildOdaUrl = (r: RDO) => {
     const base = window.location.pathname.replace('/rdo', '/oda')
-    const params = new URLSearchParams({ rdo_id: r.id, importo: String(r.importo_offerta || 0), fornitore: r.fornitore || '', richiede_sam: '0' })
+    const params = new URLSearchParams({ rdo_id: r.id, importo: String(r.importo_offerta || 0), fornitore: r.fornitore || '', richiede_sam: '0', wbs_ref: r.wbs_ref || '' })
     return base + '?' + params.toString()
   }
 
@@ -754,7 +754,7 @@ ${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;
                           <button style={{...styleBtn('#6366f1'),fontSize:11,marginLeft:4}} onClick={() => setPdfRdo(r)}>📎 Preventivo</button>
                         )}
                         {r.stato === 'aggiudicata' && (
-                          <button style={{...styleBtn('#0d9488'),fontSize:11,marginLeft:4}} onClick={() => window.location.href = buildSamUrl(r)}>📋 SAM/DAM</button>
+                          <button style={{...styleBtn('#0d9488'),fontSize:11,marginLeft:4}} onClick={() => window.location.href = buildSamUrl(r)}>📋 SAM</button>
                         )}
                         {r.stato === 'aggiudicata' && !r.richiede_sam && (
                           <button style={{...styleBtn('#10b981'),fontSize:11,marginLeft:4}} onClick={() => setProssimoPasso(r)}>✅ ODA →</button>

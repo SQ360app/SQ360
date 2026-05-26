@@ -263,6 +263,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
         data_scadenza: wizardScadenza || null,
         note: wizardNote,
         importo_offerta: 0,
+        wbs_ref: wizardRda.wbs_ref || null,
         codice: `RDO-${gruppoId.slice(0, 8).toUpperCase()}-${f.id.slice(0, 4).toUpperCase()}`,
       }))
       const { error } = await supabase.from('rdo').insert(records)
@@ -417,6 +418,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
                     onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
                     <td style={{ ...(styleObj as any).td, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>
                       {displayCodice(r)}
+                      {!r.wbs_ref && <span style={{ display:'inline-block', fontSize:9, fontWeight:700, padding:'1px 5px', borderRadius:4, background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', marginLeft:4 }}>⚠️ WBS</span>}
                       {r.wbs_ref && <span style={{ display:'block', fontSize:9, color:'var(--t3)', marginTop:1 }}>WBS: {r.wbs_ref}</span>}
                     </td>
                     <td style={(styleObj as any).td as React.CSSProperties}><span style={(styleObj as any).badge('#3b82f6')}>{r.tipo}</span></td>

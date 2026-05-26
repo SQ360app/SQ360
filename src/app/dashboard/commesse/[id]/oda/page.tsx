@@ -363,7 +363,7 @@ export default function ODAPage() {
                     </div>
                     <div className="flex gap-2 flex-wrap">
                       {o.contratto_sub_id && <span className="text-xs px-2.5 py-1.5 bg-purple-50 text-purple-700 rounded-lg border border-purple-100">✓ Contratto sub generato</span>}
-                      {o.dam_id && <span className="text-xs px-2.5 py-1.5 bg-green-50 text-green-700 rounded-lg border border-green-100">✓ DAM generato</span>}
+                      {o.dam_id && <span className="text-xs px-2.5 py-1.5 bg-green-50 text-green-700 rounded-lg border border-green-100">✓ SAM generato</span>}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs text-gray-500">Consegna →</span>
