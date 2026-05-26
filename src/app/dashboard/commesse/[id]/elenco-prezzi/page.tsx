@@ -24,7 +24,7 @@ interface EP {
   prezzario_riferimento?: string; anno_prezzario?: string
   prezzario_anno?: number; prezzario_codice_originale?: string
   approvato_da?: string; data_approvazione?: string
-  variante_id?: string; note?: string
+  variante_id?: string; note?: string; manuale?: boolean
 }
 interface VoceC {
   id: string; codice: string; descrizione: string; um: string
@@ -38,9 +38,10 @@ interface AnalisiP {
 interface Variante { id: string; numero: number; descrizione: string; stato: string }
 
 function FonteBadge({ fonte, varNum }: { fonte: string; varNum?: number }) {
-  if (fonte === 'prezzario')    return <span style={{ fontSize: 9, padding: '1px 7px', borderRadius: 3, fontWeight: 700, background: '#eff6ff', color: '#1d4ed8' }}>Prezzario</span>
-  if (fonte === 'prezzo_nuovo') return <span style={{ fontSize: 9, padding: '1px 7px', borderRadius: 3, fontWeight: 700, background: '#fff7ed', color: '#c2410c' }}>Prezzo Nuovo ★</span>
-  if (fonte === 'variante')     return <span style={{ fontSize: 9, padding: '1px 7px', borderRadius: 3, fontWeight: 700, background: '#f0fdf4', color: '#065f46' }}>Variante{varNum ? ` n.${varNum}` : ''} ●</span>
+  if (fonte === 'prezzario')      return <span style={{ fontSize: 9, padding: '1px 7px', borderRadius: 3, fontWeight: 700, background: '#eff6ff', color: '#1d4ed8' }}>Prezzario</span>
+  if (fonte === 'prezzo_nuovo')   return <span style={{ fontSize: 9, padding: '1px 7px', borderRadius: 3, fontWeight: 700, background: '#fff7ed', color: '#c2410c' }}>Prezzo Nuovo ★</span>
+  if (fonte === 'variante')       return <span style={{ fontSize: 9, padding: '1px 7px', borderRadius: 3, fontWeight: 700, background: '#f0fdf4', color: '#065f46' }}>Variante{varNum ? ` n.${varNum}` : ''} ●</span>
+  if (fonte === 'concordato_dl')  return <span style={{ fontSize: 9, padding: '1px 7px', borderRadius: 3, fontWeight: 700, background: '#f0fdf4', color: '#065f46', border: '1px solid #6ee7b7' }}>NP Concordato DL</span>
   return <span style={{ fontSize: 9, color: '#6b7280' }}>{fonte}</span>
 }
 
@@ -186,16 +187,30 @@ export default function ElencoPrezziPage({ params: pp }: { params: Promise<{ id:
   }
 
   const handleSaveNuovo = async () => {
-    if (!fCodice.trim() || !fDesc.trim() || !fPu) { setModalErr('Codice, descrizione e P.U. obbligatori'); return }
+    if (!fDesc.trim() || !fPu) { setModalErr('Descrizione e P.U. obbligatori'); return }
     const aziendaId = await getAziendaId()
+
+    // Auto-genera codice NP/xxx per concordato_dl
+    let codice = fCodice.trim()
+    if (!codice) {
+      if (fFonte === 'concordato_dl') {
+        const npCodes = ep.filter(p => /^NP\/\d+$/.test(p.codice)).map(p => parseInt(p.codice.replace('NP/', '')) || 0)
+        const maxNp = npCodes.length > 0 ? Math.max(...npCodes) : 0
+        codice = `NP/${String(maxNp + 1).padStart(3, '0')}`
+      } else {
+        setModalErr('Codice obbligatorio'); return
+      }
+    }
+
     const { error } = await supabase.from('elenco_prezzi').insert({
       commessa_id: id, azienda_id: aziendaId || null,
-      codice: fCodice.trim(), descrizione: fDesc.trim(),
+      codice, descrizione: fDesc.trim(),
       um: fUm || 'nr', prezzo_unitario: parseFloat(fPu) || 0,
       fonte: fFonte, variante_id: fVariante || null, note: fNote || null,
       prezzario_riferimento: fPrezzarioRif || null,
       prezzario_anno: fPrezzarioAnno ? parseInt(fPrezzarioAnno) : null,
       prezzario_codice_originale: fPrezzarioCodice || null,
+      manuale: true,
     })
     if (error) { setModalErr(error.message); return }
     setModalOpen(false)
@@ -222,10 +237,12 @@ export default function ElencoPrezziPage({ params: pp }: { params: Promise<{ id:
   }
 
   const filteredEP = ep.filter(p => {
-    if (filterFonte === 'prezzario')    return p.fonte === 'prezzario'
-    if (filterFonte === 'prezzo_nuovo') return p.fonte === 'prezzo_nuovo'
-    if (filterFonte === 'variante')     return p.fonte === 'variante'
-    if (filterFonte === 'con_analisi')  return (analisiPerCodice[p.codice] || []).length > 0
+    if (filterFonte === 'prezzario')     return p.fonte === 'prezzario'
+    if (filterFonte === 'prezzo_nuovo')  return p.fonte === 'prezzo_nuovo'
+    if (filterFonte === 'variante')      return p.fonte === 'variante'
+    if (filterFonte === 'concordato_dl') return p.fonte === 'concordato_dl'
+    if (filterFonte === 'manuale')       return !!p.manuale
+    if (filterFonte === 'con_analisi')   return (analisiPerCodice[p.codice] || []).length > 0
     if (filterFonte === 'senza_analisi') return (analisiPerCodice[p.codice] || []).length === 0
     return true
   })
@@ -284,12 +301,14 @@ export default function ElencoPrezziPage({ params: pp }: { params: Promise<{ id:
       {/* Filtri */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {[
-          { key: 'tutte',         label: `Tutte (${ep.length})` },
-          { key: 'prezzario',     label: `Da prezzario (${ep.filter(p => p.fonte === 'prezzario').length})` },
-          { key: 'prezzo_nuovo',  label: `Prezzi nuovi (${ep.filter(p => p.fonte === 'prezzo_nuovo').length})` },
-          { key: 'variante',      label: `Da variante (${ep.filter(p => p.fonte === 'variante').length})` },
-          { key: 'con_analisi',   label: `Con analisi (${nConAnalisi})` },
-          { key: 'senza_analisi', label: `Senza analisi (${nSenzaAnalisi})` },
+          { key: 'tutte',          label: `Tutte (${ep.length})` },
+          { key: 'prezzario',      label: `Da prezzario (${ep.filter(p => p.fonte === 'prezzario').length})` },
+          { key: 'prezzo_nuovo',   label: `Prezzi nuovi (${ep.filter(p => p.fonte === 'prezzo_nuovo').length})` },
+          { key: 'variante',       label: `Da variante (${ep.filter(p => p.fonte === 'variante').length})` },
+          { key: 'concordato_dl',  label: `NP Concordato (${ep.filter(p => p.fonte === 'concordato_dl').length})` },
+          { key: 'manuale',        label: `Manuali (${ep.filter(p => p.manuale).length})` },
+          { key: 'con_analisi',    label: `Con analisi (${nConAnalisi})` },
+          { key: 'senza_analisi',  label: `Senza analisi (${nSenzaAnalisi})` },
         ].map(f => (
           <button key={f.key} onClick={() => setFilterFonte(f.key)}
             style={{ fontSize: 11, padding: '3px 10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: filterFonte === f.key ? 700 : 400, background: filterFonte === f.key ? '#2563eb' : '#f3f4f6', color: filterFonte === f.key ? '#fff' : '#6b7280' }}>
@@ -333,7 +352,11 @@ export default function ElencoPrezziPage({ params: pp }: { params: Promise<{ id:
                 <div onClick={() => setExpanded(isExp ? null : p.id)}
                   style={{ display: 'grid', gridTemplateColumns: '20px 100px 1fr 50px 90px 100px 90px 60px', gap: 8, padding: '8px 14px', cursor: 'pointer', background: isExp ? '#f0f9ff' : '#fff', alignItems: 'center' }}>
                   <div>{isExp ? <ChevronDown size={12} style={{ color: '#9ca3af' }} /> : <ChevronRight size={12} style={{ color: '#9ca3af' }} />}</div>
-                  <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#1d4ed8', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.codice}</div>
+                  <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#1d4ed8', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {p.codice}
+                    {p.fonte === 'concordato_dl' && <span style={{ fontSize: 8, padding: '0 3px', borderRadius: 2, background: '#f0fdf4', color: '#065f46', border: '1px solid #6ee7b7', fontWeight: 700, flexShrink: 0 }}>NP</span>}
+                    {p.manuale && p.fonte !== 'concordato_dl' && <span style={{ fontSize: 8, padding: '0 3px', borderRadius: 2, background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', fontWeight: 700, flexShrink: 0 }}>M</span>}
+                  </div>
                   <div style={isExp
                     ? { whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: '1.5', fontSize: 12, color: '#374151' }
                     : { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: '1.4', fontSize: 12, cursor: 'help', color: '#374151' }}
@@ -368,6 +391,7 @@ export default function ElencoPrezziPage({ params: pp }: { params: Promise<{ id:
                             <option value="prezzario">Prezzario</option>
                             <option value="prezzo_nuovo">Prezzo Nuovo</option>
                             <option value="variante">Da Variante</option>
+                            <option value="concordato_dl">Concordato DL (NP)</option>
                           </select>
                         </div>
                         <div>
@@ -582,14 +606,19 @@ export default function ElencoPrezziPage({ params: pp }: { params: Promise<{ id:
           <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 500, padding: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>Nuovo prezzo</h2>
 
-            <div style={{ display: 'flex', gap: 6 }}>
-              {[{ v: 'prezzo_nuovo', l: 'Prezzo Nuovo ★' }, { v: 'variante', l: 'Da Variante ●' }, { v: 'prezzario', l: 'Prezzario' }].map(t => (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {[{ v: 'prezzo_nuovo', l: 'Prezzo Nuovo ★' }, { v: 'concordato_dl', l: 'NP Concordato DL' }, { v: 'variante', l: 'Da Variante ●' }, { v: 'prezzario', l: 'Prezzario' }].map(t => (
                 <button key={t.v} onClick={() => setFFonte(t.v)}
                   style={{ flex: 1, padding: '6px 8px', borderRadius: 8, border: fFonte === t.v ? '2px solid #2563eb' : '1px solid #e5e7eb', background: fFonte === t.v ? '#eff6ff' : '#fff', color: fFonte === t.v ? '#1d4ed8' : '#6b7280', fontSize: 11, cursor: 'pointer', fontWeight: fFonte === t.v ? 700 : 400 }}>
                   {t.l}
                 </button>
               ))}
             </div>
+            {fFonte === 'concordato_dl' && (
+              <p style={{ fontSize: 10, color: '#065f46', background: '#f0fdf4', border: '1px solid #6ee7b7', borderRadius: 6, padding: '5px 10px', margin: 0 }}>
+                ℹ️ Il codice NP/001, NP/002... viene generato automaticamente se lasci vuoto il campo Codice.
+              </p>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 60px 100px', gap: 10 }}>
               <div>

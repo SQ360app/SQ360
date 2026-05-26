@@ -12,6 +12,15 @@ interface VoceDB {
   capitolo: string; categoria: string; note?: string
   wbs_id?: string; wbs_label?: string
   sic_interna_importo?: number; sic_interna_percentuale?: number
+  manuale?: boolean
+}
+interface Misurazione {
+  id: string; voce_id: string; commessa_id: string
+  nota: string; nr: number; lunghezza: number; larghezza: number; h_peso: number
+  quantita: number; ordine: number
+}
+interface EpItem {
+  id: string; codice: string; descrizione: string; um: string; prezzo_unitario: number
 }
 interface RDADB { id: string; voci_ids?: string[]; stato?: string; tipo?: string; wbs_id?: string }
 const TIPI_ANALISI = [
@@ -202,6 +211,15 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
   const [extraExpanded, setExtraExpanded] = useState<Record<string, boolean>>({})
   const [rdaModal, setRdaModal] = useState<{ rows: RdaModalRow[]; senzaAnalisi: string[]; generaFallback: boolean } | null>(null)
   const [wbsFlat, setWbsFlat] = useState<WbsVoce[]>(DEFAULT_WBS_FLAT)
+  const [misurazioni, setMisurazioni] = useState<Record<string, Misurazione[]>>({})
+  const [misEdit, setMisEdit] = useState<Record<string, string>>({})
+  const [voceModal, setVoceModal] = useState(false)
+  const [voceSearch, setVoceSearch] = useState('')
+  const [voceSelEP, setVoceSelEP] = useState<EpItem | null>(null)
+  const [voceCapitolo, setVoceCapitolo] = useState('')
+  const [voceCategoria, setVoceCategoria] = useState('')
+  const [voceWbs, setVoceWbs] = useState<string | null>(null)
+  const [epItems, setEpItems] = useState<EpItem[]>([])
 
   const WBS_MAP      = useMemo(() => Object.fromEntries(wbsFlat), [wbsFlat])
   const WBS_ROOTS    = useMemo(() => wbsFlat.filter(([c]) => !c.includes('.')).map(([c]) => c), [wbsFlat])
@@ -251,18 +269,27 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
       if (!computo) { setCaricamento(false); return }
       setComputoId(computo.id)
 
-      const [{ data: v }, { data: rda }, { data: analisiData }, { data: extraData }] = await Promise.all([
+      const [{ data: v }, { data: rda }, { data: analisiData }, { data: extraData }, { data: misData }] = await Promise.all([
         supabase.from('voci_computo')
-          .select('id,codice,descrizione,um,quantita,prezzo_unitario,importo,capitolo,categoria,note,wbs_id,wbs_label,sic_interna_importo,sic_interna_percentuale')
+          .select('id,codice,descrizione,um,quantita,prezzo_unitario,importo,capitolo,categoria,note,wbs_id,wbs_label,sic_interna_importo,sic_interna_percentuale,manuale')
           .eq('computo_id', computo.id).order('capitolo').order('codice'),
         supabase.from('rda').select('id,wbs_id,stato,tipo').eq('commessa_id', id),
         supabase.from('analisi_prezzi_tariffa').select('*').eq('commessa_id', id),
         supabase.from('analisi_extra_voce').select('*').eq('commessa_id', id),
+        (supabase as any).from('voci_computo_misurazioni').select('*').eq('commessa_id', id).order('ordine'),
       ])
       if (v) { setVoci(v); setTotale(v.reduce((s, x) => s + (x.importo || 0), 0)) }
       if (rda) setRdaList(rda as RDADB[])
       if (analisiData) setAnalisi(analisiData as AnalisiPrezzo[])
       if (extraData) setAnalisiExtra(extraData as AnalisiExtraVoce[])
+      if (misData) {
+        const misMap: Record<string, Misurazione[]> = {}
+        for (const m of misData) {
+          if (!misMap[m.voce_id]) misMap[m.voce_id] = []
+          misMap[m.voce_id].push(m as Misurazione)
+        }
+        setMisurazioni(misMap)
+      }
     } finally { setCaricamento(false) }
   }, [id])
 
@@ -279,11 +306,94 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       setSel(null); setEditingCell(null); setCtx(null)
-      setWbsPicker(null); setBulkWbsPicker(false); setRdaModal(null)
+      setWbsPicker(null); setBulkWbsPicker(false); setRdaModal(null); setVoceModal(false)
     }
     window.addEventListener('keydown', handleEsc)
     return () => window.removeEventListener('keydown', handleEsc)
   }, [])
+
+  // ─── Misurazioni CRUD ────────────────────────────────────────────────────
+
+  const aggiornaMisurazione = async (mis: Misurazione, field: string, rawVal: string, voceId: string) => {
+    const val: string | number = field === 'nota' ? rawVal : (parseFloat(rawVal) || 0)
+    const updated = { ...mis, [field]: val }
+    const newQty = field !== 'nota'
+      ? parseFloat((updated.nr * updated.lunghezza * updated.larghezza * updated.h_peso).toFixed(4))
+      : mis.quantita
+    await (supabase as any).from('voci_computo_misurazioni')
+      .update({ [field]: val, ...(field !== 'nota' ? { quantita: newQty } : {}) })
+      .eq('id', mis.id)
+    const voceRows = (misurazioni[voceId] || []).map(m =>
+      m.id === mis.id ? { ...m, [field]: val, quantita: newQty } : m
+    )
+    const nuovoTotale = parseFloat(voceRows.reduce((s, m) => s + m.quantita, 0).toFixed(4))
+    setMisurazioni(prev => ({ ...prev, [voceId]: voceRows }))
+    if (field !== 'nota') {
+      const voce = voci.find(v => v.id === voceId)
+      if (voce) {
+        const newImporto = parseFloat((nuovoTotale * voce.prezzo_unitario).toFixed(2))
+        await (supabase as any).from('voci_computo').update({ quantita: nuovoTotale, importo: newImporto }).eq('id', voceId)
+        setVoci(prev => prev.map(v => v.id === voceId ? { ...v, quantita: nuovoTotale, importo: newImporto } : v))
+        setTotale(prev => parseFloat((prev - voce.importo + newImporto).toFixed(2)))
+      }
+    }
+    setMisEdit(prev => { const n = { ...prev }; delete n[`${mis.id}_${field}`]; return n })
+  }
+
+  const aggiungiMisurazione = async (voceId: string) => {
+    const ordine = (misurazioni[voceId] || []).length + 1
+    const { data } = await (supabase as any).from('voci_computo_misurazioni').insert({
+      voce_id: voceId, commessa_id: id,
+      nota: '', nr: 1, lunghezza: 1, larghezza: 1, h_peso: 1, quantita: 1, ordine,
+    }).select().single()
+    if (data) {
+      setMisurazioni(prev => ({ ...prev, [voceId]: [...(prev[voceId] || []), data as Misurazione] }))
+    }
+  }
+
+  const eliminaMisurazione = async (misId: string, voceId: string) => {
+    await (supabase as any).from('voci_computo_misurazioni').delete().eq('id', misId)
+    const voceRows = (misurazioni[voceId] || []).filter(m => m.id !== misId)
+    const nuovoTotale = parseFloat(voceRows.reduce((s, m) => s + m.quantita, 0).toFixed(4))
+    setMisurazioni(prev => ({ ...prev, [voceId]: voceRows }))
+    const voce = voci.find(v => v.id === voceId)
+    if (voce) {
+      const newImporto = parseFloat((nuovoTotale * voce.prezzo_unitario).toFixed(2))
+      await (supabase as any).from('voci_computo').update({ quantita: nuovoTotale, importo: newImporto }).eq('id', voceId)
+      setVoci(prev => prev.map(v => v.id === voceId ? { ...v, quantita: nuovoTotale, importo: newImporto } : v))
+      setTotale(prev => parseFloat((prev - voce.importo + newImporto).toFixed(2)))
+    }
+  }
+
+  // ─── Voce manuale da Elenco Prezzi ───────────────────────────────────────
+
+  const apriVoceModal = async () => {
+    setVoceModal(true)
+    const { data } = await supabase.from('elenco_prezzi')
+      .select('id,codice,descrizione,um,prezzo_unitario')
+      .eq('commessa_id', id).order('codice')
+    setEpItems((data || []) as EpItem[])
+  }
+
+  const aggiungiVoceDaEP = async () => {
+    if (!voceSelEP || !computoId) return
+    const { data, error } = await (supabase as any).from('voci_computo').insert({
+      computo_id: computoId,
+      codice: voceSelEP.codice, codice_prezzario: voceSelEP.codice,
+      descrizione: voceSelEP.descrizione, um: voceSelEP.um,
+      quantita: 1, prezzo_unitario: voceSelEP.prezzo_unitario, importo: voceSelEP.prezzo_unitario,
+      capitolo: voceCapitolo || 'Aggiunto manualmente', categoria: voceCategoria || '', note: '',
+      wbs_id: voceWbs || null, wbs_label: voceWbs ? `${voceWbs} ${WBS_MAP[voceWbs] || ''}` : null,
+      manuale: true,
+    }).select().single()
+    if (error) { showToast('⚠ Errore aggiunta voce'); return }
+    if (data) {
+      setVoci(prev => [...prev, data as VoceDB])
+      setTotale(prev => parseFloat((prev + voceSelEP.prezzo_unitario).toFixed(2)))
+      showToast(`✓ ${voceSelEP.codice} aggiunto al computo`)
+      setVoceModal(false); setVoceSelEP(null); setVoceSearch(''); setVoceCapitolo(''); setVoceCategoria(''); setVoceWbs(null)
+    }
+  }
 
   // ─── Assegna WBS a singola voce ──────────────────────────────────────────
 
@@ -608,7 +718,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     | { type: 'hsc'; id: string; lb: string }
     | { type: 'hca'; id: string; lb: string }
     | { type: 'vo'; v: VoceDB }
-    | { type: 'mi'; v: VoceDB }
+    | { type: 'mi'; v: VoceDB; mis: Misurazione[] }
     | { type: 'som'; v: VoceDB }
 
   const isFiltered = !!(catFilter.c || catFilter.sc || wbsSel)
@@ -623,7 +733,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     for (const v of sorted) {
       if (v.capitolo !== lastSC) { rows.push({ type: 'hsc', id: v.capitolo, lb: v.capitolo }); lastSC = v.capitolo; lastC = '' }
       if (v.categoria && v.categoria !== v.capitolo && v.categoria !== lastC) { rows.push({ type: 'hca', id: v.categoria, lb: v.categoria }); lastC = v.categoria }
-      rows.push({ type: 'vo', v }); rows.push({ type: 'mi', v }); rows.push({ type: 'som', v })
+      rows.push({ type: 'vo', v }); rows.push({ type: 'mi', v, mis: misurazioni[v.id] || [] }); rows.push({ type: 'som', v })
     }
     return rows
   }, [vociFiltrate])
@@ -861,6 +971,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
           {/* TOOLBAR */}
           <div className="cmp-tbar" style={{ flexShrink: 0, flexWrap: 'nowrap', overflow: 'hidden' }}>
             {sbHidden && <button className="cmp-tbtn green" onClick={() => setSbHidden(false)}>▶</button>}
+            <button className="cmp-tbtn blue" onClick={apriVoceModal} title="Aggiungi voce manualmente dall'Elenco Prezzi">✚ Voce da EP</button>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}>
               {wbsSel ? (
                 <><span style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed' }}>📐 {wbsSel} {WBS_MAP[wbsSel]}</span>
@@ -1009,6 +1120,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                               }}>
                               {hasWBS ? `📐 ${v.wbs_id}` : '+ WBS'}
                             </span>
+                            {v.manuale && <span style={{ display: 'inline-block', fontSize: 7, padding: '0 3px', borderRadius: 2, background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', marginLeft: 3, fontWeight: 700, verticalAlign: 'middle' }} title="Voce aggiunta manualmente">M</span>}
                             {(() => {
                               const av = analisi.filter(a => a.codice_tariffa === v.codice)
                               const ex = analisiExtra.filter(e => e.voce_computo_id === v.id)
@@ -1116,19 +1228,83 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                     }
 
                     if (row.type === 'mi') {
-                      const v = row.v; const isSel = sel === v.id
+                      const v = row.v; const mis = row.mis
+                      const inpSt: React.CSSProperties = { width: '100%', border: 'none', background: 'transparent', textAlign: 'right', fontFamily: 'monospace', fontSize: 10, outline: 'none', color: '#374151', padding: '0 2px' }
+                      if (mis.length > 0) {
+                        return (
+                          <React.Fragment key={`mi_${v.id}`}>
+                            {mis.map(m => (
+                              <tr key={`mis_${m.id}`} className="cmp-rmi">
+                                <td /><td /><td />
+                                <td style={{ paddingLeft: 28 }}>
+                                  <input value={misEdit[`${m.id}_nota`] ?? m.nota} placeholder="nota..."
+                                    style={{ ...inpSt, textAlign: 'left', fontStyle: 'italic', fontSize: 10, color: '#374151' }}
+                                    onChange={e => setMisEdit(p => ({ ...p, [`${m.id}_nota`]: e.target.value }))}
+                                    onBlur={() => aggiornaMisurazione(m, 'nota', misEdit[`${m.id}_nota`] ?? m.nota, v.id)}
+                                    onClick={e => e.stopPropagation()} />
+                                </td>
+                                <td>
+                                  <input type="number" value={misEdit[`${m.id}_nr`] ?? m.nr} style={inpSt}
+                                    onChange={e => setMisEdit(p => ({ ...p, [`${m.id}_nr`]: e.target.value }))}
+                                    onBlur={() => aggiornaMisurazione(m, 'nr', misEdit[`${m.id}_nr`] ?? String(m.nr), v.id)}
+                                    onClick={e => e.stopPropagation()} />
+                                </td>
+                                <td>
+                                  <input type="number" value={misEdit[`${m.id}_lunghezza`] ?? m.lunghezza} style={inpSt}
+                                    onChange={e => setMisEdit(p => ({ ...p, [`${m.id}_lunghezza`]: e.target.value }))}
+                                    onBlur={() => aggiornaMisurazione(m, 'lunghezza', misEdit[`${m.id}_lunghezza`] ?? String(m.lunghezza), v.id)}
+                                    onClick={e => e.stopPropagation()} />
+                                </td>
+                                <td>
+                                  <input type="number" value={misEdit[`${m.id}_larghezza`] ?? m.larghezza} style={inpSt}
+                                    onChange={e => setMisEdit(p => ({ ...p, [`${m.id}_larghezza`]: e.target.value }))}
+                                    onBlur={() => aggiornaMisurazione(m, 'larghezza', misEdit[`${m.id}_larghezza`] ?? String(m.larghezza), v.id)}
+                                    onClick={e => e.stopPropagation()} />
+                                </td>
+                                <td>
+                                  <input type="number" value={misEdit[`${m.id}_h_peso`] ?? m.h_peso} style={inpSt}
+                                    onChange={e => setMisEdit(p => ({ ...p, [`${m.id}_h_peso`]: e.target.value }))}
+                                    onBlur={() => aggiornaMisurazione(m, 'h_peso', misEdit[`${m.id}_h_peso`] ?? String(m.h_peso), v.id)}
+                                    onClick={e => e.stopPropagation()} />
+                                </td>
+                                <td style={{ textAlign: 'right', fontWeight: 600, fontSize: 10, fontFamily: 'monospace' }}>{f3(m.quantita)}</td>
+                                <td />
+                                <td style={{ textAlign: 'center' }}>
+                                  <button onClick={e => { e.stopPropagation(); eliminaMisurazione(m.id, v.id) }}
+                                    style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 11, padding: 0 }}>🗑</button>
+                                </td>
+                                <td /><td /><td /><td />
+                              </tr>
+                            ))}
+                            <tr className="cmp-rmi">
+                              <td colSpan={15} style={{ paddingLeft: 28 }}>
+                                <button onClick={e => { e.stopPropagation(); aggiungiMisurazione(v.id) }}
+                                  style={{ fontSize: 9, color: '#14532d', border: '1px dashed #4ade80', background: 'transparent', borderRadius: 3, cursor: 'pointer', padding: '1px 7px' }}>
+                                  + riga
+                                </button>
+                              </td>
+                            </tr>
+                          </React.Fragment>
+                        )
+                      }
                       return (
-                        <tr key={`mi_${v.id}`} className={`cmp-rmi${isSel ? ' sel' : ''}`}>
-                          <td />
-                          <td />
-                          <td /><td style={{ paddingLeft: 28, color: '#374151', fontSize: 11, fontStyle: 'italic' }}>
-                            {v.note?.split('>').pop()?.trim() || 'misura da XPWE'}
+                        <tr key={`mi_${v.id}`} className="cmp-rmi">
+                          <td /><td /><td />
+                          <td style={{ paddingLeft: 28, color: '#9ca3af', fontSize: 10, fontStyle: 'italic' }}>
+                            {v.note?.split('>').pop()?.trim() || '—'}
                           </td>
                           <td><span className="cmp-edt">1</span></td>
                           <td><span className="cmp-edt cmp-mono">{f3(v.quantita)}</span></td>
                           <td /><td />
                           <td style={{ textAlign: 'right', fontWeight: 600, fontSize: 10, fontFamily: 'monospace' }}>{f3(v.quantita)}</td>
-                          <td /><td /><td /><td /><td /><td />
+                          <td />
+                          <td style={{ textAlign: 'center' }}>
+                            <button onClick={e => { e.stopPropagation(); aggiungiMisurazione(v.id) }}
+                              style={{ fontSize: 9, color: '#14532d', border: '1px dashed #4ade80', background: 'transparent', borderRadius: 3, cursor: 'pointer', padding: '1px 6px' }}>
+                              + mis
+                            </button>
+                          </td>
+                          <td /><td /><td /><td />
                         </tr>
                       )
                     }
@@ -1504,6 +1680,87 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* VOCE DA EP MODAL */}
+        {voceModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+            onClick={() => setVoceModal(false)}>
+            <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 600, maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ padding: '12px 16px', background: '#1e3a5f', color: '#fff', fontSize: 13, fontWeight: 700, borderRadius: '14px 14px 0 0', flexShrink: 0 }}>
+                ✚ Aggiungi voce da Elenco Prezzi
+              </div>
+              <div style={{ padding: '10px 14px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
+                <input type="text" placeholder="Cerca per codice o descrizione..." value={voceSearch}
+                  autoFocus onChange={e => setVoceSearch(e.target.value)}
+                  style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 6, padding: '6px 10px', fontSize: 12, boxSizing: 'border-box' }} />
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto' }}>
+                {epItems.filter(ep => {
+                  if (!voceSearch) return true
+                  const q = voceSearch.toLowerCase()
+                  return ep.codice.toLowerCase().includes(q) || ep.descrizione.toLowerCase().includes(q)
+                }).map(ep => (
+                  <div key={ep.id} onClick={() => setVoceSelEP(ep)}
+                    style={{ padding: '7px 14px', cursor: 'pointer', background: voceSelEP?.id === ep.id ? '#eff6ff' : '#fff', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 10, height: 10, borderRadius: '50%', border: '2px solid #2563eb', background: voceSelEP?.id === ep.id ? '#2563eb' : 'transparent', flexShrink: 0 }} />
+                    <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#1d4ed8', fontWeight: 600, minWidth: 90, flexShrink: 0 }}>{ep.codice}</span>
+                    <span style={{ flex: 1, fontSize: 11, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ep.descrizione}</span>
+                    <span style={{ fontSize: 10, color: '#6b7280', flexShrink: 0 }}>{ep.um}</span>
+                    <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, flexShrink: 0 }}>€ {fi(ep.prezzo_unitario)}</span>
+                  </div>
+                ))}
+                {epItems.length === 0 && (
+                  <div style={{ padding: 20, textAlign: 'center', color: '#9ca3af', fontSize: 12 }}>
+                    Nessuna tariffa trovata. Importa prima un computo XPWE o aggiungi tariffe in Elenco Prezzi.
+                  </div>
+                )}
+              </div>
+              {voceSelEP && (
+                <div style={{ padding: '10px 14px', borderTop: '2px solid #2563eb', background: '#eff6ff', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#1d4ed8' }}>
+                    Selezionato: {voceSelEP.codice} · {voceSelEP.um} · € {fi(voceSelEP.prezzo_unitario)}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <div>
+                      <label style={{ fontSize: 10, color: '#374151', display: 'block', marginBottom: 2 }}>Capitolo</label>
+                      <input value={voceCapitolo} onChange={e => setVoceCapitolo(e.target.value)}
+                        list="vep-capitoli" placeholder="es. Murature"
+                        style={{ width: '100%', border: '1px solid #93c5fd', borderRadius: 5, padding: '4px 8px', fontSize: 11, boxSizing: 'border-box' }} />
+                      <datalist id="vep-capitoli">
+                        {[...new Set(voci.map(v => v.capitolo).filter(Boolean))].map(c => <option key={c} value={c} />)}
+                      </datalist>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, color: '#374151', display: 'block', marginBottom: 2 }}>Categoria</label>
+                      <input value={voceCategoria} onChange={e => setVoceCategoria(e.target.value)}
+                        placeholder="es. Murature interne"
+                        style={{ width: '100%', border: '1px solid #93c5fd', borderRadius: 5, padding: '4px 8px', fontSize: 11, boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <label style={{ fontSize: 10, color: '#374151', flexShrink: 0 }}>WBS:</label>
+                    <select value={voceWbs || ''} onChange={e => setVoceWbs(e.target.value || null)}
+                      style={{ border: '1px solid #93c5fd', borderRadius: 5, padding: '3px 6px', fontSize: 11, flex: 1 }}>
+                      <option value="">— Nessun WBS —</option>
+                      {wbsFlat.map(([code, label]) => <option key={code} value={code}>{code} — {label}</option>)}
+                    </select>
+                  </div>
+                </div>
+              )}
+              <div style={{ padding: '10px 14px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: 8, flexShrink: 0 }}>
+                <button onClick={() => setVoceModal(false)}
+                  style={{ flex: 1, padding: '8px', fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', cursor: 'pointer', color: '#6b7280' }}>
+                  Annulla
+                </button>
+                <button onClick={aggiungiVoceDaEP} disabled={!voceSelEP}
+                  style={{ flex: 2, padding: '8px', fontSize: 12, background: voceSelEP ? '#2563eb' : '#93c5fd', color: '#fff', border: 'none', borderRadius: 8, cursor: voceSelEP ? 'pointer' : 'default', fontWeight: 600 }}>
+                  ✚ Aggiungi al computo (qtà: 1 {voceSelEP?.um || ''})
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
