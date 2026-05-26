@@ -288,7 +288,7 @@ export default function ODAPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" style={{ minHeight: '100%', background: 'var(--bg)', padding: 16 }}>
       <div className="grid grid-cols-4 gap-3">
         {[
           ['ODA emessi', String(odaVigente.filter((o: any) => o.stato !== 'ANNULLATO').length)],
@@ -391,7 +391,7 @@ export default function ODAPage() {
                       </button>
                       <button onClick={() => downloadPdf(o)} disabled={pdfLoading === o.id}
                         className="text-xs px-2.5 py-1 rounded border border-blue-200 text-blue-600 hover:bg-blue-50 flex items-center gap-1 ml-2">
-                        {pdfLoading === o.id ? '⏳' : '📄'} PDF
+                        {pdfLoading === o.id ? '⏳' : '🖨️'} PDF
                       </button>
                     </div>
                     <VociRdaSection rdoId={o.rdo_id} supabase={supabase} />
