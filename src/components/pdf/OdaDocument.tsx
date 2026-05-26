@@ -13,10 +13,11 @@ export interface OdaDocProps {
     numero: string; tipo: string; oggetto: string
     importo_netto: number; iva_pct: number; ritenuta_pct: number
     condizioni_pagamento?: string; data_consegna_prevista?: string
-    note?: string; stato: string; rdo_id?: string
+    note?: string; stato: string; rdo_id?: string; wbs_ref?: string
   }
   commessa: { codice: string; nome: string; committente?: string; cig?: string; cup?: string }
-  fornitore?: { ragione_sociale?: string; piva?: string }
+  fornitore?: { ragione_sociale?: string; piva?: string; indirizzo?: string; pec?: string; telefono?: string }
+  voci?: { descrizione: string; um: string; quantita: number; prezzo_unitario: number; importo: number }[]
   aziendaDoc?: AziendaDoc
 }
 
@@ -81,7 +82,7 @@ const s = StyleSheet.create({
 
 // ─── Documento ────────────────────────────────────────────────────────────────
 
-export function OdaDocument({ oda, commessa, fornitore, aziendaDoc }: OdaDocProps) {
+export function OdaDocument({ oda, commessa, fornitore, voci, aziendaDoc }: OdaDocProps) {
   const importoNetto = oda.importo_netto || 0
   const iva = importoNetto * (oda.iva_pct || 0) / 100
   const totale = importoNetto + iva
@@ -145,6 +146,9 @@ export function OdaDocument({ oda, commessa, fornitore, aziendaDoc }: OdaDocProp
                 ? <>
                     <View style={s.boxRow}><Text style={s.boxLabel}>Ragione sociale</Text><Text style={s.boxValue}>{fornitore.ragione_sociale}</Text></View>
                     {fornitore.piva && <View style={s.boxRow}><Text style={s.boxLabel}>P.IVA</Text><Text style={s.boxValue}>{fornitore.piva}</Text></View>}
+                    {fornitore.indirizzo && <View style={s.boxRow}><Text style={s.boxLabel}>Indirizzo</Text><Text style={s.boxValue}>{fornitore.indirizzo}</Text></View>}
+                    {fornitore.pec && <View style={s.boxRow}><Text style={s.boxLabel}>PEC</Text><Text style={s.boxValue}>{fornitore.pec}</Text></View>}
+                    {fornitore.telefono && <View style={s.boxRow}><Text style={s.boxLabel}>Telefono</Text><Text style={s.boxValue}>{fornitore.telefono}</Text></View>}
                   </>
                 : <Text style={{ fontSize: 8.5, color: '#9ca3af', fontStyle: 'italic' }}>Fornitore non specificato</Text>
               }
@@ -152,6 +156,7 @@ export function OdaDocument({ oda, commessa, fornitore, aziendaDoc }: OdaDocProp
                 <View style={s.boxRow}><Text style={s.boxLabel}>Tipo fornitura</Text><Text style={s.boxValue}>{TIPO_LBL[oda.tipo] || oda.tipo}</Text></View>
                 <View style={s.boxRow}><Text style={s.boxLabel}>Data emissione</Text><Text style={s.boxValue}>{dataOggi}</Text></View>
                 {oda.data_consegna_prevista && <View style={s.boxRow}><Text style={s.boxLabel}>Consegna prevista</Text><Text style={s.boxValue}>{new Date(oda.data_consegna_prevista).toLocaleDateString('it-IT')}</Text></View>}
+                {oda.wbs_ref && <View style={s.boxRow}><Text style={s.boxLabel}>WBS</Text><Text style={s.boxValue}>{oda.wbs_ref}</Text></View>}
               </View>
             </View>
           </View>
@@ -196,6 +201,35 @@ export function OdaDocument({ oda, commessa, fornitore, aziendaDoc }: OdaDocProp
               </>}
             </View>
           </View>
+
+          {/* Voci ordine */}
+          {voci && voci.length > 0 && (
+            <View style={s.section}>
+              <Text style={s.sectionTitle}>Dettaglio voci — {voci.length} articoli</Text>
+              <View style={s.table}>
+                <View style={s.tableHead}>
+                  <Text style={[s.tableHeadTxt, { flex: 1 }]}>Descrizione</Text>
+                  <Text style={[s.tableHeadTxt, { width: 28, textAlign: 'center' }]}>UM</Text>
+                  <Text style={[s.tableHeadTxt, { width: 54, textAlign: 'right' }]}>Quantità</Text>
+                  <Text style={[s.tableHeadTxt, { width: 70, textAlign: 'right' }]}>P.U. €</Text>
+                  <Text style={[s.tableHeadTxt, { width: 78, textAlign: 'right' }]}>Importo €</Text>
+                </View>
+                {voci.map((v, i) => (
+                  <View key={i} style={i % 2 === 0 ? s.tableRow : s.tableRowAlt}>
+                    <Text style={{ flex: 1, fontSize: 7.5, color: '#374151' }}>{v.descrizione}</Text>
+                    <Text style={{ width: 28, fontSize: 7.5, textAlign: 'center', color: '#6b7280' }}>{v.um}</Text>
+                    <Text style={{ width: 54, fontSize: 8, textAlign: 'right', fontFamily: 'Helvetica-Bold', color: '#111827' }}>{Number(v.quantita || 0).toLocaleString('it-IT', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}</Text>
+                    <Text style={{ width: 70, fontSize: 7.5, textAlign: 'right', color: '#6b7280' }}>{fi(v.prezzo_unitario)}</Text>
+                    <Text style={{ width: 78, fontSize: 8.5, textAlign: 'right', fontFamily: 'Helvetica-Bold', color: '#1e3a5f' }}>{fi(v.importo)}</Text>
+                  </View>
+                ))}
+                <View style={s.tableRowTotal}>
+                  <Text style={s.tableTotalLbl}>Totale voci</Text>
+                  <Text style={[s.tableTotalVal, { width: 78 }]}>€ {fi(voci.reduce((s, v) => s + (v.importo || 0), 0))}</Text>
+                </View>
+              </View>
+            </View>
+          )}
 
           {/* Condizioni pagamento */}
           {oda.condizioni_pagamento && (

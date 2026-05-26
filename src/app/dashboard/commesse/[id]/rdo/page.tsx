@@ -290,6 +290,7 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
   const [revModal, setRevModal] = useState<{doc: RDO; motivo: string} | null>(null)
   const [storicoOpen, setStoricoOpen] = useState<Record<string,boolean>>({})
   const [allRdo, setAllRdo] = useState<RDO[]>([])
+  const [aziendaDoc, setAziendaDoc] = useState<any>(null)
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
@@ -311,6 +312,14 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
   useEffect(() => { carica() }, [carica])
 
   useEffect(() => {
+    getAziendaId().then(async azId => {
+      if (!azId) return
+      const { data } = await supabase.from('aziende').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', azId).single()
+      setAziendaDoc(data || null)
+    })
+  }, [])
+
+  useEffect(() => {
     if (!fSearch || fSearch.length < 2) { setFResults([]); return }
     const t = setTimeout(async () => {
       const { data } = await supabase.from('professionisti_fornitori')
@@ -322,45 +331,41 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
     return () => clearTimeout(t)
   }, [fSearch])
 
-  const generaPdf = async (rdo: any) => {
-    const { data: com } = await supabase.from('commesse').select('codice,nome,committente').eq('id', id).single()
-    let voci: any[] = []
-    if (rdo.rda_id) {
-      const { data: rda } = await supabase.from('rda').select('voci_ids').eq('id', rdo.rda_id).single()
-      if (rda?.voci_ids?.length) {
-        const { data: v } = await supabase.from('voci_computo').select('descrizione,um,quantita').in('id', rda.voci_ids)
-        voci = v || []
+  const generaPdf = async (rdo: RDO) => {
+    showToast('⏳ Generando PDF...')
+    try {
+      const { data: com } = await supabase.from('commesse').select('codice,nome,committente,cig,cup').eq('id', id).single()
+      let voci: { descrizione: string; um: string; quantita: number }[] = []
+      if (rdo.rda_id) {
+        const { data: rda } = await supabase.from('rda').select('voci_ids').eq('id', rdo.rda_id).single()
+        if ((rda as any)?.voci_ids?.length) {
+          const { data: v } = await supabase.from('voci_computo').select('descrizione,um,quantita').in('id', (rda as any).voci_ids)
+          voci = (v as any[]) || []
+        }
       }
+      const portalUrl = rdo.token_offerta ? `${window.location.origin}/offerta/${rdo.token_offerta}` : undefined
+      const [pdfrMod, docMod] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/pdf/RdoDocument'),
+      ])
+      const element = React.createElement(docMod.RdoDocument, {
+        rdo: { codice: rdo.codice, oggetto: rdo.oggetto, fornitore: rdo.fornitore, email_fornitore: rdo.email_fornitore, data_scadenza: rdo.data_scadenza, note: rdo.note, token_offerta: rdo.token_offerta, wbs_ref: rdo.wbs_ref },
+        commessa: { codice: (com as any)?.codice || '', nome: (com as any)?.nome || '', committente: (com as any)?.committente, cig: (com as any)?.cig, cup: (com as any)?.cup },
+        voci,
+        aziendaDoc,
+        portalUrl,
+      })
+      const blob = await pdfrMod.pdf(element as any).toBlob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${rdo.codice}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+      showToast('✓ PDF scaricato')
+    } catch (e: any) {
+      showToast('Errore PDF: ' + e.message)
     }
-    const rows = voci.map((v,i) => `<tr><td>${i+1}</td><td>${v.descrizione}</td><td>${v.um||'—'}</td><td>${v.quantita!=null?Number(v.quantita).toLocaleString('it-IT'):'—'}</td></tr>`).join('')
-    const portalUrl = rdo.token_offerta ? `${window.location.origin}/offerta/${rdo.token_offerta}` : null
-    const qrUrl = portalUrl ? `https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(portalUrl)}` : null
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>RDO ${rdo.codice}</title>
-<style>body{font-family:Arial;font-size:12px;margin:40px}table{width:100%;border-collapse:collapse}th,td{padding:6px 8px;border:1px solid #ccc;text-align:left}th{background:#f5f5f5}.firma{margin-top:40px;display:flex;gap:30px}.fbox{flex:1;border-top:1px solid #333;padding-top:8px;font-size:11px;color:#555}</style>
-</head><body>
-<div style="border-bottom:2px solid #1e3a5f;padding-bottom:12px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-start">
-  <div>
-    <div style="font-size:10px;color:#777;text-transform:uppercase">Richiesta di Offerta</div>
-    <h1 style="font-size:18px;margin:4px 0">${rdo.codice}</h1>
-    ${com ? `<div><b>Commessa:</b> ${com.codice} — ${com.nome}</div>` : ''}
-    ${com?.committente ? `<div><b>Committente:</b> ${com.committente}</div>` : ''}
-  </div>
-  ${qrUrl ? `<div style="text-align:center"><img src="${qrUrl}" width="80" height="80" style="border-radius:6px;border:1px solid #e5e7eb"/><div style="font-size:8px;color:#999;margin-top:3px">Portale offerte</div></div>` : ''}
-</div>
-<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px">
-  <span><b>Oggetto:</b> ${rdo.oggetto||'—'}</span>
-  ${rdo.fornitore ? `<span><b>A:</b> ${rdo.fornitore}</span>` : ''}
-  ${rdo.data_scadenza ? `<span><b>Scadenza:</b> ${rdo.data_scadenza}</span>` : ''}
-</div>
-${rdo.note ? `<p><b>Note:</b> ${rdo.note}</p>` : ''}
-${rows ? `<h3>Lavorazioni / Forniture</h3><table><thead><tr><th>#</th><th>Descrizione</th><th>U.M.</th><th>Quantità</th></tr></thead><tbody>${rows}</tbody></table>` : '<p style="color:#777;font-style:italic">Nessuna voce collegata.</p>'}
-<p style="margin-top:16px;font-size:11px;color:#666">Formulare offerta con prezzi unitari IVA esclusa.</p>
-${portalUrl ? `<div style="margin-top:20px;padding:12px 16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px"><b style="font-size:11px;color:#0369a1">ISTRUZIONI FORNITORE</b><p style="font-size:11px;color:#374151;margin:6px 0 4px">Compilare e inviare l'offerta tramite il portale sicuro:</p><code style="font-size:10px;color:#2563eb;word-break:break-all">${portalUrl}</code></div>` : ''}
-<div class="firma"><div class="fbox">Firma Fornitore</div><div class="fbox">Prezzo offerto €</div><div class="fbox">Note</div></div>
-<p style="margin-top:30px;font-size:9px;color:#999;border-top:1px solid #eee;padding-top:8px">${rdo.codice} · Generato il ${new Date().toLocaleDateString('it-IT')} · SQ360</p>
-</body></html>`
-    const w = window.open('','_blank')
-    if(w){w.document.write(html);w.document.close();setTimeout(()=>w.print(),400)}
   }
 
   const fLabel = (f: Fornitore) => f.ragione_sociale || ((f.nome || '') + ' ' + (f.cognome || '')).trim()

@@ -9,9 +9,10 @@ export interface SalDocProps {
     importo_certificato: number; importo_cumulativo?: number
     ritenuta_garanzia: number; importo_netto: number
     stato: string; note?: string
+    iva_pct?: number; oneri_sicurezza?: number
   }
   commessa: { codice: string; nome: string; committente?: string; importo_contratto?: number; cig?: string; cup?: string }
-  voci: { codice: string; descrizione: string; um: string; quantita_periodo: number; prezzo_unitario: number; importo_periodo: number }[]
+  voci: { codice: string; descrizione: string; um: string; quantita_periodo: number; prezzo_unitario: number; importo_periodo: number; wbs_id?: string; wbs_label?: string }[]
   aziendaDoc?: AziendaDoc
 }
 
@@ -73,6 +74,18 @@ const s = StyleSheet.create({
 export function SalDocument({ sal, commessa, voci, aziendaDoc }: SalDocProps) {
   const cumulPrec  = Math.max(0, (sal.importo_cumulativo || 0) - sal.importo_certificato)
   const totVoci    = voci.reduce((s, v) => s + v.importo_periodo, 0)
+  const ivaAmt     = sal.iva_pct ? sal.importo_netto * sal.iva_pct / 100 : 0
+  const oneri      = sal.oneri_sicurezza || 0
+
+  // Raggruppa voci per WBS (se presenti etichette diverse)
+  const wbsGroups  = voci.reduce<Record<string, typeof voci>>((acc, v) => {
+    const key = v.wbs_label || 'Senza WBS'
+    if (!acc[key]) acc[key] = []
+    acc[key].push(v)
+    return acc
+  }, {})
+  const wbsKeys    = Object.keys(wbsGroups)
+  const useGroups  = wbsKeys.length > 1
 
   return (
     <Document title={`SAL ${sal.numero} — ${commessa.nome}`} author="SQ360" subject="Stato Avanzamento Lavori">
@@ -147,13 +160,19 @@ export function SalDocument({ sal, commessa, voci, aziendaDoc }: SalDocProps) {
                 <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#111827' }}>€ {fi(sal.importo_certificato)}</Text>
               </View>
               <View style={s.ecoRowAlt}>
-                <Text style={{ fontSize: 8.5, color: '#374151' }}>Cumulativo SAL precedenti</Text>
+                <Text style={{ fontSize: 8.5, color: '#374151' }}>Cumulativo SAL precedenti (N. 1 ÷ {sal.numero - 1})</Text>
                 <Text style={{ fontSize: 9, color: '#6b7280' }}>€ {fi(cumulPrec)}</Text>
               </View>
               <View style={s.ecoRow}>
                 <Text style={{ fontSize: 8.5, color: '#374151', fontFamily: 'Helvetica-Bold' }}>Cumulativo totale avanzamento</Text>
                 <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#111827' }}>€ {fi(sal.importo_cumulativo || 0)}</Text>
               </View>
+              {oneri > 0 && (
+                <View style={s.ecoRowAlt}>
+                  <Text style={{ fontSize: 8.5, color: '#374151' }}>Di cui oneri sicurezza non ribassabili</Text>
+                  <Text style={{ fontSize: 9, color: '#059669' }}>€ {fi(oneri)}</Text>
+                </View>
+              )}
               <View style={s.ecoRowAlt}>
                 <Text style={{ fontSize: 8.5, color: '#374151' }}>Ritenuta di garanzia 5% (svincolata a collaudo)</Text>
                 <Text style={{ fontSize: 9, color: '#7c3aed' }}>(€ {fi(sal.ritenuta_garanzia)})</Text>
@@ -162,13 +181,25 @@ export function SalDocument({ sal, commessa, voci, aziendaDoc }: SalDocProps) {
                 <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#14532d' }}>NETTO DA FATTURARE</Text>
                 <Text style={{ fontSize: 12, fontFamily: 'Helvetica-Bold', color: '#059669' }}>€ {fi(sal.importo_netto)}</Text>
               </View>
+              {ivaAmt > 0 && (
+                <View style={{ ...s.ecoRow, backgroundColor: '#f8fafc' }}>
+                  <Text style={{ fontSize: 8.5, color: '#374151' }}>IVA {sal.iva_pct}%</Text>
+                  <Text style={{ fontSize: 9, color: '#374151' }}>€ {fi(ivaAmt)}</Text>
+                </View>
+              )}
+              {ivaAmt > 0 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '8 12', backgroundColor: '#f0fdf4', borderTop: '1 solid #d1fae5' }}>
+                  <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#14532d' }}>TOTALE FATTURA IVA INCLUSA</Text>
+                  <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: '#059669' }}>€ {fi(sal.importo_netto + ivaAmt)}</Text>
+                </View>
+              )}
             </View>
           </View>
 
           {/* Tabella voci */}
           {voci.length > 0 && (
             <View style={s.section}>
-              <Text style={s.sectionTitle}>Dettaglio voci nel periodo ({voci.length} voci)</Text>
+              <Text style={s.sectionTitle}>Dettaglio voci nel periodo — {voci.length} voci</Text>
               <View style={s.table}>
                 <View style={s.tableHead}>
                   <Text style={[s.tableHeadTxt, { width: 58 }]}>Codice</Text>
@@ -178,16 +209,44 @@ export function SalDocument({ sal, commessa, voci, aziendaDoc }: SalDocProps) {
                   <Text style={[s.tableHeadTxt, { width: 60, textAlign: 'right' }]}>P.U. €</Text>
                   <Text style={[s.tableHeadTxt, { width: 68, textAlign: 'right' }]}>Importo €</Text>
                 </View>
-                {voci.map((v, i) => (
-                  <View key={i} style={i % 2 === 0 ? s.tableRow : s.tableRowAlt}>
-                    <Text style={{ width: 58, fontSize: 7.5, color: '#6b7280' }}>{v.codice?.slice(0, 12)}</Text>
-                    <Text style={{ flex: 1, fontSize: 7.5, color: '#374151' }}>{v.descrizione}</Text>
-                    <Text style={{ width: 26, fontSize: 7.5, textAlign: 'center', color: '#6b7280' }}>{v.um}</Text>
-                    <Text style={{ width: 54, fontSize: 8, textAlign: 'right', fontFamily: 'Helvetica-Bold', color: '#111827' }}>{fiq(v.quantita_periodo)}</Text>
-                    <Text style={{ width: 60, fontSize: 7.5, textAlign: 'right', color: '#6b7280' }}>{fi(v.prezzo_unitario)}</Text>
-                    <Text style={{ width: 68, fontSize: 8.5, textAlign: 'right', fontFamily: 'Helvetica-Bold', color: '#1e3a5f' }}>{fi(v.importo_periodo)}</Text>
-                  </View>
-                ))}
+                {useGroups ? (
+                  wbsKeys.map(key => {
+                    const group = wbsGroups[key]
+                    const sub = group.reduce((s, v) => s + v.importo_periodo, 0)
+                    return (
+                      <View key={key}>
+                        <View style={{ flexDirection: 'row', padding: '5 8', backgroundColor: '#334155' }}>
+                          <Text style={{ fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: '#94a3b8', flex: 1 }}>📐 {key}</Text>
+                        </View>
+                        {group.map((v, i) => (
+                          <View key={i} style={i % 2 === 0 ? s.tableRow : s.tableRowAlt}>
+                            <Text style={{ width: 58, fontSize: 7.5, color: '#6b7280' }}>{v.codice?.slice(0, 12)}</Text>
+                            <Text style={{ flex: 1, fontSize: 7.5, color: '#374151' }}>{v.descrizione}</Text>
+                            <Text style={{ width: 26, fontSize: 7.5, textAlign: 'center', color: '#6b7280' }}>{v.um}</Text>
+                            <Text style={{ width: 54, fontSize: 8, textAlign: 'right', fontFamily: 'Helvetica-Bold', color: '#111827' }}>{fiq(v.quantita_periodo)}</Text>
+                            <Text style={{ width: 60, fontSize: 7.5, textAlign: 'right', color: '#6b7280' }}>{fi(v.prezzo_unitario)}</Text>
+                            <Text style={{ width: 68, fontSize: 8.5, textAlign: 'right', fontFamily: 'Helvetica-Bold', color: '#1e3a5f' }}>{fi(v.importo_periodo)}</Text>
+                          </View>
+                        ))}
+                        <View style={{ flexDirection: 'row', padding: '5 8', backgroundColor: '#eff6ff', borderTop: '1 solid #bfdbfe' }}>
+                          <Text style={{ flex: 1, fontSize: 7.5, color: '#1e40af', fontStyle: 'italic' }}>Subtotale {key}</Text>
+                          <Text style={{ fontSize: 8.5, fontFamily: 'Helvetica-Bold', color: '#1d4ed8', width: 68, textAlign: 'right' }}>€ {fi(sub)}</Text>
+                        </View>
+                      </View>
+                    )
+                  })
+                ) : (
+                  voci.map((v, i) => (
+                    <View key={i} style={i % 2 === 0 ? s.tableRow : s.tableRowAlt}>
+                      <Text style={{ width: 58, fontSize: 7.5, color: '#6b7280' }}>{v.codice?.slice(0, 12)}</Text>
+                      <Text style={{ flex: 1, fontSize: 7.5, color: '#374151' }}>{v.descrizione}</Text>
+                      <Text style={{ width: 26, fontSize: 7.5, textAlign: 'center', color: '#6b7280' }}>{v.um}</Text>
+                      <Text style={{ width: 54, fontSize: 8, textAlign: 'right', fontFamily: 'Helvetica-Bold', color: '#111827' }}>{fiq(v.quantita_periodo)}</Text>
+                      <Text style={{ width: 60, fontSize: 7.5, textAlign: 'right', color: '#6b7280' }}>{fi(v.prezzo_unitario)}</Text>
+                      <Text style={{ width: 68, fontSize: 8.5, textAlign: 'right', fontFamily: 'Helvetica-Bold', color: '#1e3a5f' }}>{fi(v.importo_periodo)}</Text>
+                    </View>
+                  ))
+                )}
                 <View style={s.tableRowTot}>
                   <Text style={{ flex: 1, fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#93c5fd' }}>Totale periodo</Text>
                   <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: '#4ade80', width: 68, textAlign: 'right' }}>€ {fi(totVoci)}</Text>

@@ -220,7 +220,9 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
   const [qtInput, setQtInput] = useState<Record<string,number>>({})
   const [qtPerSal, setQtPerSal] = useState<Record<string,Record<string,number>>>({})
   const [qtCumul, setQtCumul] = useState<Record<string,number>>({})
-  const [sicInternaEsclusa, setSicInternaEsclusa] = useState<boolean>(true) // default: non ribassabile
+  const [sicInternaEsclusa, setSicInternaEsclusa] = useState<boolean>(true)
+  const [commessaInfo, setCommessaInfo] = useState<{ codice: string; nome: string; committente?: string; importo_contratto?: number; cig?: string; cup?: string } | null>(null)
+  const [aziendaDoc, setAziendaDoc] = useState<any>(null)
 
   const [fontSize, setFontSize] = useState<number>(() => {
     if (typeof window !== 'undefined') {
@@ -265,6 +267,56 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
     return quotaLavori + quotaSicurezza
   }
 
+  // ─── Download PDF SAL ────────────────────────────────────────────────────
+
+  const downloadSalPdf = async () => {
+    if (!salSel) return
+    showToast('⏳ Generando PDF...')
+    try {
+      const { data: salData } = await supabase.from('sal')
+        .select('id,numero,codice,data_emissione,importo_certificato,importo_cumulativo,ritenuta_garanzia,importo_netto,stato,note')
+        .eq('id', salSel.id).single()
+      if (!salData) { showToast('SAL non trovato'); return }
+      const qtSaved = qtPerSal[salSel.id] || qtInput
+      const vociPdf = Object.entries(qtSaved)
+        .filter(([, q]) => (q as number) > 0)
+        .map(([vid, q]) => {
+          const voce = voci.find((v: any) => v.id === vid)
+          if (!voce) return null
+          return {
+            codice: voce.codice,
+            descrizione: voce.descrizione,
+            um: voce.um,
+            quantita_periodo: q as number,
+            prezzo_unitario: voce.prezzo_unitario,
+            importo_periodo: calcolaImportoSAL(voce, q as number),
+            wbs_id: voce.wbs_id,
+            wbs_label: voce.wbs_label,
+          }
+        }).filter((v): v is NonNullable<typeof v> => v !== null)
+      const [pdfrMod, docMod] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/pdf/SalDocument'),
+      ])
+      const element = React.createElement(docMod.SalDocument, {
+        sal: salData as any,
+        commessa: commessaInfo || { codice: id, nome: id },
+        voci: vociPdf,
+        aziendaDoc,
+      })
+      const blob = await pdfrMod.pdf(element as any).toBlob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `SAL-${(salData as any).numero}-${commessaInfo?.codice || id}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+      showToast('✓ PDF scaricato')
+    } catch (e: any) {
+      showToast('Errore PDF: ' + e.message)
+    }
+  }
+
   // ─── Alert riserva 15gg (DM 49/2018 art. 23) ────────────────────────────
 
   function alertRiserva(sal: { stato: string; data_emissione: string }) {
@@ -300,13 +352,14 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
         supabase.from('rda').select('id,wbs_id,stato,tipo').eq('commessa_id', id),
         supabase.from('analisi_prezzi_tariffa').select('*').eq('commessa_id', id),
         supabase.from('analisi_extra_voce').select('*').eq('commessa_id', id),
-        supabase.from('commesse').select('sicurezza_interna_esclusa_ribasso').eq('id', id).single(),
+        supabase.from('commesse').select('codice,nome,committente,importo_contratto,cig,cup,sicurezza_interna_esclusa_ribasso').eq('id', id).single(),
       ])
       if (v) { setVoci(v); setTotale(v.reduce((s, x) => s + (x.importo || 0), 0)) }
       if (rda) setRdaList(rda as RDADB[])
       if (analisiData) setAnalisi(analisiData as AnalisiPrezzo[])
       if (extraData) setAnalisiExtra(extraData as AnalisiExtraVoce[])
       setSicInternaEsclusa((comm as any)?.sicurezza_interna_esclusa_ribasso ?? true)
+      if (comm) setCommessaInfo({ codice: (comm as any).codice || '', nome: (comm as any).nome || '', committente: (comm as any).committente, importo_contratto: (comm as any).importo_contratto, cig: (comm as any).cig, cup: (comm as any).cup })
 
       // Carica SAL e quantità certificate
       const { data: sals } = await supabase
@@ -338,6 +391,14 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
       if (aziendaId) loadWbs(supabase, id, aziendaId).then(setWbsFlat)
     })
   }, [id])
+
+  useEffect(() => {
+    getAziendaId().then(async azId => {
+      if (!azId) return
+      const { data } = await supabase.from('aziende').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', azId).single()
+      setAziendaDoc(data || null)
+    })
+  }, [])
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -983,6 +1044,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
               ))
               showToast('✓ SAL salvato')
             }} style={{ padding: '4px 12px', background: 'rgba(52,211,153,.2)', border: '1px solid rgba(52,211,153,.3)', borderRadius: 6, color: '#34d399', fontSize: 11, fontWeight: 600, cursor: 'pointer', visibility: salSel ? 'visible' : 'hidden', pointerEvents: salSel ? 'auto' : 'none', flexShrink: 0 }}>💾 Salva SAL</button>
+            <button onClick={downloadSalPdf} style={{ padding: '4px 12px', background: 'rgba(139,92,246,.2)', border: '1px solid rgba(139,92,246,.3)', borderRadius: 6, color: '#a78bfa', fontSize: 11, fontWeight: 600, cursor: 'pointer', visibility: salSel ? 'visible' : 'hidden', pointerEvents: salSel ? 'auto' : 'none', flexShrink: 0 }}>🖨️ PDF</button>
           </div>
 
           {/* ALERT RISERVA 15GG — DM 49/2018 art. 23 */}
