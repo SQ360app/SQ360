@@ -504,6 +504,12 @@
   CREATE POLICY "azienda_wbs_nodes" ON wbs_nodes USING (azienda_id = get_azienda_id());
   ```
 
+### Sessione 28 Maggio 2026 — Permessi sotto-moduli commessa (commit 0b84332)
+- ✅ `commesse/[id]/layout.tsx`: carica `moduli_abilitati` via `getCurrentUserModuli()` al mount; filtra tab e gruppi pill per permessi; redirect automatico ad `/anagrafica` se URL diretto a modulo disabilitato; admin (`ruolo === 'admin'`) vede sempre tutto
+- ✅ Mappa 16 href → chiave `moduli_abilitati`: computo/elenco-prezzi/rda/rdo/dam→sam/oda/sal-attivi/sal-passivi/cantiere/sicurezza/persone/fatturazione/conto-economico→economico/contratti/varianti/ordini-servizio; tutti gli altri href (anagrafica, documenti, ddt, archivio…) sempre visibili
+- ✅ `DEPLOY.md` creato: elenco completo env var Vercel (Supabase URL/anon/service_role, Gemini, Resend, Cron, Mapbox)
+- ✅ `/api/invite-user/route.ts`: commento esplicito su `SUPABASE_SERVICE_ROLE_KEY` richiesta
+
 ## Prossimi task prioritari
 1. **SQL migrations da eseguire su Supabase** (se non già fatto):
    - `CREATE TABLE wbs_templates` e `wbs_nodes` con RLS — vedi sessione 28 Maggio 2026 sopra
@@ -590,7 +596,7 @@
 - Tabella `voci_computo_misurazioni`: `id uuid`, `voce_id uuid FK`, `commessa_id uuid FK`, `nr numeric`, `lunghezza numeric`, `larghezza numeric`, `h_peso numeric`, `quantita numeric`, `nota text`, `ordine int`; delete+insert ad ogni reimport XPWE
 - Campo `manuale boolean DEFAULT false` su `voci_computo` — segna voci aggiunte tramite `✚ Voce da EP` (non da import XPWE)
 - Tabelle Sprint 6 subappalti (da creare se non esistono): `documenti_contratto_sub` (tipo, url, nome_file, data_scadenza, extra JSONB), `lavoratori_sub` (nome, cognome, cf, documenti), `pagamenti_sub` (data, importo_lordo, ritenuta_pct, importo_netto, tipo)
-- Pattern navigazione layout commessa: `GRUPPI` array con `id`, `color`, `bg`, `border`, `tabs[]` — gruppo attivo rilevato da `pathname.startsWith(base + '/' + t.href)`
+- Pattern navigazione layout commessa: `GRUPPI` array con `id`, `color`, `bg`, `border`, `tabs[]` — gruppo attivo rilevato da `pathname.startsWith(base + '/' + t.href)`; `MODULO_KEY` mappa href → chiave `moduli_abilitati`; `gruppiVisibili` filtra sia gruppi che tab; redirect automatico ad `/anagrafica` se modulo disabilitato; admin escluso dal filtro
 - Tabella `migliorie`: `gara_id`, `commessa_id`, `azienda_id`, `categoria`, `descrizione`, `costo_stimato`, `costo_effettivo`, `punteggio_tecnico_stimato`, `note`, `offerta` bool, `fase` ('gara'|'commessa'), `stato` (contrattuale|da_eseguire|in_esecuzione|completata|verificata_dl)
 - Checklist offerta gare: persistita in `localStorage('checklist-{gara_id}')` — non in DB
 - Tabella `sal`: `pdf_dl_url text`, `pdf_certificato_url text` (da aggiungere se mancanti)
