@@ -404,6 +404,12 @@
 - ✅ 17 codici stazione appaltante
 - ✅ Generatore automatico con RPC Supabase
 
+### Sessione 28 Maggio 2026 — RDO PDF + Verbale Consegna Lavori (commit 236395b)
+- ✅ `RdoDocument.tsx`: già presente e completo — carta intestata, CIG/CUP, voci RDA, QR portale offerte, spazio firma fornitore
+- ✅ `rdo/page.tsx`: `generaPdf()` + pulsante `📄 PDF` già presenti con import dinamico `@react-pdf/renderer`
+- ✅ `VerbaleConsegnaDocument.tsx` (nuovo): PDF "VERBALE DI CONSEGNA LAVORI" ai sensi D.Lgs.36/2023 art.114 + D.M.49/2018 art.5 — dati opera, figure presenti (RUP/DL/CSE/Capocantiere/RSPP), dichiarazione consegna, nota normativa, note libere, 4 spazi firma
+- ✅ `anagrafica/page.tsx`: aggiunto `aziendaDoc` state + loader da `aziende`; `generaVerbale()` che raccoglie figure dalla state e genera il PDF; pulsante `📄 Verbale consegna` in header actions
+
 ### Sessione 28 Maggio 2026 — Fix bug critici prompt 1
 - ✅ **BUG 1** `fornitori/page.tsx`: INSERT contatto ora controlla l'errore; se fallisce mostra toast e blocca senza chiudere il form; rimosso `console.log` debug
 - ✅ **BUG 2** `rda/page.tsx` `creaRDOMulti`: aggiunto `wbs_id: wizardRda.wbs_id` nel payload INSERT delle RDO — il campo non si perdeva più al passaggio RDA→RDO
@@ -413,6 +419,15 @@
 - ✅ **BUG 6** `mappa/page.tsx`: banner errore Mapbox già presente — nessuna modifica necessaria (token mancante mostra overlay ⚠️ centrato)
 - ✅ **BUG 7** `computo/page.tsx`: aggiunto `visibile_in_computo` a interfaccia + query con filtro `.or('visibile_in_computo.is.null,visibile_in_computo.eq.true')`; voci XPWE (`manuale !== true`) → quantità e PU non editabili al doppio-click; badge 🔒 grigio accanto al PU; pulsante 🗑 misurazioni nascosto
 - ✅ **BUG 7** `varianti/page.tsx` `cambiaStato`: quando variante → `esecutiva`, esegue `UPDATE voci_computo SET visibile_in_computo = true WHERE variante_id = id`
+
+### Sessione 26 Maggio 2026 — commit f73ea2b
+- ✅ fornitori/page.tsx: fix contatto non appare dopo salvataggio — error handling corretto su INSERT
+- ✅ rda/page.tsx: `wbs_id` propagato da RDA a RDO nel payload `creaRDOMulti`
+- ✅ rda/page.tsx: badge "⚠ WBS mancante" arancio su RDA senza WBS
+- ✅ impostazioni/page.tsx: pannello si chiude dopo salvataggio
+- ✅ mappa/page.tsx: banner errore token Mapbox già presente confermato
+- ✅ computo/page.tsx: filtro `visibile_in_computo=TRUE`; voci XPWE read-only con badge 🔒; misurazioni non eliminabili su voci XPWE
+- ✅ varianti/page.tsx: approvazione variante → `visibile_in_computo=TRUE` su voci collegate
 
 ### Sessione 26 Maggio 2026 (commit 7d2c714)
 - ✅ xpwe-parse/route.ts: parsing `<Misure>`/`<MisureItem>` per ogni voce → salvataggio in `voci_computo_misurazioni` con formula NR × Lung × Larg × HPeso
