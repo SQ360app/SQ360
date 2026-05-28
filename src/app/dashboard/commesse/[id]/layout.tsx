@@ -2,8 +2,28 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter, usePathname } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { supabase, getCurrentUserModuli } from '@/lib/supabase'
 import { ArrowLeft, Trash2 } from 'lucide-react'
+
+// href tab → chiave moduli_abilitati (null = sempre visibile)
+const MODULO_KEY: Record<string, string | null> = {
+  'computo':         'computo',
+  'elenco-prezzi':   'elenco_prezzi',
+  'rda':             'rda',
+  'rdo':             'rdo',
+  'dam':             'sam',
+  'oda':             'oda',
+  'sal-attivi':      'sal_attivi',
+  'sal-passivi':     'sal_passivi',
+  'cantiere':        'cantiere',
+  'sicurezza':       'sicurezza',
+  'persone':         'persone',
+  'fatturazione':    'fatturazione',
+  'conto-economico': 'economico',
+  'contratti':       'contratti',
+  'varianti':        'varianti',
+  'ordini-servizio': 'ordini_servizio',
+}
 
 interface Commessa {
   id: string; codice: string; nome: string
@@ -83,16 +103,45 @@ export default function CommessaLayout({ children }: { children: React.ReactNode
   const { id } = useParams() as { id: string }
   const router   = useRouter()
   const pathname = usePathname()
-  const [commessa,           setCommessa]           = useState<Commessa | null>(null)
-  const [showDeleteConfirm,  setShowDeleteConfirm]  = useState(false)
-  const [deleting,           setDeleting]           = useState(false)
+  const base = '/dashboard/commesse/' + id
+
+  const [commessa,          setCommessa]          = useState<Commessa | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting,          setDeleting]          = useState(false)
+  const [moduli,            setModuli]            = useState<Record<string, boolean>>({})
+  const [ruolo,             setRuolo]             = useState('')
+  const [moduliLoaded,      setModuliLoaded]      = useState(false)
 
   useEffect(() => {
     supabase.from('commesse')
       .select('id,codice,nome,stato,importo_contratto,committente')
       .eq('id', id).single()
       .then(({ data }) => setCommessa(data))
+    getCurrentUserModuli().then(({ moduli: m, ruolo: r }) => {
+      setModuli(m)
+      setRuolo(r)
+      setModuliLoaded(true)
+    })
   }, [id])
+
+  // Redirect se l'utente accede direttamente a un sotto-modulo non abilitato
+  useEffect(() => {
+    if (!moduliLoaded || ruolo === 'admin') return
+    const allTabs = GRUPPI.flatMap(g => g.tabs)
+    const currentTab = allTabs.find(t => pathname.startsWith(base + '/' + t.href))
+    if (!currentTab) return
+    const key = MODULO_KEY[currentTab.href]
+    if (key && moduli[key] === false) {
+      router.replace(base + '/anagrafica')
+    }
+  }, [moduliLoaded, pathname, base, moduli, ruolo])
+
+  function isTabVisible(href: string): boolean {
+    if (ruolo === 'admin' || !moduliLoaded) return true
+    const key = MODULO_KEY[href]
+    if (key === undefined || key === null) return true
+    return moduli[key] !== false
+  }
 
   async function handleDelete() {
     setDeleting(true)
@@ -101,16 +150,19 @@ export default function CommessaLayout({ children }: { children: React.ReactNode
     router.push('/dashboard/commesse')
   }
 
-  const base = '/dashboard/commesse/' + id
+  // Gruppi e tab filtrati per permessi
+  const gruppiVisibili = GRUPPI.map(g => ({
+    ...g,
+    tabs: g.tabs.filter(t => isTabVisible(t.href)),
+  })).filter(g => g.tabs.length > 0)
 
-  // Detect active group and active tab from pathname
-  const activeGruppo = GRUPPI.find(g =>
+  const activeGruppo = gruppiVisibili.find(g =>
     g.tabs.some(t => pathname.startsWith(base + '/' + t.href))
-  ) || GRUPPI[0]
+  ) || gruppiVisibili[0] || GRUPPI[0]
 
   const activeTabHref = activeGruppo.tabs.find(t =>
     pathname.startsWith(base + '/' + t.href)
-  )?.href || activeGruppo.tabs[0].href
+  )?.href || activeGruppo.tabs[0]?.href || ''
 
   const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })
   const statoColor = commessa ? (STATI_COLOR[commessa.stato] || '#6b7280') : '#6b7280'
@@ -154,7 +206,7 @@ export default function CommessaLayout({ children }: { children: React.ReactNode
 
         {/* RIGA 1 — Gruppi pill */}
         <div style={{ display: 'flex', gap: 4, padding: '5px 16px', overflowX: 'auto', scrollbarWidth: 'none' }}>
-          {GRUPPI.map(g => {
+          {gruppiVisibili.map(g => {
             const isActive = g.id === activeGruppo.id
             return (
               <button key={g.id}
@@ -178,7 +230,7 @@ export default function CommessaLayout({ children }: { children: React.ReactNode
           })}
         </div>
 
-        {/* RIGA 2 — Sotto-tab del gruppo attivo */}
+        {/* RIGA 2 — Sotto-tab del gruppo attivo (già filtrati per permessi) */}
         <div style={{ display: 'flex', gap: 0, padding: '0 16px', overflowX: 'auto', scrollbarWidth: 'none', borderTop: `2px solid ${activeGruppo.bg}` }}>
           {activeGruppo.tabs.map(t => {
             const isActive = t.href === activeTabHref

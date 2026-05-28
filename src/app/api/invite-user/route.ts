@@ -1,3 +1,5 @@
+// Richiede SUPABASE_SERVICE_ROLE_KEY
+// su Vercel → Settings → Environment Variables
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
