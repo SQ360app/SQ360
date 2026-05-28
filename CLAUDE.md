@@ -469,8 +469,44 @@
 - ✅ **FIX 1** `xpwe-parse/route.ts`: delete `voci_computo_misurazioni` SEMPRE prima di reimport (non solo se il nuovo XPWE ha misurazioni) — evita orfane quando si reimporta un XPWE senza `<Misure>`
 - ✅ **FIX 2** `computo/page.tsx`: riga statica `mi` quando nessuna misurazione in DB — mostra testo "misura da XPWE" (non più `v.note?.split('>')`) + `+ mis` per aggiungere manualmente
 
+### Sessione 28 Maggio 2026 — WBS personalizzabile (commit d5293d4)
+- ✅ `wbs.ts`: aggiunto `template_id?: string` su `WbsNode` — traccia da quale voce `wbs_templates` proviene il nodo
+- ✅ `wbsLoader.ts`: `dbToNode()` unificato (supporta `descrizione` nuovo + `etichetta` legacy); `loadWbs()` con 4 livelli di fallback: `wbs_nodes` → `wbs_commessa` → `wbs_templates` → `wbs_template` → `DEFAULT_WBS_FLAT`; `loadWbsNodes()` tipato per tutte e 4 le tabelle; `buildWbsInsertPayload()` nuovo export — ricalcola codici e mappa `etichetta→descrizione`
+- ✅ `impostazioni/page.tsx`: editor template WBS aziendale salva su `wbs_templates` (nuova) + "📋 Carica WBS edilizia" pre-popola 5 categorie + "Applica a tutte le commesse" scrive su `wbs_nodes` per ogni commessa dell'azienda
+- ✅ `anagrafica/page.tsx`: WBS commessa ora salva su `wbs_nodes` (nuova) con fallback a `wbs_commessa` in lettura; "📋 Importa da template aziendale" carica da `wbs_templates`, remappa UUID, imposta `template_id`; dot grigio `●` per nodi importati da template; banner vuoto-stato se WBS non configurata
+- ⚠️ **SQL da eseguire su Supabase**:
+  ```sql
+  CREATE TABLE IF NOT EXISTS wbs_templates (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    azienda_id UUID NOT NULL REFERENCES aziende(id) ON DELETE CASCADE,
+    codice VARCHAR(20) NOT NULL,
+    descrizione VARCHAR(200) NOT NULL,
+    parent_id UUID REFERENCES wbs_templates(id),
+    ordine INTEGER DEFAULT 0,
+    colore VARCHAR(7),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+  CREATE TABLE IF NOT EXISTS wbs_nodes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    commessa_id UUID NOT NULL REFERENCES commesse(id) ON DELETE CASCADE,
+    azienda_id UUID NOT NULL REFERENCES aziende(id) ON DELETE CASCADE,
+    codice VARCHAR(20) NOT NULL,
+    descrizione VARCHAR(200) NOT NULL,
+    parent_id UUID REFERENCES wbs_nodes(id),
+    template_id UUID REFERENCES wbs_templates(id),
+    ordine INTEGER DEFAULT 0,
+    colore VARCHAR(7),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+  ALTER TABLE wbs_templates ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE wbs_nodes ENABLE ROW LEVEL SECURITY;
+  CREATE POLICY "azienda_wbs_templates" ON wbs_templates USING (azienda_id = get_azienda_id());
+  CREATE POLICY "azienda_wbs_nodes" ON wbs_nodes USING (azienda_id = get_azienda_id());
+  ```
+
 ## Prossimi task prioritari
 1. **SQL migrations da eseguire su Supabase** (se non già fatto):
+   - `CREATE TABLE wbs_templates` e `wbs_nodes` con RLS — vedi sessione 28 Maggio 2026 sopra
    - `ALTER TABLE sal ADD COLUMN IF NOT EXISTS pdf_dl_url text, pdf_certificato_url text`
    - `ALTER TABLE voci_computo ADD COLUMN IF NOT EXISTS sic_interna_importo numeric DEFAULT 0, sic_interna_percentuale numeric DEFAULT 0`
    - `ALTER TABLE voci_computo ADD COLUMN IF NOT EXISTS manuale BOOLEAN DEFAULT FALSE`
@@ -531,10 +567,11 @@
 39. ~~Performance: virtualizzazione computo + paginazione ODA/DDT/fatture~~ ✅
 40. ~~PWA installabile — service worker statico + banner installazione~~ ✅
 41. ~~Misurazioni XPWE reali nel computo + tariffa manuale EP (concordato DL / NP codes) + voce manuale da EP~~ ✅
-42. Registro di contabilità (libro giornale lavori strutturato) 📋
-42. Export completo commessa in formato ZIP strutturato 📋
-43. Knowledge base AI edile (normativa D.Lgs. 36/2023, prezzari regionali) 📋
-44. Billing e piani tariffari (Stripe integration) 📋
+42. ~~WBS personalizzabile: template aziendale (wbs_templates) + WBS per commessa (wbs_nodes) con import da template, dot indicatore, fallback 4 livelli~~ ✅
+43. Registro di contabilità (libro giornale lavori strutturato) 📋
+44. Export completo commessa in formato ZIP strutturato 📋
+45. Knowledge base AI edile (normativa D.Lgs. 36/2023, prezzari regionali) 📋
+46. Billing e piani tariffari (Stripe integration) 📋
 
 ## Architettura moduli specifici
 - **Mappa cantieri**: Mapbox (`react-map-gl`) stile `satellite-streets-v12`. Pin SVG colorati per avanzamento SAL (blu 0% / giallo 1-33% / arancio 34-66% / verde 67-99% / grigio 100% / rosso in_ritardo). Dati da view `v_commesse_kpi`. Token: `NEXT_PUBLIC_MAPBOX_TOKEN=pk.xxx` in `.env.local` (da aggiungere manualmente — senza token mostra banner di errore, non crasha). Implementazione completa in `src/app/dashboard/mappa/page.tsx` (commit 9a2fa6a).
@@ -546,6 +583,9 @@
 - Tutti i moduli salvano `azienda_id` negli INSERT; RLS attivo su DB garantisce isolamento completo
 - Tabella `utenti`: `id` = `auth.uid`, `azienda_id` FK, `email`, `nome`, `cognome`, `ruolo` (admin/user)
 - Tabella `aziende`: `id`, `nome`, `piva`, `cf`, `provincia`, `created_at`, `logo_url`, `carta_intestata_header_url`, `carta_intestata_footer_url`, `codice_separatore`
+- Tabella `wbs_templates`: `id uuid PK`, `azienda_id uuid FK`, `codice varchar(20)`, `descrizione varchar(200)`, `parent_id uuid FK self-ref`, `ordine int`, `colore varchar(7)` — template WBS aziendale (nuova, sostituisce `wbs_template` legacy con `etichetta`)
+- Tabella `wbs_nodes`: `id uuid PK`, `commessa_id uuid FK`, `azienda_id uuid FK`, `codice varchar(20)`, `descrizione varchar(200)`, `parent_id uuid FK self-ref`, `template_id uuid FK → wbs_templates`, `ordine int`, `colore varchar(7)` — WBS specifica per commessa (nuova, sostituisce `wbs_commessa` legacy con `etichetta`)
+- WBS architettura: 2 livelli — template aziendale (`wbs_templates`) + WBS commessa (`wbs_nodes`); `loadWbs()` usa chain di fallback a 4 livelli; `buildWbsInsertPayload()` calcola codici e mappa `etichetta→descrizione` prima dell'INSERT; `template_id` su WbsNode traccia origine import
 - Tabella `elenco_prezzi`: `codice`, `descrizione`, `um`, `prezzo_unitario`, `fonte` ('prezzario'|'prezzo_nuovo'|'variante'|'concordato_dl'), `prezzario_riferimento`, `anno_prezzario`, `approvato_da`, `data_approvazione`, `variante_id`, `note`, `manuale boolean DEFAULT false`; fonte `concordato_dl` auto-genera codici `NP/001`, `NP/002`...
 - Tabella `voci_computo_misurazioni`: `id uuid`, `voce_id uuid FK`, `commessa_id uuid FK`, `nr numeric`, `lunghezza numeric`, `larghezza numeric`, `h_peso numeric`, `quantita numeric`, `nota text`, `ordine int`; delete+insert ad ogni reimport XPWE
 - Campo `manuale boolean DEFAULT false` su `voci_computo` — segna voci aggiunte tramite `✚ Voce da EP` (non da import XPWE)
