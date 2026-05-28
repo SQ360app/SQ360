@@ -510,8 +510,48 @@
 - ✅ `DEPLOY.md` creato: elenco completo env var Vercel (Supabase URL/anon/service_role, Gemini, Resend, Cron, Mapbox)
 - ✅ `/api/invite-user/route.ts`: commento esplicito su `SUPABASE_SERVICE_ROLE_KEY` richiesta
 
+### Sessione 28 Maggio 2026 — Modulo contratto autonomo + Nuovi Prezzi + Riserve (commit 0d0b570)
+- ✅ `layout.tsx`: Contratto assorbe Varianti/OS/Nuovi Prezzi/Riserve; Acquisti assorbe Contratti Sub; ex-Contrattuale diventa `extra` "Extra ⭐" con solo Migliorie
+- ✅ `nuovi-prezzi/page.tsx` (nuovo): KPI 3 card; lista NP con stati proposta→in_negoziazione→concordato→inserito_ep; PDF verbale concordamento (@react-pdf); bottone "→ EP" crea voce in `elenco_prezzi` con fonte='concordato_dl' e codice NP/auto; collegamento a variante o OS
+- ✅ `riserve/page.tsx` (nuovo): KPI 4 card; alert banner rosso se scadenza ≤7gg; accordion con stati iscritta→in_discussione→accettata/respinta/arbitrato; importo riconosciuto editabile on-blur; modal con scadenza default +30gg; collegamento a SAL numero o OS
+- ⚠️ **SQL da eseguire su Supabase**:
+  ```sql
+  CREATE TABLE IF NOT EXISTS nuovi_prezzi (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    commessa_id UUID NOT NULL REFERENCES commesse(id),
+    azienda_id UUID NOT NULL REFERENCES aziende(id),
+    codice VARCHAR(20), descrizione TEXT NOT NULL, um VARCHAR(20),
+    pu_proposto NUMERIC(12,4), pu_concordato NUMERIC(12,4),
+    stato VARCHAR(30) DEFAULT 'proposta',
+    variante_id UUID REFERENCES varianti(id),
+    ordine_servizio_id UUID REFERENCES ordini_servizio(id),
+    note TEXT, data_proposta DATE DEFAULT CURRENT_DATE,
+    data_concordamento DATE, concordato_da VARCHAR(150),
+    pdf_verbale_url TEXT, created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+  ALTER TABLE nuovi_prezzi ENABLE ROW LEVEL SECURITY;
+  CREATE POLICY "np_auth" ON nuovi_prezzi FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+  CREATE TABLE IF NOT EXISTS riserve (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    commessa_id UUID NOT NULL REFERENCES commesse(id),
+    azienda_id UUID NOT NULL REFERENCES aziende(id),
+    numero INTEGER, descrizione TEXT NOT NULL,
+    importo_richiesto NUMERIC(15,2), importo_riconosciuto NUMERIC(15,2),
+    riferimento_normativo TEXT, iscrizione_su VARCHAR(20) DEFAULT 'sal',
+    sal_numero INTEGER, ordine_servizio_id UUID REFERENCES ordini_servizio(id),
+    stato VARCHAR(30) DEFAULT 'iscritta',
+    data_iscrizione DATE DEFAULT CURRENT_DATE,
+    data_scadenza_risposta DATE, data_chiusura DATE,
+    note TEXT, pdf_url TEXT, created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+  ALTER TABLE riserve ENABLE ROW LEVEL SECURITY;
+  CREATE POLICY "riserve_auth" ON riserve FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  ```
+
 ## Prossimi task prioritari
 1. **SQL migrations da eseguire su Supabase** (se non già fatto):
+   - `CREATE TABLE nuovi_prezzi` + `CREATE TABLE riserve` con RLS — vedi sessione 28 Maggio 2026 sopra
    - `CREATE TABLE wbs_templates` e `wbs_nodes` con RLS — vedi sessione 28 Maggio 2026 sopra
    - `ALTER TABLE sal ADD COLUMN IF NOT EXISTS pdf_dl_url text, pdf_certificato_url text`
    - `ALTER TABLE voci_computo ADD COLUMN IF NOT EXISTS sic_interna_importo numeric DEFAULT 0, sic_interna_percentuale numeric DEFAULT 0`
