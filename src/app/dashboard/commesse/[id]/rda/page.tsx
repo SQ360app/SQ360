@@ -286,6 +286,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
         data_scadenza: wizardScadenza || null,
         note: wizardNote,
         importo_offerta: 0,
+        wbs_id: wizardRda.wbs_id || null,
         wbs_ref: wizardRda.wbs_ref || null,
         codice: `RDO-${gruppoId.slice(0, 8).toUpperCase()}-${f.id.slice(0, 4).toUpperCase()}`,
       }))
@@ -441,7 +442,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
                     onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
                     <td style={{ ...(styleObj as any).td, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>
                       {displayCodice(r)}
-                      {!r.wbs_ref && <span style={{ display:'inline-block', fontSize:9, fontWeight:700, padding:'1px 5px', borderRadius:4, background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', marginLeft:4 }}>⚠️ WBS</span>}
+                      {!r.wbs_ref && <span style={{ display:'inline-block', fontSize:9, fontWeight:700, padding:'1px 5px', borderRadius:4, background:'#fff7ed', color:'#c2410c', border:'1px solid #fed7aa', marginLeft:4 }}>⚠ WBS mancante</span>}
                       {r.wbs_ref && <span style={{ display:'block', fontSize:9, color:'var(--t3)', marginTop:1 }}>WBS: {r.wbs_ref}</span>}
                       {r.rda_origine_id && (() => {
                         const parent = allRda.find(x => x.id === r.rda_origine_id)

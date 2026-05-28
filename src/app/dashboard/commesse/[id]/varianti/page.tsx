@@ -126,6 +126,7 @@ export default function VariantiPage({ params: pp }: { params: Promise<{ id: str
       const nuovoImporto = importoContratto + (variante.importo_variante || 0)
       await supabase.from('commesse').update({ importo_contratto: nuovoImporto }).eq('id', id)
       setImportoContratto(nuovoImporto)
+      await supabase.from('voci_computo').update({ visibile_in_computo: true }).eq('variante_id', varianteId)
     }
     await supabase.from('varianti').update(updates).eq('id', varianteId)
     await load()

@@ -306,9 +306,9 @@ export default function ImpostazioniPage() {
       soa_categorie:     azienda.soa_categorie || null,
       patente_punteggio: azienda.patente_crediti || null,
     }).eq('id', aziendaId)
+    setEditingAzienda(false)
     if (error) { alert('Errore salvataggio: ' + error.message); return }
     setSavedOk(true)
-    setEditingAzienda(false)
     setTimeout(() => setSavedOk(false), 2000)
   }
 

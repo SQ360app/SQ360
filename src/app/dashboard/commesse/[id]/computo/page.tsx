@@ -13,6 +13,7 @@ interface VoceDB {
   wbs_id?: string; wbs_label?: string
   sic_interna_importo?: number; sic_interna_percentuale?: number
   manuale?: boolean
+  visibile_in_computo?: boolean
 }
 interface Misurazione {
   id: string; voce_id: string; commessa_id: string
@@ -271,8 +272,10 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
 
       const [{ data: v }, { data: rda }, { data: analisiData }, { data: extraData }, { data: misData }] = await Promise.all([
         supabase.from('voci_computo')
-          .select('id,codice,descrizione,um,quantita,prezzo_unitario,importo,capitolo,categoria,note,wbs_id,wbs_label,sic_interna_importo,sic_interna_percentuale,manuale')
-          .eq('computo_id', computo.id).order('capitolo').order('codice'),
+          .select('id,codice,descrizione,um,quantita,prezzo_unitario,importo,capitolo,categoria,note,wbs_id,wbs_label,sic_interna_importo,sic_interna_percentuale,manuale,visibile_in_computo')
+          .eq('computo_id', computo.id)
+          .or('visibile_in_computo.is.null,visibile_in_computo.eq.true')
+          .order('capitolo').order('codice'),
         supabase.from('rda').select('id,wbs_id,stato,tipo').eq('commessa_id', id),
         supabase.from('analisi_prezzi_tariffa').select('*').eq('commessa_id', id),
         supabase.from('analisi_extra_voce').select('*').eq('commessa_id', id),
@@ -1162,6 +1165,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                           <td className="cmp-td-edit"
                             onClick={e => {
                               e.stopPropagation()
+                              if (v.manuale !== true) return
                               const now = Date.now()
                               const prev = dblClickRef.current
                               if (prev && prev.id === v.id && prev.field === 'quantita' && now - prev.t < 400) {
@@ -1185,6 +1189,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                           <td className="cmp-td-edit"
                             onClick={e => {
                               e.stopPropagation()
+                              if (v.manuale !== true) return
                               const now = Date.now()
                               const prev = dblClickRef.current
                               if (prev && prev.id === v.id && prev.field === 'prezzo_unitario' && now - prev.t < 400) {
@@ -1204,6 +1209,12 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                             ) : (
                               <span style={{ fontSize: 10, fontFamily: 'monospace', display: 'block', textAlign: 'right' }}>
                                 {fi(v.prezzo_unitario)}
+                                {v.manuale !== true && (
+                                  <span title="Voce da XPWE — PU e quantità non modificabili"
+                                    style={{ display: 'inline-block', fontSize: 7, background: '#f3f4f6', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 2, padding: '0px 3px', marginLeft: 3, cursor: 'help', verticalAlign: 'middle', fontFamily: 'sans-serif' }}>
+                                    🔒
+                                  </span>
+                                )}
                                 {(v.sic_interna_importo || 0) > 0 && (
                                   <span
                                     title={`Quota sicurezza interna non soggetta a ribasso se configurato nel capitolato. Importo: €${fi(v.sic_interna_importo || 0)}/um (${fi(v.sic_interna_percentuale || 0)}%)`}
@@ -1270,8 +1281,10 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                                 <td style={{ textAlign: 'right', fontWeight: 600, fontSize: 10, fontFamily: 'monospace' }}>{f3(m.quantita)}</td>
                                 <td />
                                 <td style={{ textAlign: 'center' }}>
-                                  <button onClick={e => { e.stopPropagation(); eliminaMisurazione(m.id, v.id) }}
-                                    style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 11, padding: 0 }}>🗑</button>
+                                  {v.manuale === true && (
+                                    <button onClick={e => { e.stopPropagation(); eliminaMisurazione(m.id, v.id) }}
+                                      style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 11, padding: 0 }}>🗑</button>
+                                  )}
                                 </td>
                                 <td /><td /><td /><td />
                               </tr>

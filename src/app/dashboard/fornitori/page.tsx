@@ -699,8 +699,8 @@ export default function ContattiPage() {
     } else {
       const azId = await getAziendaId()
       const payload = { ...form, azienda_id: azId, attivo: true }
-      console.log('[INSERT contatto]', JSON.stringify(payload, null, 2))
-      await (supabase as any).from('professionisti_fornitori').insert(payload)
+      const { error } = await (supabase as any).from('professionisti_fornitori').insert(payload)
+      if (error) { showToast('⚠ Errore: ' + error.message); return }
       showToast('Contatto aggiunto')
     }
     await carica()

@@ -404,10 +404,62 @@
 - ✅ 17 codici stazione appaltante
 - ✅ Generatore automatico con RPC Supabase
 
+### Sessione 28 Maggio 2026 — Fix bug critici prompt 1
+- ✅ **BUG 1** `fornitori/page.tsx`: INSERT contatto ora controlla l'errore; se fallisce mostra toast e blocca senza chiudere il form; rimosso `console.log` debug
+- ✅ **BUG 2** `rda/page.tsx` `creaRDOMulti`: aggiunto `wbs_id: wizardRda.wbs_id` nel payload INSERT delle RDO — il campo non si perdeva più al passaggio RDA→RDO
+- ✅ **BUG 3** `rda/page.tsx`: badge WBS mancante aggiornato — testo "⚠ WBS mancante", sfondo arancio `#fff7ed`/`#c2410c`
+- ✅ **BUG 4** `impostazioni/page.tsx` `saveAzienda`: `setEditingAzienda(false)` spostato prima del `return` sull'errore — il pannello si chiude sempre dopo salvataggio
+- ✅ **BUG 5**: risolto dalla stessa fix del BUG 1 — l'INSERT con tipo='altro' ora propaga l'errore DB invece di fallire silenziosamente
+- ✅ **BUG 6** `mappa/page.tsx`: banner errore Mapbox già presente — nessuna modifica necessaria (token mancante mostra overlay ⚠️ centrato)
+- ✅ **BUG 7** `computo/page.tsx`: aggiunto `visibile_in_computo` a interfaccia + query con filtro `.or('visibile_in_computo.is.null,visibile_in_computo.eq.true')`; voci XPWE (`manuale !== true`) → quantità e PU non editabili al doppio-click; badge 🔒 grigio accanto al PU; pulsante 🗑 misurazioni nascosto
+- ✅ **BUG 7** `varianti/page.tsx` `cambiaStato`: quando variante → `esecutiva`, esegue `UPDATE voci_computo SET visibile_in_computo = true WHERE variante_id = id`
+
+### Sessione 26 Maggio 2026 (commit 7d2c714)
+- ✅ xpwe-parse/route.ts: parsing `<Misure>`/`<MisureItem>` per ogni voce → salvataggio in `voci_computo_misurazioni` con formula NR × Lung × Larg × HPeso
+- ✅ computo/page.tsx: righe `mi` con dati reali da DB, campi editabili on-blur (Nota/NR/L/La/H), ricalcolo quantità automatico, bottoni `+riga` e 🗑
+- ✅ computo/page.tsx: bottone `✚ Voce da EP`, modal ricerca EP, badge M arancio, `manuale: true`
+- ✅ elenco-prezzi/page.tsx: fonte `concordato_dl`, auto-codice `NP/001`, badge NP verde, filtri pill
+- ⚠️ SQL da eseguire su Supabase:
+  ```sql
+  ALTER TABLE voci_computo ADD COLUMN IF NOT EXISTS manuale BOOLEAN DEFAULT FALSE;
+  ALTER TABLE elenco_prezzi ADD COLUMN IF NOT EXISTS manuale BOOLEAN DEFAULT FALSE;
+  ```
+
+### Sessione 2026-05-26 — Misurazioni XPWE reali + tariffa/voce manuale (commit 7d2c714 → 91856a5)
+
+#### Misurazioni XPWE reali nel computo (7d2c714)
+- ✅ `xpwe-parse/route.ts`: parse tag `<Misure>`/`<MisureItem>` — estrae nota, NR, lunghezza, larghezza, h_peso per ogni riga di calcolo
+- ✅ UUID client-side (`randomUUID()`) pre-assegnati alle voci prima dell'INSERT batch — consente linking misurazioni senza re-query
+- ✅ Salvataggio in `voci_computo_misurazioni`: `{id, voce_id, commessa_id, nr, lunghezza, larghezza, h_peso, quantita, nota, ordine}`
+- ✅ `computo/page.tsx`: 5ª query in `caricaDati` per `voci_computo_misurazioni` → mappa `Record<voce_id, Misurazione[]>`
+- ✅ Righe `mi` con misurazioni reali: N righe editabili (nota/NR/Lung/Larg/HPeso/qty/🗑) + pulsante `+ riga`
+- ✅ CRUD misurazioni: `aggiornaMisurazione` (on-blur), `aggiungiMisurazione`, `eliminaMisurazione` — ricalcolo `quantita` automatico nel DB
+- ✅ Interfaccia `Misurazione`: `{id, voce_id, commessa_id, nota, nr, lunghezza, larghezza, h_peso, quantita, ordine}`
+
+#### Tariffa manuale EP con fonte Concordato DL (7d2c714)
+- ✅ `elenco-prezzi/page.tsx`: nuova fonte `concordato_dl` — auto-genera codici `NP/001`, `NP/002`... (MAX+1 tra codici esistenti NP/*)
+- ✅ Flag `manuale: true` su tutti gli insert in `elenco_prezzi` (anche fonte prezzario/variante aggiunti manualmente)
+- ✅ Badge "NP Concordato DL" verde + badge "M" arancione per tariffe manuali nella lista EP
+- ✅ Filtri pill: `concordato_dl` e `manuale` aggiunti
+- ✅ `concordato_dl` aggiunto alla select fonte nel pannello dettaglio tariffa espanso
+
+#### Voce manuale da EP nel computo (7d2c714)
+- ✅ `computo/page.tsx`: pulsante `✚ Voce da EP` in toolbar (sempre visibile, stile blue)
+- ✅ Modal con ricerca su `elenco_prezzi` — lista interattiva con codice/descrizione/um/PU
+- ✅ Input capitolo (datalist da capitoli esistenti), categoria (datalist), WBS select
+- ✅ Insert in `voci_computo` con `manuale: true` — badge "M" visibile nella riga `vo`
+- ✅ `apriVoceModal`: carica `elenco_prezzi` per la commessa; `aggiungiVoceDaEP`: INSERT + reload
+
+#### Fix misurazioni (91856a5)
+- ✅ **FIX 1** `xpwe-parse/route.ts`: delete `voci_computo_misurazioni` SEMPRE prima di reimport (non solo se il nuovo XPWE ha misurazioni) — evita orfane quando si reimporta un XPWE senza `<Misure>`
+- ✅ **FIX 2** `computo/page.tsx`: riga statica `mi` quando nessuna misurazione in DB — mostra testo "misura da XPWE" (non più `v.note?.split('>')`) + `+ mis` per aggiungere manualmente
+
 ## Prossimi task prioritari
 1. **SQL migrations da eseguire su Supabase** (se non già fatto):
    - `ALTER TABLE sal ADD COLUMN IF NOT EXISTS pdf_dl_url text, pdf_certificato_url text`
    - `ALTER TABLE voci_computo ADD COLUMN IF NOT EXISTS sic_interna_importo numeric DEFAULT 0, sic_interna_percentuale numeric DEFAULT 0`
+   - `ALTER TABLE voci_computo ADD COLUMN IF NOT EXISTS manuale BOOLEAN DEFAULT FALSE`
+   - `ALTER TABLE elenco_prezzi ADD COLUMN IF NOT EXISTS manuale BOOLEAN DEFAULT FALSE`
    - `ALTER TABLE commesse ADD COLUMN IF NOT EXISTS sicurezza_interna_esclusa_ribasso boolean DEFAULT true`
    - `ALTER TABLE aziende ADD COLUMN IF NOT EXISTS logo_url text, carta_intestata_header_url text, carta_intestata_footer_url text`
 2. **Storage bucket `aziende-assets`** — creare su Supabase Storage con accesso pubblico per upload logo/carta intestata
@@ -463,7 +515,8 @@
 38. ~~Sicurezza interna alle voci — formula 3 livelli Primus-compatible nel SAL~~ ✅
 39. ~~Performance: virtualizzazione computo + paginazione ODA/DDT/fatture~~ ✅
 40. ~~PWA installabile — service worker statico + banner installazione~~ ✅
-41. Registro di contabilità (libro giornale lavori strutturato) 📋
+41. ~~Misurazioni XPWE reali nel computo + tariffa manuale EP (concordato DL / NP codes) + voce manuale da EP~~ ✅
+42. Registro di contabilità (libro giornale lavori strutturato) 📋
 42. Export completo commessa in formato ZIP strutturato 📋
 43. Knowledge base AI edile (normativa D.Lgs. 36/2023, prezzari regionali) 📋
 44. Billing e piani tariffari (Stripe integration) 📋
@@ -478,7 +531,9 @@
 - Tutti i moduli salvano `azienda_id` negli INSERT; RLS attivo su DB garantisce isolamento completo
 - Tabella `utenti`: `id` = `auth.uid`, `azienda_id` FK, `email`, `nome`, `cognome`, `ruolo` (admin/user)
 - Tabella `aziende`: `id`, `nome`, `piva`, `cf`, `provincia`, `created_at`, `logo_url`, `carta_intestata_header_url`, `carta_intestata_footer_url`, `codice_separatore`
-- Tabella `elenco_prezzi`: `codice`, `descrizione`, `um`, `prezzo_unitario`, `fonte` ('prezzario'|'prezzo_nuovo'|'variante'), `prezzario_riferimento`, `anno_prezzario`, `approvato_da`, `data_approvazione`, `variante_id`, `note`
+- Tabella `elenco_prezzi`: `codice`, `descrizione`, `um`, `prezzo_unitario`, `fonte` ('prezzario'|'prezzo_nuovo'|'variante'|'concordato_dl'), `prezzario_riferimento`, `anno_prezzario`, `approvato_da`, `data_approvazione`, `variante_id`, `note`, `manuale boolean DEFAULT false`; fonte `concordato_dl` auto-genera codici `NP/001`, `NP/002`...
+- Tabella `voci_computo_misurazioni`: `id uuid`, `voce_id uuid FK`, `commessa_id uuid FK`, `nr numeric`, `lunghezza numeric`, `larghezza numeric`, `h_peso numeric`, `quantita numeric`, `nota text`, `ordine int`; delete+insert ad ogni reimport XPWE
+- Campo `manuale boolean DEFAULT false` su `voci_computo` — segna voci aggiunte tramite `✚ Voce da EP` (non da import XPWE)
 - Tabelle Sprint 6 subappalti (da creare se non esistono): `documenti_contratto_sub` (tipo, url, nome_file, data_scadenza, extra JSONB), `lavoratori_sub` (nome, cognome, cf, documenti), `pagamenti_sub` (data, importo_lordo, ritenuta_pct, importo_netto, tipo)
 - Pattern navigazione layout commessa: `GRUPPI` array con `id`, `color`, `bg`, `border`, `tabs[]` — gruppo attivo rilevato da `pathname.startsWith(base + '/' + t.href)`
 - Tabella `migliorie`: `gara_id`, `commessa_id`, `azienda_id`, `categoria`, `descrizione`, `costo_stimato`, `costo_effettivo`, `punteggio_tecnico_stimato`, `note`, `offerta` bool, `fase` ('gara'|'commessa'), `stato` (contrattuale|da_eseguire|in_esecuzione|completata|verificata_dl)
@@ -489,7 +544,7 @@
 - Tabella `commesse`: `sicurezza_interna_esclusa_ribasso boolean DEFAULT true` — formula 3 livelli SAL
 - Upload SAL: bucket `documenti`, path `{azienda_id}/sal/{commessa_id}/SAL-{numero}-DL.pdf` e `SAL-{numero}-certificato.pdf`
 - `SalGrid`: copia meccanica di `computo/page.tsx` con `cp`; usa `props.commessaId` invece di `use(paramsPromise)`; il pannello analisi originale è disabilitato con `{false && (() => {...})()}` per mantenere TypeScript-safe
-- Computo virtualizzato con `@tanstack/react-virtual` (padding-top/bottom su `cmp-tscroll`); overscan 15; ref `scrollRef` sul container scroll
+- Computo: render diretto (virtualizzatore rimosso nella sessione 23 Maggio 2026); `@tanstack/react-virtual` installato ma non usato nel computo principale
 - Codice commessa semantico: `genera_codice_commessa(azienda_id, categoria, provincia)` → `[AA]-[CAT]-[PR]-[NNN]`; 11 categorie SOA; `codice_separatore` su `aziende`
 - PDF carta intestata: prop `aziendaDoc?` su tutti i 5 componenti PDF; priorità carta_intestata > logo > testo; icone PWA via `/api/pwa-icon/[size]` (Edge ImageResponse)
 - PWA: `public/sw.js` statico committato; `ServiceWorkerRegistration` componente client; `public/manifest.json` con shortcuts
