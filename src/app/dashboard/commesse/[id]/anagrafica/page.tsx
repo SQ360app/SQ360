@@ -9,7 +9,7 @@ import {
 import { supabase, getAziendaId } from '@/lib/supabase'
 import { AddressAutocomplete } from '@/components/AddressAutocomplete'
 import { DEFAULT_WBS_FLAT, WbsNode, ricalcolaCodici, wbsFlatToNodes } from '@/lib/wbs'
-import { loadWbsNodes } from '@/lib/wbsLoader'
+import { loadWbsNodes, buildWbsInsertPayload } from '@/lib/wbsLoader'
 
 // ─── Tipi ─────────────────────────────────────────────────────────────────────
 
@@ -470,8 +470,11 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
           const azId = comm.azienda_id || ''
           setAziendaId(azId)
           if (azId) {
-            loadWbsNodes(supabase, 'wbs_commessa', { commessa_id: id, azienda_id: azId }).then(nodes => {
-              if (nodes.length > 0) setWbsNodes(nodes)
+            loadWbsNodes(supabase, 'wbs_nodes', { commessa_id: id, azienda_id: azId }).then(async nodes => {
+              if (nodes.length > 0) { setWbsNodes(nodes); return }
+              // Fallback legacy wbs_commessa
+              const legacy = await loadWbsNodes(supabase, 'wbs_commessa', { commessa_id: id, azienda_id: azId })
+              if (legacy.length > 0) setWbsNodes(legacy)
               else setWbsNodes(wbsFlatToNodes(DEFAULT_WBS_FLAT, () => crypto.randomUUID()))
             })
           }
@@ -848,13 +851,10 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
             setWbsSaving(true)
             try {
               const db = supabase as any
-              await db.from('wbs_commessa').delete().eq('commessa_id', id)
+              await db.from('wbs_nodes').delete().eq('commessa_id', id).eq('azienda_id', aziendaId)
               if (wbsNodes.length > 0) {
-                await db.from('wbs_commessa').insert(
-                  wbsNodes.map(n => ({
-                    id: n.id, commessa_id: id, azienda_id: aziendaId,
-                    parent_id: n.parent_id, etichetta: n.etichetta, ordine: n.ordine
-                  }))
+                await db.from('wbs_nodes').insert(
+                  buildWbsInsertPayload(wbsNodes, { commessa_id: id, azienda_id: aziendaId })
                 )
               }
               setWbsEdited(false)
@@ -911,6 +911,30 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
             setWbsEdited(true)
           }
 
+          const importFromTemplate = async () => {
+            if (!aziendaId) return
+            const db = supabase as any
+            const { data } = await db.from('wbs_templates')
+              .select('id,parent_id,descrizione,ordine')
+              .eq('azienda_id', aziendaId)
+              .order('ordine', { ascending: true })
+            if (!data?.length) {
+              alert('Nessun template WBS configurato. Vai in Impostazioni → Template WBS aziendale.')
+              return
+            }
+            // Remap IDs: nuovi UUID per questa commessa, mantieni struttura parent_id
+            const oldToNew: Record<string, string> = {}
+            const imported: WbsNode[] = data.map((r: any) => {
+              const newId = crypto.randomUUID()
+              oldToNew[r.id] = newId
+              return { id: newId, parent_id: r.parent_id, etichetta: r.descrizione, ordine: r.ordine, template_id: r.id }
+            })
+            const remapped = imported.map(n => ({ ...n, parent_id: n.parent_id ? (oldToNew[n.parent_id] || null) : null }))
+            setWbsNodes(remapped)
+            setWbsEdited(true)
+            setWbsOpen(true)
+          }
+
           return (
             <div style={S.card}>
               <button style={{ ...S.cardHeader, width: '100%', border: 'none', cursor: 'pointer', textAlign: 'left' }}
@@ -929,6 +953,8 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
                   <div style={{ marginBottom: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     <button style={{ fontSize: 11, padding: '4px 10px', background: '#14532d', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
                       onClick={addRoot}>➕ Fase radice</button>
+                    <button style={{ fontSize: 11, padding: '4px 10px', background: '#1e3a5f', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
+                      onClick={importFromTemplate}>📋 Importa da template aziendale</button>
                     {wbsEdited && (
                       <button style={{ fontSize: 11, padding: '4px 10px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}
                         onClick={saveWbs} disabled={wbsSaving}>
@@ -938,6 +964,11 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
                     <button style={{ fontSize: 11, padding: '4px 10px', background: 'transparent', color: 'var(--t3)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}
                       onClick={() => { setWbsNodes(wbsFlatToNodes(DEFAULT_WBS_FLAT, () => crypto.randomUUID())); setWbsEdited(true) }}>↩ Ripristina default</button>
                   </div>
+                  {wbsNodes.length === 0 && (
+                    <div style={{ padding: '16px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, fontSize: 12, color: '#92400e', marginBottom: 8 }}>
+                      ⚠ Nessuna WBS configurata. Clicca "📋 Importa da template aziendale" o "➕ Fase radice" per iniziare.
+                    </div>
+                  )}
                   <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
                     {wbsOrdered.map(node => {
                       const depth = (node.codice!.match(/\./g) || []).length
@@ -948,6 +979,7 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
                         <div key={node.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', paddingLeft: 8 + depth * 16, borderBottom: '1px solid var(--border)', background: isRoot ? '#f0fdf4' : '#fff' }}>
                           <span style={{ fontSize: 10, color: 'var(--t3)', flexShrink: 0, width: 8 }}>{isRoot ? '▶' : '└'}</span>
                           <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#2563eb', minWidth: 40, flexShrink: 0 }}>{node.codice}</span>
+                          {node.template_id && <span title="Importato da template" style={{ width: 7, height: 7, borderRadius: '50%', background: '#9ca3af', flexShrink: 0 }} />}
                           <input style={{ fontSize: 11, flex: 1, padding: '2px 6px', border: '1px solid var(--border)', borderRadius: 4 }}
                             value={node.etichetta}
                             onChange={e => editLabel(node.id, e.target.value)} />

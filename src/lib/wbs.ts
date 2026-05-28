@@ -6,7 +6,8 @@ export interface WbsNode {
   parent_id: string | null
   etichetta: string
   ordine: number
-  codice?: string  // computed by ricalcolaCodici, never stored in DB
+  codice?: string     // computed by ricalcolaCodici, stored in DB on save
+  template_id?: string // set when node was imported from wbs_templates
 }
 
 // ── DEFAULT WBS numerica gerarchica ───────────────────────────────────────

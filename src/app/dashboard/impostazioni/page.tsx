@@ -5,7 +5,7 @@ import { Building2, Users, Bell, Shield, Plus, Save, CheckCircle, Edit2, Upload,
 import { supabase, getAziendaId } from '@/lib/supabase'
 import { AddressAutocomplete } from '@/components/AddressAutocomplete'
 import { DEFAULT_WBS_FLAT, WbsNode, ricalcolaCodici, wbsFlatToNodes } from '@/lib/wbs'
-import { loadWbsNodes } from '@/lib/wbsLoader'
+import { loadWbsNodes, buildWbsInsertPayload } from '@/lib/wbsLoader'
 
 // ─── Tipi ────────────────────────────────────────────────────────────────────
 type Ruolo = 'admin' | 'direttore_tecnico' | 'responsabile_commessa' | 'operatore' | 'contabilita' | 'viewer'
@@ -181,17 +181,16 @@ export default function ImpostazioniPage() {
       if (!id) return
       setAziendaId(id)
 
-      // Load WBS template — auto-init con DEFAULT_WBS_FLAT se vuoto
-      const nodes = await loadWbsNodes(supabase, 'wbs_template', { azienda_id: id })
+      // Load WBS template — prova wbs_templates (nuovo), poi wbs_template (legacy)
+      let nodes = await loadWbsNodes(supabase, 'wbs_templates', { azienda_id: id })
+      if (!nodes.length) nodes = await loadWbsNodes(supabase, 'wbs_template', { azienda_id: id })
       if (nodes.length > 0) {
         setWbsTemplate(nodes)
       } else {
-        // Auto-init: genera UUIDs lato client e inserisce in una sola batch
+        // Auto-init con DEFAULT_WBS_FLAT
         const db = supabase as any
         const initNodes = wbsFlatToNodes(DEFAULT_WBS_FLAT, () => crypto.randomUUID())
-        await db.from('wbs_template').insert(
-          initNodes.map(n => ({ id: n.id, azienda_id: id, parent_id: n.parent_id, etichetta: n.etichetta, ordine: n.ordine }))
-        )
+        await db.from('wbs_templates').insert(buildWbsInsertPayload(initNodes, { azienda_id: id }))
         setWbsTemplate(initNodes)
       }
       const { data } = await (supabase as any).from('azienda').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', id).single()
@@ -903,11 +902,9 @@ export default function ImpostazioniPage() {
                 setWbsTemplateSaving(true)
                 const db = supabase as any
                 try {
-                  await db.from('wbs_template').delete().eq('azienda_id', aziendaId)
+                  await db.from('wbs_templates').delete().eq('azienda_id', aziendaId)
                   if (wbsTemplate.length > 0) {
-                    await db.from('wbs_template').insert(
-                      wbsTemplate.map(n => ({ id: n.id, azienda_id: aziendaId, parent_id: n.parent_id, etichetta: n.etichetta, ordine: n.ordine }))
-                    )
+                    await db.from('wbs_templates').insert(buildWbsInsertPayload(wbsTemplate, { azienda_id: aziendaId }))
                   }
                   setWbsTemplateEdited(false)
                 } finally { setWbsTemplateSaving(false) }
@@ -921,15 +918,13 @@ export default function ImpostazioniPage() {
                 try {
                   const { data: commesse } = await db.from('commesse').select('id').eq('azienda_id', aziendaId)
                   for (const c of commesse || []) {
-                    // Genera nuovi UUIDs per ogni commessa (no parent_id cross-commessa)
+                    // Nuovi UUIDs per ogni commessa — no cross-commessa parent_id refs
                     const newNodes = wbsFlatToNodes(
                       wbsOrdered.map(n => [n.codice!, n.etichetta] as [string, string]),
                       () => crypto.randomUUID()
                     )
-                    await db.from('wbs_commessa').delete().eq('commessa_id', c.id)
-                    await db.from('wbs_commessa').insert(
-                      newNodes.map(n => ({ id: n.id, commessa_id: c.id, azienda_id: aziendaId, parent_id: n.parent_id, etichetta: n.etichetta, ordine: n.ordine }))
-                    )
+                    await db.from('wbs_nodes').delete().eq('commessa_id', c.id).eq('azienda_id', aziendaId)
+                    await db.from('wbs_nodes').insert(buildWbsInsertPayload(newNodes, { commessa_id: c.id, azienda_id: aziendaId }))
                   }
                 } finally { setWbsTemplateSaving(false) }
               }
@@ -1001,7 +996,20 @@ export default function ImpostazioniPage() {
                     )}
                     <button style={{ fontSize: 12, padding: '5px 12px', background: 'transparent', color: 'var(--t3)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}
                       onClick={() => { setWbsTemplate(wbsFlatToNodes(DEFAULT_WBS_FLAT, () => crypto.randomUUID())); setWbsTemplateEdited(true) }}>
-                      ↩ Ripristina WBS standard SQ360
+                      ↩ WBS standard SQ360
+                    </button>
+                    <button style={{ fontSize: 12, padding: '5px 12px', background: '#1e3a5f', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
+                      onClick={() => {
+                        const WBS_EDILIZIA: [string,string][] = [
+                          ['1','Strutture'],['1.1','Fondazioni'],['1.2','Strutture in elevazione'],
+                          ['2','Finiture'],['2.1','Murature'],['2.2','Intonaci'],['2.3','Pavimenti e rivestimenti'],
+                          ['3','Impianti'],['3.1','Impianto elettrico'],['3.2','Impianto idraulico'],['3.3','Impianto termico'],
+                          ['4','Opere esterne'],['5','Sicurezza'],
+                        ]
+                        setWbsTemplate(wbsFlatToNodes(WBS_EDILIZIA, () => crypto.randomUUID()))
+                        setWbsTemplateEdited(true)
+                      }}>
+                      📋 Carica WBS edilizia
                     </button>
                     <button style={{ fontSize: 12, padding: '5px 12px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
                       onClick={applyToAll} disabled={wbsTemplateSaving}>
