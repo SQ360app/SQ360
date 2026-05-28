@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, use } from 'react'
+import React, { useState, useEffect, useRef, useCallback, use } from 'react'
 import {
   Search, Plus, Save, Check, ChevronDown, ChevronUp,
   X, AlertCircle, Loader2, Shield, Euro, Calendar,
@@ -410,6 +410,53 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
   const [editDati, setEditDati] = useState(false)
   const [gruppoAperto, setGruppoAperto] = useState<'committenza'|'impresa'|'sicurezza'|null>('committenza')
   const [modal, setModal] = useState({ aperto: false, ruolo: '', query: '' })
+  const [aziendaDoc, setAziendaDoc] = useState<any>(null)
+
+  useEffect(() => {
+    getAziendaId().then(async azId => {
+      if (!azId) return
+      const { data } = await supabase.from('aziende').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', azId).single()
+      setAziendaDoc(data || null)
+    })
+  }, [])
+
+  const generaVerbale = async () => {
+    try {
+      const fig: Record<string, string> = {}
+      for (const [ruolo, v] of Object.entries(figure)) {
+        const p = v.professionista
+        if (p?.nome) fig[ruolo] = `${p.nome} ${p.cognome || ''}`.trim()
+      }
+      const [pdfrMod, docMod] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/pdf/VerbaleConsegnaDocument'),
+      ])
+      const element = React.createElement(docMod.VerbaleConsegnaDocument, {
+        commessa: {
+          codice: commessa.codice || '',
+          nome: commessa.nome || '',
+          committente: commessa.committente,
+          cig: commessa.cig,
+          cup: commessa.cup,
+          data_inizio: commessa.data_inizio,
+          indirizzo_cantiere: commessa.indirizzo_cantiere,
+          comune_cantiere: commessa.comune_cantiere,
+          provincia: commessa.provincia,
+        },
+        figure: fig,
+        aziendaDoc,
+      })
+      const blob = await pdfrMod.pdf(element as any).toBlob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `VerbaleConsegna-${commessa.codice || 'commessa'}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e: any) {
+      alert('Errore generazione PDF: ' + e.message)
+    }
+  }
 
   useEffect(() => {
     if (!id) return
@@ -554,6 +601,10 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
             </p>
           </div>
           <div style={S.headerActions}>
+            <button className="btn-secondary" style={{ fontSize: 12, padding: '7px 14px' }}
+              onClick={generaVerbale}>
+              📄 Verbale consegna
+            </button>
             <button className="btn-secondary" style={{ fontSize: 12, padding: '7px 14px' }}
               onClick={() => setEditDati(!editDati)}>
               <Edit3 size={13} /> {editDati ? 'Annulla' : 'Modifica dati'}
