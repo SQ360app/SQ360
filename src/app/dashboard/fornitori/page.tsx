@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase, getAziendaId } from '@/lib/supabase'
 import { AddressAutocomplete } from '@/components/AddressAutocomplete'
 
@@ -70,6 +70,28 @@ const durcStatus = (s?: string): 'none' | 'ok' | 'warn' | 'expired' => {
 }
 
 const fmtDate = (s?: string | null) => s ? new Date(s).toLocaleDateString('it-IT') : '—'
+
+const scadenzaCfg = (s?: string | null): { bg: string; color: string; label: string } | null => {
+  if (!s) return null
+  const diff = Math.round((new Date(s).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000)
+  const fmt = new Date(s).toLocaleDateString('it-IT')
+  if (diff < 0) return { bg: '#fef2f2', color: '#dc2626', label: `✕ ${fmt}` }
+  if (diff <= 30) return { bg: '#fffbeb', color: '#d97706', label: `⚠ ${fmt} (${diff}gg)` }
+  return { bg: '#f0fdf4', color: '#16a34a', label: `✓ ${fmt}` }
+}
+
+const hasExpired = (c: Contatto) =>
+  [c.durc_scadenza, c.polizza_rc_scadenza, c.inarcassa_scadenza].some(s => {
+    if (!s) return false
+    return Math.round((new Date(s).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000) < 0
+  })
+
+const hasWarning = (c: Contatto) =>
+  [c.durc_scadenza, c.polizza_rc_scadenza, c.inarcassa_scadenza].some(s => {
+    if (!s) return false
+    const diff = Math.round((new Date(s).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000)
+    return diff >= 0 && diff <= 30
+  })
 
 /* ── Avatar ───────────────────────────────────────────────────────────────── */
 function Avatar({ c, size = 36 }: { c: Partial<Contatto>; size?: number }) {
@@ -158,6 +180,137 @@ function SoaEditor({ items, onChange }: { items: SoaItem[]; onChange: (i: SoaIte
         </div>
       ))}
       <button onClick={add} style={{ fontSize: 11, color: 'var(--accent)', background: 'none', border: '1px dashed var(--accent)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', width: '100%', marginTop: 2 }}>+ Aggiungi categoria SOA</button>
+    </div>
+  )
+}
+
+/* ── AiImportModal ────────────────────────────────────────────────────────── */
+function AiImportModal({ onImport, onClose }: {
+  onImport: (data: Partial<Contatto>) => Promise<void>
+  onClose: () => void
+}) {
+  const [file, setFile] = useState<File | null>(null)
+  const [drag, setDrag] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [parsed, setParsed] = useState<Partial<Contatto> | null>(null)
+  const [err, setErr] = useState('')
+  const [saving, setSaving] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const analizza = async (f: File) => {
+    setLoading(true); setErr('')
+    const fd = new FormData()
+    fd.append('file', f)
+    try {
+      const res = await fetch('/api/ai-import-fornitore', { method: 'POST', body: fd })
+      const json = await res.json()
+      if (!json.ok) { setErr(json.errore || 'Errore AI'); setLoading(false); return }
+      const d = json.dati as Record<string, string>
+      const soaRaw = d.soa_categorie?.trim()
+      setParsed({
+        tipo: 'fornitore',
+        ragione_sociale: d.ragione_sociale || '',
+        partita_iva: d.piva || '',
+        codice_fiscale: d.cf || '',
+        email: d.email || '',
+        pec: d.pec || '',
+        telefono_ufficio: d.telefono || '',
+        indirizzo: d.indirizzo || '',
+        comune: d.citta || '',
+        cap: d.cap || '',
+        provincia: d.provincia || '',
+        iban: d.iban || '',
+        note: d.note || '',
+        soa_categorie: soaRaw ? [{ categoria: soaRaw, classifica: d.soa_classifica || 'I', scadenza: '' }] : [],
+        attivo: true,
+      })
+    } catch { setErr('Errore di rete') }
+    setLoading(false)
+  }
+
+  const set = (k: keyof Contatto, v: any) => setParsed(p => p ? { ...p, [k]: v } : p)
+
+  const handleImport = async () => {
+    if (!parsed) return
+    setSaving(true)
+    await onImport(parsed)
+    setSaving(false)
+    onClose()
+  }
+
+  const inp: React.CSSProperties = { fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--panel)', color: 'var(--t1)', width: '100%', boxSizing: 'border-box' as const }
+  const lbs: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase' as const, letterSpacing: '0.06em', display: 'block', marginBottom: 3 }
+
+  return (
+    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal-box" style={{ maxWidth: 560, width: '95%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>🤖 Import AI da PDF</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--t3)' }}>✕</button>
+        </div>
+
+        {!parsed && (
+          <>
+            <div
+              onDragOver={e => { e.preventDefault(); setDrag(true) }}
+              onDragLeave={() => setDrag(false)}
+              onDrop={e => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) { setFile(f); analizza(f) } }}
+              onClick={() => inputRef.current?.click()}
+              style={{ border: `2px dashed ${drag ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 12, padding: '32px 24px', textAlign: 'center', cursor: 'pointer', background: drag ? '#eff6ff' : 'var(--bg)', transition: 'all .15s', marginBottom: 12 }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>📎</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--t1)', marginBottom: 4 }}>
+                {file ? file.name : 'Trascina qui il PDF o clicca per scegliere'}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--t3)' }}>Visura camerale, documento identità, tessera ordine, certificato SOA, polizza</div>
+            </div>
+            <input ref={inputRef} type="file" accept=".pdf" style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) { setFile(f); analizza(f) } }} />
+            {loading && <div style={{ textAlign: 'center', padding: '10px 0', fontSize: 12, color: 'var(--t2)' }}><span className="spinner" style={{ marginRight: 8 }} />Analisi AI in corso...</div>}
+            {err && <div style={{ color: '#dc2626', fontSize: 12, textAlign: 'center', marginTop: 8 }}>{err}</div>}
+          </>
+        )}
+
+        {parsed && (
+          <>
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 600, background: '#f0fdf4', padding: '6px 10px', borderRadius: 6 }}>✓ Dati estratti — verifica e correggi prima di importare</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div><span style={lbs}>Tipo</span>
+                  <select style={inp} value={parsed.tipo || 'fornitore'} onChange={e => set('tipo', e.target.value)}>
+                    {TIPI.map(t => <option key={t.v} value={t.v}>{t.l}</option>)}
+                  </select>
+                </div>
+                <div><span style={lbs}>Ragione Sociale</span><input style={inp} value={parsed.ragione_sociale || ''} onChange={e => set('ragione_sociale', e.target.value)} /></div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div><span style={lbs}>Partita IVA</span><input style={inp} value={parsed.partita_iva || ''} onChange={e => set('partita_iva', e.target.value)} /></div>
+                <div><span style={lbs}>Codice Fiscale</span><input style={inp} value={parsed.codice_fiscale || ''} onChange={e => set('codice_fiscale', e.target.value)} /></div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div><span style={lbs}>Email</span><input style={inp} value={parsed.email || ''} onChange={e => set('email', e.target.value)} /></div>
+                <div><span style={lbs}>PEC</span><input style={inp} value={parsed.pec || ''} onChange={e => set('pec', e.target.value)} /></div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div><span style={lbs}>Telefono</span><input style={inp} value={parsed.telefono_ufficio || ''} onChange={e => set('telefono_ufficio', e.target.value)} /></div>
+                <div><span style={lbs}>IBAN</span><input style={inp} value={parsed.iban || ''} onChange={e => set('iban', e.target.value)} /></div>
+              </div>
+              <div><span style={lbs}>Indirizzo</span><input style={inp} value={parsed.indirizzo || ''} onChange={e => set('indirizzo', e.target.value)} /></div>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 10 }}>
+                <div><span style={lbs}>Comune</span><input style={inp} value={parsed.comune || ''} onChange={e => set('comune', e.target.value)} /></div>
+                <div><span style={lbs}>CAP</span><input style={inp} maxLength={5} value={parsed.cap || ''} onChange={e => set('cap', e.target.value)} /></div>
+                <div><span style={lbs}>Prov.</span><input style={inp} maxLength={2} value={parsed.provincia || ''} onChange={e => set('provincia', e.target.value.toUpperCase())} /></div>
+              </div>
+              {parsed.note ? (
+                <div><span style={lbs}>Note</span><textarea style={{ ...inp, resize: 'vertical' as const, fontFamily: 'inherit' }} rows={2} value={parsed.note} onChange={e => set('note', e.target.value)} /></div>
+              ) : null}
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+              <button onClick={() => { setParsed(null); setFile(null) }} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'none', cursor: 'pointer', fontSize: 12 }}>← Rianalizza</button>
+              <button onClick={handleImport} disabled={saving} className="btn-primary" style={{ fontSize: 12, padding: '8px 20px' }}>{saving ? '...' : '✓ Importa'}</button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -296,7 +449,10 @@ function DetailDrawer({ c, allContatti, onClose, onEdit, onDelete }: {
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--t2)', textTransform: 'uppercase', marginBottom: 8 }}>Polizza RC</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {fld('N° polizza', c.polizza_rc_numero)}
-              {fld('Scadenza', fmtDate(c.polizza_rc_scadenza))}
+              <div style={{ marginBottom: 10 }}>
+                <span style={lbs}>Scadenza</span>
+                {(() => { const cfg = scadenzaCfg(c.polizza_rc_scadenza); return cfg ? <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 6, background: cfg.bg, color: cfg.color }}>{cfg.label}</span> : <span style={{ fontSize: 13, color: 'var(--t3)' }}>—</span> })()}
+              </div>
             </div>
             {c.polizza_rc_massimale && fld('Massimale', '€ ' + c.polizza_rc_massimale.toLocaleString('it-IT'))}
             <div style={{ height: 1, background: 'var(--border)', margin: '10px 0' }} />
@@ -308,7 +464,10 @@ function DetailDrawer({ c, allContatti, onClose, onEdit, onDelete }: {
                   {c.inarcassa_regolare !== undefined ? (c.inarcassa_regolare ? '✓ Regolare' : '✕ Non regolare') : '—'}
                 </span>
               </div>
-              {fld('Scadenza verifica', fmtDate(c.inarcassa_scadenza))}
+              <div style={{ marginBottom: 10 }}>
+                <span style={lbs}>Scadenza verifica</span>
+                {(() => { const cfg = scadenzaCfg(c.inarcassa_scadenza); return cfg ? <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 6, background: cfg.bg, color: cfg.color }}>{cfg.label}</span> : <span style={{ fontSize: 13, color: 'var(--t3)' }}>—</span> })()}
+              </div>
             </div>
           </>
         )}
@@ -668,10 +827,12 @@ export default function ContattiPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filtroTipo, setFiltroTipo] = useState('tutti')
+  const [filtroScadenza, setFiltroScadenza] = useState<'tutti' | 'in_scadenza' | 'scaduti'>('tutti')
   const [detail, setDetail] = useState<Contatto | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [editData, setEditData] = useState<Partial<Contatto>>({})
   const [confirmDel, setConfirmDel] = useState<Contatto | null>(null)
+  const [showAiModal, setShowAiModal] = useState(false)
   const [toast, setToast] = useState('')
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
@@ -722,9 +883,14 @@ export default function ContattiPage() {
 
   const isAltro = (c: Contatto) => !c.tipo || c.tipo === 'altro' || !TIPI_TAB.includes(c.tipo)
 
+  const contattiScaduti    = lista.filter(hasExpired)
+  const contattiInScadenza = lista.filter(c => !hasExpired(c) && hasWarning(c))
+
   const filtrati = lista.filter(c => {
     if (filtroTipo === 'altro' && !isAltro(c)) return false
     if (filtroTipo !== 'tutti' && filtroTipo !== 'altro' && c.tipo !== filtroTipo) return false
+    if (filtroScadenza === 'scaduti' && !hasExpired(c)) return false
+    if (filtroScadenza === 'in_scadenza' && !hasWarning(c) && !hasExpired(c)) return false
     if (search) {
       const q = search.toLowerCase()
       return fNome(c).toLowerCase().includes(q)
@@ -745,13 +911,19 @@ export default function ContattiPage() {
           <h1 style={{ fontSize: 16, fontWeight: 700, color: 'var(--t1)' }}>Database Contatti</h1>
           <p style={{ fontSize: 12, color: 'var(--t3)', marginTop: 2 }}>{lista.length} contatti registrati</p>
         </div>
-        <button className="btn-primary" style={{ fontSize: 12, padding: '8px 14px' }}
-          onClick={() => { setEditData({ tipo: 'professionista', attivo: true }); setShowForm(true) }}>
-          + Nuovo contatto
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button style={{ fontSize: 12, padding: '8px 14px', borderRadius: 8, border: '1px solid #3b82f6', background: '#eff6ff', color: '#1d4ed8', cursor: 'pointer', fontWeight: 600 }}
+            onClick={() => setShowAiModal(true)}>
+            🤖 Import da PDF
+          </button>
+          <button className="btn-primary" style={{ fontSize: 12, padding: '8px 14px' }}
+            onClick={() => { setEditData({ tipo: 'professionista', attivo: true }); setShowForm(true) }}>
+            + Nuovo contatto
+          </button>
+        </div>
       </div>
 
-      {/* Filter tabs */}
+      {/* Filter tabs — tipo */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {FILTER_TABS.map(t => {
           const cnt = t.v === 'tutti' ? lista.length : t.v === 'altro' ? lista.filter(isAltro).length : lista.filter(c => c.tipo === t.v).length
@@ -765,6 +937,45 @@ export default function ContattiPage() {
           )
         })}
       </div>
+
+      {/* Filter pills — scadenza */}
+      <div style={{ display: 'flex', gap: 6 }}>
+        {([
+          { v: 'tutti',       l: 'Tutti',         col: '#6b7280' },
+          { v: 'in_scadenza', l: '⚠ In scadenza', col: '#d97706' },
+          { v: 'scaduti',     l: '🔴 Scaduti',    col: '#dc2626' },
+        ] as const).map(t => {
+          const active = filtroScadenza === t.v
+          return (
+            <button key={t.v} onClick={() => setFiltroScadenza(t.v)}
+              style={{ padding: '4px 12px', borderRadius: 20, border: `1px solid ${active ? t.col : t.col + '55'}`, cursor: 'pointer', fontSize: 11, fontWeight: 600, background: active ? t.col + '18' : 'var(--panel)', color: active ? t.col : 'var(--t3)' }}>
+              {t.l}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Alert banners */}
+      {contattiScaduti.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10 }}>
+          <span style={{ fontSize: 14 }}>🔴</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#dc2626', flex: 1 }}>{contattiScaduti.length} contatt{contattiScaduti.length === 1 ? 'o' : 'i'} con documenti scaduti</span>
+          <button onClick={() => { setFiltroScadenza('scaduti'); setFiltroTipo('tutti') }}
+            style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: '1px solid #fca5a5', background: '#fff', color: '#dc2626', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            Vedi scaduti
+          </button>
+        </div>
+      )}
+      {contattiInScadenza.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 10 }}>
+          <span style={{ fontSize: 14 }}>⚠️</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#92400e', flex: 1 }}>{contattiInScadenza.length} contatt{contattiInScadenza.length === 1 ? 'o' : 'i'} con scadenze nei prossimi 30 giorni</span>
+          <button onClick={() => { setFiltroScadenza('in_scadenza'); setFiltroTipo('tutti') }}
+            style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: '1px solid #fcd34d', background: '#fff', color: '#92400e', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            Vedi scadenze
+          </button>
+        </div>
+      )}
 
       {/* Search + List */}
       <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
@@ -844,6 +1055,13 @@ export default function ContattiPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showAiModal && (
+        <AiImportModal
+          onImport={async (data) => { await salva(data) }}
+          onClose={() => setShowAiModal(false)}
+        />
       )}
 
       {toast && (

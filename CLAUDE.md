@@ -504,6 +504,17 @@
   CREATE POLICY "azienda_wbs_nodes" ON wbs_nodes USING (azienda_id = get_azienda_id());
   ```
 
+### Sessione 28 Maggio 2026 — Contatti AI import + alert scadenze (commit TBD)
+- ✅ `fornitori/page.tsx`: bottone "🤖 Import da PDF" in header
+- ✅ `AiImportModal`: drag & drop PDF → POST `/api/ai-import-fornitore` (Claude Haiku) → preview campi estratti editabili → "✓ Importa" salva su DB
+- ✅ Mapping risposta AI: `piva→partita_iva`, `citta→comune`, `soa_categorie+soa_classifica→SoaItem[]`, tutti i campi base
+- ✅ Helpers `scadenzaCfg()`, `hasExpired()`, `hasWarning()` per tutte e 3 le scadenze (DURC, polizza RC, Inarcassa)
+- ✅ Banner rosso "🔴 N contatti con documenti scaduti" se almeno uno scaduto
+- ✅ Banner giallo "⚠ N contatti con scadenze nei prossimi 30 giorni" se almeno uno in warning
+- ✅ Bottone [Vedi scaduti/Vedi scadenze] → filtra lista automaticamente
+- ✅ Pills filtro scadenza: [Tutti] [⚠ In scadenza] [🔴 Scaduti] — si combinano con filtro tipo
+- ✅ DetailDrawer tab Professione: `polizza_rc_scadenza` e `inarcassa_scadenza` ora mostrano badge colorati (verde/arancio/rosso) invece di testo piano
+
 ### Sessione 28 Maggio 2026 — Permessi sotto-moduli commessa (commit 0b84332)
 - ✅ `commesse/[id]/layout.tsx`: carica `moduli_abilitati` via `getCurrentUserModuli()` al mount; filtra tab e gruppi pill per permessi; redirect automatico ad `/anagrafica` se URL diretto a modulo disabilitato; admin (`ruolo === 'admin'`) vede sempre tutto
 - ✅ Mappa 16 href → chiave `moduli_abilitati`: computo/elenco-prezzi/rda/rdo/dam→sam/oda/sal-attivi/sal-passivi/cantiere/sicurezza/persone/fatturazione/conto-economico→economico/contratti/varianti/ordini-servizio; tutti gli altri href (anagrafica, documenti, ddt, archivio…) sempre visibili
