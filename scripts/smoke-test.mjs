@@ -130,11 +130,22 @@ page.on('requestfailed', (r) => {
 // ─── Login ───────────────────────────────────────────────────────────────────
 log(`→ Login su ${BASE} come ${EMAIL}`)
 try {
-  await page.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded', timeout: 30_000 })
-  await page.locator('input[type="email"]').fill(EMAIL)
-  await page.locator('input[type="password"]').fill(PASSWORD)
-  await page.locator('button[type="submit"]').click()
-  await page.waitForURL(/\/dashboard/, { timeout: 30_000 })
+  // Il form di login è React: se si compila prima dell'idratazione, React
+  // riporta i campi al valore iniziale e il clic fa un submit nativo (reload).
+  // → si attende la rete ferma, si verifica il valore e si riprova.
+  let entrato = false
+  for (let tentativo = 1; tentativo <= 3 && !entrato; tentativo++) {
+    await page.goto(`${BASE}/login`, { waitUntil: 'networkidle', timeout: 30_000 })
+    const email = page.locator('input[type="email"]')
+    const pass = page.locator('input[type="password"]')
+    await email.fill(EMAIL)
+    await pass.fill(PASSWORD)
+    await page.waitForTimeout(300)
+    if ((await email.inputValue()) !== EMAIL || (await pass.inputValue()) !== PASSWORD) continue
+    await page.locator('button[type="submit"]').click()
+    entrato = await page.waitForURL(/\/dashboard/, { timeout: 20_000 }).then(() => true).catch(() => false)
+  }
+  if (!entrato) throw new Error('dopo 3 tentativi non si arriva su /dashboard (credenziali o pagina di login)')
   log('✓ Login riuscito')
 } catch (e) {
   await page.screenshot({ path: path.join(SHOTS, '00-login-fallito.png') }).catch(() => {})
