@@ -153,30 +153,145 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 
 ## 5. Stato dei 16 prompt
 
-> ⚠️ Fonte `sq360-prompts.md` non trovata nel repo. Tabella da completare quando il file sarà disponibile.
+> Fonte: `sq360-prompts.md` (dettaglio completo dei prompt da fare in quel file).
 
 | # | Prompt | Stato | Commit | Note |
 |---|---|---|---|---|
-| 1 | Fix bug critici (fornitori, WBS RDA→RDO, impostazioni, mappa, computo XPWE read-only, varianti) | ✅ | `f73ea2b` | Da CLAUDE.md, sessione 28/05/2026 |
-| 2 | ? | ❓ | | |
-| 3 | ? | ❓ | | |
-| 4 | ? | ❓ | | |
-| 5 | ? | ❓ | | |
-| 6 | ? | ❓ | | |
-| 7 | ? | ❓ | | |
-| 8 | ? | ❓ | | |
-| 9 | ? | ❓ | | |
-| 10 | ? | ❓ | | |
-| 11 | ? | ❓ | | |
-| 12 | ? | ❓ | | |
-| 13 | ? | ❓ | | |
-| 14 | ? | ❓ | | |
-| 15 | ? | ❓ | | |
-| 16 | ? | ❓ | | |
+| 1 | Bug critici | ✅ | `7d2c714` + `f73ea2b` | Misurazioni XPWE (solo nuovi import), voce manuale da EP, tariffa concordato DL, fix contatti, wbs_id RDA→RDO, badge WBS mancante, impostazioni, banner Mapbox, voci XPWE read-only, visibile_in_computo |
+| 1B | WBS personalizzabile | ✅ | `d5293d4` | `wbs_templates` + `wbs_nodes`, template aziendale, WBS per commessa, fallback |
+| 2 | PDF | ✅ | `236395b` | RDO PDF, Verbale consegna lavori; comunicazioni formali spostate al Prompt 8 (da fare) |
+| 3 | Utenti e permessi | ✅ | `036ccb3` + `0b84332` | 6 ruoli, toggle 19 moduli, sidebar adattiva, blocco URL, invito email; ruoli solo etichette, controllo reale su `moduli_abilitati` |
+| 4 | Contratto autonomo | ✅ | `0d0b570` | Gruppi Contratto (10 tab) / Acquisti (6 tab) / Extra; Nuovi Prezzi, Riserve |
+| 5 | Contatti AI | ✅ | `79e24bc` | Import AI da PDF, banner scadenze, badge, filtri In scadenza / Scaduti |
+| 6 | Sicurezza sub + Nolo + DDT→ODA | 📋 | | DDT→ODA con AI, registro nolo, rapportini manodopera, fattura passiva con WBS, portale `/documenti-sub/[token]` |
+| 7 | Report economico completo | 📋 | | CE per WBS previsto/impegnato/reale, cash flow base, alert, PDF economico, pacchetto fornitore, spese generali |
+| 8 | Moduli contrattuali verso committente | 📋 | | Sospensioni, anticipazione 20%, penali, revisione prezzi art. 60, conto finale, comunicazioni formali, As Built + collaudo |
+| 9 | Cantiere mobile + AI zero-input | 📋 | | `/api/ai-cantiere`, scanner universale PWA, centro approvazioni, AI proattiva base |
+| 10 | Alert configurabili + centro notifiche | 📋 | | `regole_alert`, campanella, reminder scadenze |
+| 11 | Cash flow previsionale | 📋 | | 18 mesi, saldo cumulato, export, pianificato vs consuntivo |
+| 12 | FatturaPA + SDI | 📋 | | XML, intermediario, tracking, split payment, conservazione |
+| 13 | Portale documenti sub | 📋 | | Estrazione AI, confronto checklist, notifiche, scadenzario |
+| 14 | Sicurezza impresa avanzata | 📋 | | POS, DVR, riunioni, notifica preliminare, DURC congruità, statistiche infortuni |
+| 15 | AI integrata | 📋 | | Assistant commessa, AI proattiva avanzata, NormaBot RAG, analisi bandi, price checker |
+| 16 | Go to market | 📋 | | Landing, onboarding wizard, Stripe, Supabase/Vercel Pro; 79 €/mese early adopter, 149 €/mese standard |
 
 ## 6. Test checklist
 
-> ⚠️ Fonte `TEST_CHECKLIST.md` non trovata nel repo. Da integrare.
+> Fonte: `TEST_CHECKLIST.md` — aggiornata 31 ottobre 2026.
+> Legenda: [ ] da testare | [OK] funziona | [ERR] errore | [PARZ] parziale
+> Per ogni errore annotare: modulo, cosa hai fatto, cosa e successo.
+
+### 6.0 Prima di iniziare
+- Usare una commessa di test (non una reale)
+- Reimportare l'XPWE sulla commessa di test (le misurazioni compaiono solo sui nuovi import)
+
+### 6.1 Accesso
+- [ ] Login admin@sq360.it
+- [ ] Logout e ritorno al login
+- [ ] Registrazione nuova azienda /register
+
+### 6.2 Dashboard
+- [ ] KPI caricano
+- [ ] Alert DURC e scadenziario popolati
+- [ ] Mappa cantieri senza errori
+
+### 6.3 Gare
+- [ ] Lista e nuova gara
+- [ ] Checklist offerta e migliorie
+- [ ] Simulatore ribasso
+- [ ] Crea commessa da gara aggiudicata
+
+### 6.4 Commesse
+- [ ] Creazione commessa (wizard 3 step, codice automatico)
+- [ ] Elimina commessa (doppia conferma)
+- [ ] Navigazione gruppi: Contratto / Acquisti / Cantiere / Economico / Extra / Archivio
+
+### 6.5 Contratto
+**Anagrafica**
+- [ ] Campi editabili, figure RUP/DL/CSE
+- [ ] Toggle sicurezza interna
+- [ ] Bottone Verbale consegna genera PDF
+- [ ] WBS commessa: importa da template
+
+**Elenco Prezzi**
+- [ ] Tariffe caricate dal computo, filtri, analisi
+
+**Computo**
+- [ ] Import XPWE
+- [ ] Righe misurazioni visibili e con dati
+- [ ] Voci XPWE bloccate, voci manuali editabili
+- [ ] Filtro WBS e categoria
+- [ ] Selezione multipla e Ctrl+A
+- [ ] Analisi prezzi BASE/EXTRA
+- [ ] Voce da EP
+
+**SAL Attivi**
+- [ ] Nuovo SAL, griglia, residuo live
+- [ ] Upload PDF DL e certificato RUP
+- [ ] Genera fattura attiva
+
+**SAL Passivi**
+- [ ] Card sub, avanzamento, blocco se DURC scaduto
+
+**Varianti / Ordini di Servizio**
+- [ ] Workflow completo
+- [ ] Variante esecutiva: le sue voci compaiono nel computo
+
+**Nuovi Prezzi**
+- [ ] Proposta -> negoziazione -> concordato
+- [ ] PDF verbale
+- [ ] Inserimento in Elenco Prezzi
+
+**Riserve**
+- [ ] Iscrizione, scadenza +30gg, alert <=7gg, cambio stato
+
+### 6.6 Acquisti
+**RDA**
+- [ ] Creazione da computo, WBS propagata, badge "WBS mancante"
+
+**RDO**
+- [ ] Wizard multi-fornitore, pagina pubblica /offerta/[token]
+- [ ] Comparativa e aggiudica
+- [ ] Upload preventivo con AI
+- [ ] PDF RDO
+
+**SAM / ODA**
+- [ ] Flusso RDO -> SAM -> ODA, 6 tipi ODA, PDF
+
+**Contratti Sub**
+- [ ] Creazione, checklist 7 documenti, lavoratori, pagamenti
+
+### 6.7 Cantiere
+- [ ] Giornale lavori
+- [ ] Sicurezza: upload con AI
+- [ ] Persone: QR badge, scanner, presenze
+- [ ] DDT: upload foto con AI
+
+### 6.8 Economico
+- [ ] Fatturazione e fatture passive (upload con AI)
+- [ ] Conto economico (per tipo ODA, per WBS)
+- [ ] Marginalita
+
+### 6.9 Impostazioni
+- [ ] Dati azienda (si chiude dopo salvataggio)
+- [ ] Logo e carta intestata
+- [ ] Template WBS
+- [ ] Gestione utenti, invito email, permessi moduli
+- [ ] Un utente con modulo disattivato non apre la pagina via URL
+
+### 6.10 Contatti
+- [ ] Nuovo contatto compare in lista (anche tipo "altro")
+- [ ] Import AI da PDF
+- [ ] Banner scadenze e filtri
+- [ ] Drawer a 5 tab
+
+### 6.11 PWA
+- [ ] Banner installazione
+- [ ] App installabile su telefono
+
+### Bug trovati
+(data - modulo - descrizione)
+-
 
 ---
 
