@@ -1,7 +1,7 @@
 # SQ360 — MASTER
 
 > Documento di stato unico del progetto. **Va aggiornato ad ogni commit.**
-> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: flusso inviti e password (successivo a `51d26cd`)
+> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: sicurezza passo 1 (successivo a `ba5aa25`)
 >
 > Fonti: `CLAUDE.md` (storico sessioni), `DEPLOY.md`, struttura `src/app`.
 
@@ -133,6 +133,8 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 ## 4. Discusso ma non implementato / pendente
 
 ### 4.1 Da eseguire su Supabase (bloccanti per moduli già scritti)
+- [x] **Sicurezza passo 1 — eseguito il 31/10/2026**: `REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon` + default privileges; anon mantiene solo SELECT su `commesse`, `rda`, `rdo`, `utenti`, `voci_computo`, `lavoratori_commessa`, `presenze_cantiere`, UPDATE su `rdo`, INSERT su `presenze_cantiere` (pagine pubbliche `/offerta`, `/scan`). Verifica con chiave anon: 96/103 tabelle/viste negate; **ancora leggibili senza login: `utenti` (3 righe) e `voci_computo` (1.630)** → da chiudere dopo il passo 3. Ritorno: `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon`.
+- [ ] Sicurezza passo 0: fotografia RLS/regole/funzioni/permessi (query di sola lettura) — necessaria per i passi 4–8 (regole per azienda con `get_azienda_id()`, tabelle figlie, `aziende`/`mia_azienda_id`, bucket `documenti` privato)
 - [x] `supabase/migrations/20261031_allineamento_schema.sql` — **eseguita il 31/10/2026** (colonne mancanti su fatture_passive/oda/documenti_commessa/gare/varianti/voci_variante/sal_passivi/contratti_sub/azienda/wbs_nodes, enum `stato_gara`, FK verso `professionisti_fornitori`)
 - [ ] Regola RLS **UPDATE su `azienda`** limitata alla propria azienda (oggi solo SELECT → Impostazioni non può salvare dati azienda, email, logo/carta intestata; la pagina ora lo segnala)
 - [ ] `mia_azienda_id()` restituisce NULL per gli utenti → le regole di `aziende` non mostrano nulla (da correggere o sostituire con `get_azienda_id()`, che funziona)
@@ -169,6 +171,8 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 - **Impostazioni scrive all'apertura**: POST su `wbs_templates` partito senza clic (bloccato dallo smoke test).
 
 ### 4.4 Debito tecnico / idee aperte
+- **Sicurezza multi-tenant (analisi 31/10/2026)**: viste `v_*` senza `security_invoker` (saltano le RLS); `nuovi_prezzi`/`riserve` aperte a tutti gli autenticati; tabelle figlie senza filtro azienda; `mia_azienda_id()` → NULL (probabile lettura da `user_aziende`, mappatura incoerente); bucket `documenti` e `aziende-assets` pubblici con percorsi prevedibili; `/api/email` e route AI senza controllo del chiamante. Criterio unico scelto: `azienda_id = (SELECT get_azienda_id())`.
+- `wbs_templates`: 66 righe (2 copie del template, la seconda inserita alle 09:56 del 31/10 dalla versione precedente alla correzione) → pulizia da fare con ok.
 - Auth solo client-side: `middleware.ts` vuoto — valutare protezione server-side delle route.
 - Tabelle legacy ancora in DB ma non più usate dal codice: `piano_costi_voce` (eliminata), `wbs_commessa`, `wbs_template` (libreria WBS standard globale, 220 righe), `sal_attivi` (i SAL sono in `sal`), `fornitori` (34 righe; l'unico `contratti_sub` punta ancora lì → FK `NOT VALID`): pianificare migrazione/rimozione.
 - Due tabelle azienda (`azienda` + `aziende`) con FK divise: unificare su `azienda`.
@@ -340,4 +344,5 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 | 2026-10-31 | `aba8858` | Smoke test Playwright in sola lettura (`scripts/smoke-test.mjs`, `playwright` devDependency, output esclusi da git); esito in §4.3 |
 | 2026-10-31 | `0bd18e8` | Migrazione `20261031_allineamento_schema.sql` (eseguita) + allineamento codice: crash `/dashboard/sal` (stati minuscoli), `/register` su route server `/api/register`, carta intestata da `azienda`, WBS senza fallback legacy e senza scrittura automatica in Impostazioni, CE da `sal`, alias colonne (ODA/DDT/fatture/gare/varianti/SAL passivi/documenti), verifica righe aggiornate su `azienda` |
 | 2026-10-31 | `51d26cd` | Smoke test: login robusto all'idratazione React; esito dopo le correzioni 44/44 ok (§4.3) |
-| 2026-10-31 | (questo commit) | Flusso inviti e password: nuova pagina `/auth/conferma` (invito + recupero, link scaduto), `/api/invite-user` con token del chiamante e azienda dal suo profilo + controllo upsert, "Password dimenticata?" nel login, stop a `NEXT_PUBLIC_APP_URL`; DEPLOY.md con le Redirect URLs Supabase |
+| 2026-10-31 | `ba5aa25` | Flusso inviti e password: nuova pagina `/auth/conferma` (invito + recupero, link scaduto), `/api/invite-user` con token del chiamante e azienda dal suo profilo + controllo upsert, "Password dimenticata?" nel login, stop a `NEXT_PUBLIC_APP_URL`; DEPLOY.md con le Redirect URLs Supabase |
+| 2026-10-31 | (questo commit) | Sicurezza passo 1 eseguito (REVOKE su anon; restano leggibili senza login `utenti` e `voci_computo`); smoke test: lettura testo senza timeout sulle pagine grandi e senza falsi errori dai dati RSC, attesa della rete dopo il login; esito 44/44 ok dopo il passo 1 |

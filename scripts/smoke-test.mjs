@@ -146,6 +146,10 @@ try {
     entrato = await page.waitForURL(/\/dashboard/, { timeout: 20_000 }).then(() => true).catch(() => false)
   }
   if (!entrato) throw new Error('dopo 3 tentativi non si arriva su /dashboard (credenziali o pagina di login)')
+  // La dashboard aperta dal login sta ancora caricando: se il giro parte subito,
+  // le sue richieste vengono interrotte e il browser registra un falso
+  // "Failed to fetch" sulla prima pagina del giro (la home).
+  await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {})
   log('✓ Login riuscito')
 } catch (e) {
   await page.screenshot({ path: path.join(SHOTS, '00-login-fallito.png') }).catch(() => {})
@@ -177,9 +181,26 @@ for (const [i, p] of PAGINE.entries()) {
   if (corrente.http && corrente.http >= 400) corrente.problemi.push(`HTTP ${corrente.http}`)
   if (/\/login/.test(page.url())) corrente.problemi.push('rimandata al login')
   else if (!page.url().includes(p.url.split('?')[0])) corrente.avvisi.push(`reindirizzata a ${corrente.finale}`)
-  const testo = await page.locator('body').innerText({ timeout: 5_000 }).catch(() => '')
-  for (const t of TESTI_ROTTURA) if (testo.includes(t)) corrente.problemi.push(`schermata di errore: "${t}"`)
-  if (!testo.trim()) corrente.problemi.push('pagina vuota')
+  // Testo visibile senza innerText: innerText ricalcola il layout e su pagine con
+  // migliaia di righe (computo, SAL) supera il timeout → falso "pagina vuota".
+  // Nemmeno textContent va bene: include i <script> con i dati RSC di Next.js,
+  // dove compare il modello "This page could not be found" → falso errore.
+  // Si leggono quindi solo i nodi di testo fuori da script/style/template.
+  const testo = await page.evaluate(() => {
+    if (!document.body) return ''
+    const salta = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE'])
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: n => (n.parentElement && !salta.has(n.parentElement.tagName) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
+    })
+    let s = ''
+    while (w.nextNode()) s += w.currentNode.nodeValue
+    return s
+  }).catch(() => null)
+  if (testo === null) corrente.avvisi.push('testo della pagina non leggibile')
+  else {
+    for (const t of TESTI_ROTTURA) if (testo.includes(t)) corrente.problemi.push(`schermata di errore: "${t}"`)
+    if (!testo.trim()) corrente.problemi.push('pagina vuota')
+  }
   if (corrente.jsErrors.length) corrente.problemi.push(`${corrente.jsErrors.length} errori JavaScript`)
   if (corrente.console.length) corrente.avvisi.push(`${corrente.console.length} errori in console`)
   if (corrente.rete.length) corrente.avvisi.push(`${corrente.rete.length} richieste fallite`)
