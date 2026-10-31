@@ -77,7 +77,7 @@ export default function VariantiPage({ params: pp }: { params: Promise<{ id: str
     const [{ data: c }, { data: v }, { data: vv }] = await Promise.all([
       supabase.from('commesse').select('importo_contratto').eq('id', id).single(),
       supabase.from('varianti').select('*').eq('commessa_id', id).order('numero'),
-      supabase.from('voci_variante').select('*').eq('commessa_id', id),
+      supabase.from('voci_variante').select('*, quantita:quantita_variante').eq('commessa_id', id),
     ])
     setImportoContratto(c?.importo_contratto || 0)
     setVarianti(v || [])
@@ -139,7 +139,7 @@ export default function VariantiPage({ params: pp }: { params: Promise<{ id: str
     await supabase.from('voci_variante').insert({
       variante_id: varianteId, commessa_id: id,
       codice: fvCodice || null, descrizione: fvDesc.trim(),
-      um: fvUm || null, quantita: qta, prezzo_unitario: pu,
+      um: fvUm || null, quantita_variante: qta, prezzo_unitario: pu,
       importo: Math.round(qta * pu * 100) / 100,
       tipo_modifica: fvTipo,
     })

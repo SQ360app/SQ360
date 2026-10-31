@@ -153,7 +153,7 @@ export default function DashboardPage() {
         .gte('created_at', meseS),
 
       supabase.from('fatture_passive')
-        .select('id,importo_totale'),
+        .select('id,importo_totale:totale'),
 
       supabase.from('documenti_sicurezza')
         .select('id,tipo,soggetto,data_scadenza,commessa_id')
@@ -175,12 +175,12 @@ export default function DashboardPage() {
         .neq('stato', 'ANNULLATO'),
 
       supabase.from('oda')
-        .select('id,numero,commessa_id,importo_netto,created_at')
+        .select('id,numero:codice,commessa_id,importo_netto,created_at')
         .order('created_at', { ascending: false })
         .limit(5),
 
       supabase.from('ddt')
-        .select('id,numero,commessa_id,stato,created_at')
+        .select('id,numero:numero_ddt,commessa_id,stato,created_at')
         .order('created_at', { ascending: false })
         .limit(5),
 
@@ -190,7 +190,7 @@ export default function DashboardPage() {
         .limit(5),
 
       supabase.from('fatture_passive')
-        .select('id,numero,importo_totale,data_scadenza,commessa_id')
+        .select('id,numero:numero_fattura,importo_totale:totale,data_scadenza,commessa_id')
         .not('data_scadenza', 'is', null)
         .gte('data_scadenza', todayS)
         .lte('data_scadenza', tra30S)

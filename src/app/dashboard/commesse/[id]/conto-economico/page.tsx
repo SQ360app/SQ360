@@ -52,13 +52,17 @@ export default function ContoEconomicoPage() {
     // Fallback: se nessun computo importato, usa importo_contratto come riferimento budget
     if (!hasComputo) budgetComputo = ricavoContratto
 
-    // 3. SAL attivi (ricavi maturati)
+    // 3. SAL attivi (ricavi maturati) — tabella `sal` con tipo ATTIVO
+    // (`sal_attivi` è legacy e vuota). Stato in minuscolo o MAIUSCOLO a seconda
+    // di chi l'ha scritto: si confronta sempre in minuscolo.
     const { data: sal } = await supabase
-      .from('sal_attivi')
-      .select('importo_certificato, stato')
+      .from('sal')
+      .select('importo_certificato, stato, pagamento_ricevuto')
       .eq('commessa_id', id)
-    const ricaviEmessi    = (sal || []).filter((s: any) => s.stato !== 'bozza').reduce((s: number, x: any) => s + (x.importo_certificato || 0), 0)
-    const ricaviIncassati = (sal || []).filter((s: any) => s.stato === 'pagato').reduce((s: number, x: any) => s + (x.importo_certificato || 0), 0)
+      .eq('tipo', 'ATTIVO')
+    const statoSal = (s: any) => String(s.stato || '').toLowerCase()
+    const ricaviEmessi    = (sal || []).filter((s: any) => !['bozza', 'rifiutato'].includes(statoSal(s))).reduce((s: number, x: any) => s + (x.importo_certificato || 0), 0)
+    const ricaviIncassati = (sal || []).filter((s: any) => statoSal(s) === 'pagato' || s.pagamento_ricevuto === true).reduce((s: number, x: any) => s + (x.importo_certificato || 0), 0)
 
     // 4. Costi da ODA impegnati
     const { data: odaList } = await supabase.from('oda').select('importo_netto, stato, tipo_oda').eq('commessa_id', id)
@@ -70,13 +74,11 @@ export default function ContoEconomicoPage() {
       odaPerTipo[k] = (odaPerTipo[k] || 0) + (o.importo_netto || 0)
     }
 
-    // 5b. Piano costi voce per tipo
-    const { data: pianoList } = await supabase.from('piano_costi_voce').select('tipo, importo_previsto').eq('commessa_id', id)
+    // 5b. Piano costi voce: tabella `piano_costi_voce` eliminata (sostituita
+    // dall'analisi prezzi BASE+EXTRA, vedi wbsAnalisiMap). Valori vuoti per
+    // compatibilità con la UI esistente.
     const pianoPerTipo: Record<string, number> = {}
-    for (const p of pianoList || []) {
-      pianoPerTipo[p.tipo] = (pianoPerTipo[p.tipo] || 0) + (p.importo_previsto || 0)
-    }
-    const totalePiano = Object.values(pianoPerTipo).reduce((s, v) => s + v, 0)
+    const totalePiano = 0
 
     // 5c. Analisi prezzi × quantità per WBS (client-side join)
     const { data: analisiList } = await supabase.from('analisi_prezzi_tariffa').select('codice_tariffa, tipo, importo_unitario').eq('commessa_id', id)
@@ -105,8 +107,9 @@ export default function ContoEconomicoPage() {
     const costiSpese = (speseList || []).filter((s: any) => ['REGISTRATA', 'APPROVATA'].includes(s.stato)).reduce((s: number, x: any) => s + (x.importo_netto || 0), 0)
 
     // 7. Ritenute accumulate
-    const { data: salP } = await supabase.from('sal_passivi').select('ritenuta_importo, stato').eq('commessa_id', id)
-    const ritenute = (salP || []).filter((s: any) => ['APPROVATO', 'PAGATO'].includes(s.stato)).reduce((s: number, x: any) => s + (x.ritenuta_importo || 0), 0)
+    // Stati scritti da SAL Passivi: ricevuto → in_verifica → autorizzato → pagato
+    const { data: salP } = await supabase.from('sal_passivi').select('ritenuta_garanzia, stato').eq('commessa_id', id)
+    const ritenute = (salP || []).filter((s: any) => ['autorizzato', 'pagato'].includes(String(s.stato || '').toLowerCase())).reduce((s: number, x: any) => s + (x.ritenuta_garanzia || 0), 0)
 
     // 8. Contratti sub impegnati
     const { data: contSub } = await supabase.from('contratti_sub').select('importo_netto, stato').eq('commessa_id', id)

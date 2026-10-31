@@ -104,45 +104,30 @@ export default function RegisterPage() {
     }
   }
 
-  // Eseguito anche dal bottone "Riprova" in caso di fallimento parziale
-  async function completaRegistrazione(userId: string, esistenteAziendaId?: string) {
-    let aziendaId = esistenteAziendaId
-
-    if (!aziendaId) {
-      // 2. Crea azienda
-      const { data: newAzienda, error: aziendaErr } = await supabase
-        .from('azienda')
-        .insert({
-          nome:      azienda.nome.trim(),
-          piva:      azienda.piva.replace(/\s/g, ''),
-          cf:        azienda.cf.trim() || null,
-          provincia: azienda.provincia.trim() || null,
-        })
-        .select('id')
-        .single()
-
-      if (aziendaErr || !newAzienda) {
-        setPending({ userId })
-        throw new Error('Errore creazione azienda: ' + (aziendaErr?.message || 'riprovare'))
-      }
-      aziendaId = newAzienda.id as string
-    }
-
-    // 3. Crea record utenti con ruolo admin
-    const { error: utenteErr } = await supabase
-      .from('utenti')
-      .insert({
-        id:         userId,
-        azienda_id: aziendaId,
-        email:      admin.email.trim(),
-        nome:       admin.nome.trim(),
-        cognome:    admin.cognome.trim(),
-        ruolo:      'admin',
+  // Eseguito anche dal bottone "Riprova" in caso di fallimento parziale.
+  // Azienda (azienda + aziende) e utente admin vengono creati dalla route server
+  // /api/register: le tabelle non hanno regole INSERT per i client.
+  async function completaRegistrazione(userId: string) {
+    let res: Response
+    try {
+      res = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          email:   admin.email.trim(),
+          azienda: { ragione_sociale: azienda.nome.trim(), piva: azienda.piva, cf: azienda.cf },
+          admin:   { nome: admin.nome.trim(), cognome: admin.cognome.trim() },
+        }),
       })
-
-    if (utenteErr) {
-      setPending({ userId, aziendaId })
-      throw new Error('Errore collegamento utente: ' + utenteErr.message)
+    } catch {
+      setPending({ userId })
+      throw new Error('Errore di rete: riprova')
+    }
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.ok) {
+      setPending({ userId })
+      throw new Error(data.error || 'Registrazione non completata: riprova')
     }
 
     // Tutto riuscito
@@ -154,7 +139,7 @@ export default function RegisterPage() {
     if (!pending) return
     setErrore(''); setLoading(true)
     try {
-      await completaRegistrazione(pending.userId, pending.aziendaId)
+      await completaRegistrazione(pending.userId)
     } catch (e: unknown) {
       setErrore((e instanceof Error) ? e.message : 'Errore sconosciuto')
     } finally {

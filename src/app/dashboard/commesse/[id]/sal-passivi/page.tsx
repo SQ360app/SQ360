@@ -74,12 +74,12 @@ export default function SALPassiviPage({ params: p }: { params: Promise<{ id: st
     setLoading(true)
     const [{ data: ctr }, { data: sal }] = await Promise.all([
       supabase.from('contratti_sub')
-        .select('id,importo,stato,note,fornitore:professionisti_fornitori(id,ragione_sociale,nome,cognome,durc_scadenza)')
+        .select('id,importo:importo_netto,stato,note,fornitore:professionisti_fornitori(id,ragione_sociale,nome,cognome,durc_scadenza)')
         .eq('commessa_id', id),
       supabase.from('sal_passivi')
-        .select('*')
+        .select('*, contratto_sub_id:contratto_id')
         .eq('commessa_id', id)
-        .order('contratto_sub_id').order('numero')
+        .order('contratto_id').order('numero')
     ])
     // Supabase restituisce fornitore come array dal join, normalizziamo
     const ctrNorm = (ctr || []).map((c: any) => ({
@@ -129,7 +129,8 @@ export default function SALPassiviPage({ params: p }: { params: Promise<{ id: st
     const { error } = await supabase.from('sal_passivi').insert({
       commessa_id: id,
       azienda_id: aziendaId,
-      contratto_sub_id: modalContratto.id,
+      contratto_id: modalContratto.id,
+      codice: `SALP-${modalContratto.id.slice(0, 6).toUpperCase()}-${String(numero).padStart(2, '0')}`,
       fornitore_id: modalContratto.fornitore?.id || null,
       numero,
       data_emissione: form.data_emissione,

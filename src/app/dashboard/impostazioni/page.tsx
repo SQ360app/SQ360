@@ -163,7 +163,10 @@ export default function ImpostazioniPage() {
 
   const [editingAzienda, setEditingAzienda] = useState(false)
 
-  const [wbsTemplate, setWbsTemplate] = useState<WbsNode[]>(() => wbsFlatToNodes(DEFAULT_WBS_FLAT))
+  const [wbsTemplate, setWbsTemplate] = useState<WbsNode[]>([])
+  // 'errore' = lettura fallita: il salvataggio è bloccato (cancellerebbe il template esistente)
+  const [wbsStato, setWbsStato] = useState<'caricamento' | 'ok' | 'vuoto' | 'errore'>('caricamento')
+  const [wbsErrore, setWbsErrore] = useState('')
   const [wbsTemplateEdited, setWbsTemplateEdited] = useState(false)
   const [wbsTemplateSaving, setWbsTemplateSaving] = useState(false)
 
@@ -181,17 +184,16 @@ export default function ImpostazioniPage() {
       if (!id) return
       setAziendaId(id)
 
-      // Load WBS template — prova wbs_templates (nuovo), poi wbs_template (legacy)
-      let nodes = await loadWbsNodes(supabase, 'wbs_templates', { azienda_id: id })
-      if (!nodes.length) nodes = await loadWbsNodes(supabase, 'wbs_template', { azienda_id: id })
-      if (nodes.length > 0) {
-        setWbsTemplate(nodes)
+      // Load WBS template aziendale. All'apertura della pagina NON si scrive mai nulla:
+      // in passato un errore di lettura veniva scambiato per "template vuoto" e ad ogni
+      // apertura veniva inserita un'altra copia del template di default.
+      const { nodes, error: errWbs } = await loadWbsNodes(supabase, 'wbs_templates', { azienda_id: id })
+      if (errWbs) {
+        setWbsStato('errore'); setWbsErrore(errWbs)
+      } else if (nodes.length > 0) {
+        setWbsTemplate(nodes); setWbsStato('ok')
       } else {
-        // Auto-init con DEFAULT_WBS_FLAT
-        const db = supabase as any
-        const initNodes = wbsFlatToNodes(DEFAULT_WBS_FLAT, () => crypto.randomUUID())
-        await db.from('wbs_templates').insert(buildWbsInsertPayload(initNodes, { azienda_id: id }))
-        setWbsTemplate(initNodes)
+        setWbsStato('vuoto')
       }
       const { data } = await (supabase as any).from('azienda').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', id).single()
       if (data) {
@@ -258,13 +260,27 @@ export default function ImpostazioniPage() {
     if (tipo === 'footer') { setFooterUrl(url); setFooterPreview(objectUrl) }
   }
 
+  // UPDATE su `azienda` con verifica: con le RLS un update non permesso NON dà
+  // errore ma aggiorna 0 righe → senza questo controllo la pagina mostrerebbe
+  // "Salvato" anche quando non ha salvato nulla.
+  async function aggiornaAzienda(patch: Record<string, unknown>): Promise<boolean> {
+    const { data, error } = await (supabase as any).from('azienda').update(patch).eq('id', aziendaId).select('id')
+    if (error) { alert('Errore salvataggio: ' + error.message); return false }
+    if (!data?.length) {
+      alert('Dati azienda NON salvati: permessi insufficienti sulla tabella azienda (manca la regola di aggiornamento). Contatta l\'amministratore.')
+      return false
+    }
+    return true
+  }
+
   async function saveDocumenti() {
     if (!aziendaId) return
-    await (supabase as any).from('azienda').update({
+    const ok = await aggiornaAzienda({
       logo_url:                   logoUrl   || null,
       carta_intestata_header_url: headerUrl || null,
       carta_intestata_footer_url: footerUrl || null,
-    }).eq('id', aziendaId)
+    })
+    if (!ok) return
     setDocSaved(true)
     setTimeout(() => setDocSaved(false), 3000)
   }
@@ -293,7 +309,7 @@ export default function ImpostazioniPage() {
         ? `${azienda.cap_sede} ${azienda.comune_sede}`
         : azienda.cap_sede || azienda.comune_sede,
     ].filter(Boolean).join(', ')
-    const { error } = await (supabase as any).from('azienda').update({
+    const ok = await aggiornaAzienda({
       ragione_sociale:   azienda.ragione_sociale || null,
       partita_iva:       azienda.piva || null,
       codice_fiscale:    azienda.cf || null,
@@ -304,20 +320,21 @@ export default function ImpostazioniPage() {
       rea:               azienda.rea || null,
       soa_categorie:     azienda.soa_categorie || null,
       patente_punteggio: azienda.patente_crediti || null,
-    }).eq('id', aziendaId)
+    })
     setEditingAzienda(false)
-    if (error) { alert('Errore salvataggio: ' + error.message); return }
+    if (!ok) return
     setSavedOk(true)
     setTimeout(() => setSavedOk(false), 2000)
   }
 
   async function saveEmailConfig() {
     if (!aziendaId) return
-    await (supabase as any).from('azienda').update({
+    const ok = await aggiornaAzienda({
       email_acquisti:        emailAcquisti        || null,
       email_cantiere:        emailCantiere        || null,
       email_amministrazione: emailAmministrazione || null,
-    }).eq('id', aziendaId)
+    })
+    if (!ok) return
     setEmailSaved(true)
     setTimeout(() => setEmailSaved(false), 3000)
   }
@@ -899,14 +916,21 @@ export default function ImpostazioniPage() {
 
               const saveTemplate = async () => {
                 if (!aziendaId) return
+                if (wbsStato === 'errore' || wbsStato === 'caricamento') {
+                  alert('Il template attuale non è stato letto: salvataggio bloccato per non sovrascriverlo. Ricarica la pagina.')
+                  return
+                }
                 setWbsTemplateSaving(true)
                 const db = supabase as any
                 try {
-                  await db.from('wbs_templates').delete().eq('azienda_id', aziendaId)
+                  const { error: errDel } = await db.from('wbs_templates').delete().eq('azienda_id', aziendaId)
+                  if (errDel) { alert(`Errore salvataggio template: ${errDel.message}`); return }
                   if (wbsTemplate.length > 0) {
-                    await db.from('wbs_templates').insert(buildWbsInsertPayload(wbsTemplate, { azienda_id: aziendaId }))
+                    const { error: errIns } = await db.from('wbs_templates').insert(buildWbsInsertPayload(wbsTemplate, { azienda_id: aziendaId }))
+                    if (errIns) { alert(`Errore salvataggio template: ${errIns.message}`); return }
                   }
                   setWbsTemplateEdited(false)
+                  setWbsStato(wbsTemplate.length > 0 ? 'ok' : 'vuoto')
                 } finally { setWbsTemplateSaving(false) }
               }
 
@@ -985,12 +1009,22 @@ export default function ImpostazioniPage() {
                   <p style={{ fontSize: 12, color: 'var(--t3)', margin: '0 0 16px', lineHeight: 1.6 }}>
                     Struttura WBS predefinita per tutte le nuove commesse. Ogni commessa può avere la propria WBS personalizzata.
                   </p>
+                  {wbsStato === 'errore' && (
+                    <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, fontSize: 12, color: '#991b1b', marginBottom: 12 }}>
+                      ⚠️ Impossibile leggere il template WBS: {wbsErrore}. Il salvataggio è bloccato per non sovrascrivere il template esistente; ricarica la pagina.
+                    </div>
+                  )}
+                  {wbsStato === 'vuoto' && wbsTemplate.length === 0 && (
+                    <div style={{ padding: '10px 14px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, fontSize: 12, color: '#1e40af', marginBottom: 12 }}>
+                      Nessun template WBS salvato per l&apos;azienda. Usa <strong>📋 Carica WBS edilizia</strong> o <strong>↩ WBS standard SQ360</strong>, modifica se serve e poi <strong>💾 Salva template</strong>.
+                    </div>
+                  )}
                   <div style={{ marginBottom: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     <button style={{ fontSize: 12, padding: '5px 12px', background: '#14532d', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
                       onClick={addRoot}>➕ Fase radice</button>
                     {wbsTemplateEdited && (
                       <button style={{ fontSize: 12, padding: '5px 12px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}
-                        onClick={saveTemplate} disabled={wbsTemplateSaving}>
+                        onClick={saveTemplate} disabled={wbsTemplateSaving || wbsStato === 'errore' || wbsStato === 'caricamento'}>
                         {wbsTemplateSaving ? '…' : '💾 Salva template'}
                       </button>
                     )}

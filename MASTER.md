@@ -1,7 +1,7 @@
 # SQ360 — MASTER
 
 > Documento di stato unico del progetto. **Va aggiornato ad ogni commit.**
-> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: smoke test Playwright (successivo a `e03ee42`, solo locale)
+> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: allineamento codice ↔ schema DB (successivo a `aba8858`)
 >
 > Fonti: `CLAUDE.md` (storico sessioni), `DEPLOY.md`, struttura `src/app`.
 
@@ -15,7 +15,7 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 | Modulo | Stato | Note |
 |---|---|---|
 | Auth login | ✅ | Protezione solo client-side (`dashboard/layout.tsx`); `middleware.ts` vuoto |
-| Registrazione multi-azienda `/register` | ⚠️ | Wizard 2 step + recovery orfano; **test end-to-end register→email→login da fare** |
+| Registrazione multi-azienda `/register` | ⚠️ | Wizard 2 step + recovery orfano; azienda+utente creati dalla route server `/api/register` (service role, validazione, righe in `azienda` **e** `aziende` con lo stesso id); **test end-to-end register→email→login da fare** |
 | Multi-tenant (`azienda_id` + RLS) | ✅ | Tutti gli INSERT con `azienda_id`; RLS su tutte le tabelle figlie |
 | Permessi sotto-moduli (`moduli_abilitati`) | ✅ | Filtro tab/gruppi + redirect ad `/anagrafica`; admin vede tutto |
 | Inviti utente `/api/invite-user` | ✅ | Richiede `SUPABASE_SERVICE_ROLE_KEY` |
@@ -98,6 +98,10 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 - **Paginazione**: ODA / DDT / fatture passive a blocchi da 50 con "Carica altri".
 - **PDF**: `@react-pdf/renderer` sempre con import dinamico nel click handler.
 - **PWA**: `public/sw.js` statico committato; NetworkFirst su navigazione, pass-through per Supabase e `/api/*`.
+- **Tabella azienda canonica = `azienda`** (FK di `utenti`, `gare`, `sal`, `documenti_commessa`, `email_log`): dati e carta intestata si leggono/scrivono lì. `aziende` resta solo per le FK di `wbs_templates`/`azienda_sedi` e viene creata con lo stesso id da `/api/register`; unificazione futura da pianificare.
+- **Nomi colonna DB ≠ nomi usati nel codice**: si legge con alias PostgREST (`numero:codice`, `url:file_url`, …) e si scrive con il nome reale. Rif. `supabase/migrations/20261031_allineamento_schema.sql`.
+- **Scritture non permesse da RLS**: un UPDATE/DELETE bloccato non dà errore ma tocca 0 righe → verificare sempre le righe toccate (`.select('id')` dopo l'update, ricontare dopo la delete).
+- **Nessuna scrittura automatica all'apertura di una pagina** (es. template WBS): errore di lettura ≠ dato vuoto.
 - **Rename DAM → SAM** solo nelle label: URL `/dam`, variabili e tabella `dam` invariati.
 - **Pagine pubbliche senza login**: `/offerta/[token]` (fornitore), `/scan/[token]` (badge cantiere) — accesso via token univoco.
 
@@ -127,6 +131,9 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 ## 4. Discusso ma non implementato / pendente
 
 ### 4.1 Da eseguire su Supabase (bloccanti per moduli già scritti)
+- [x] `supabase/migrations/20261031_allineamento_schema.sql` — **eseguita il 31/10/2026** (colonne mancanti su fatture_passive/oda/documenti_commessa/gare/varianti/voci_variante/sal_passivi/contratti_sub/azienda/wbs_nodes, enum `stato_gara`, FK verso `professionisti_fornitori`)
+- [ ] Regola RLS **UPDATE su `azienda`** limitata alla propria azienda (oggi solo SELECT → Impostazioni non può salvare dati azienda, email, logo/carta intestata; la pagina ora lo segnala)
+- [ ] `mia_azienda_id()` restituisce NULL per gli utenti → le regole di `aziende` non mostrano nulla (da correggere o sostituire con `get_azienda_id()`, che funziona)
 - [ ] `CREATE TABLE nuovi_prezzi` + `riserve` con RLS (⚠️ policy attuali `USING (true)` — da restringere a `azienda_id = get_azienda_id()`)
 - [ ] `CREATE TABLE wbs_templates`, `wbs_nodes` con RLS
 - [ ] Tabelle Sprint 6: `documenti_contratto_sub`, `lavoratori_sub`, `pagamenti_sub`
@@ -145,7 +152,7 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 - [ ] Test end-to-end register → conferma email → primo login
 
 ### 4.3 Esito smoke test 31/10/2026 (produzione, utente di prova admin)
-1 pagina rotta, 22 con avvisi, 21 ok su 44. Dettaglio in `scripts/report-smoke.md` (locale).
+**Prima delle correzioni** (stato risolto dalla migrazione 20261031 + commit di allineamento codice): 1 pagina rotta, 22 con avvisi, 21 ok su 44. Dettaglio in `scripts/report-smoke.md` (locale).
 - ✗ **`/dashboard/sal` rotta**: crash client `Cannot read properties of undefined (reading 'color')`.
 - **Schema DB non allineato al codice** (errori 400/404 PostgREST, le pagine si aprono ma mostrano dati parziali):
   - colonne mancanti: `fatture_passive.importo_totale/numero/totale`, `ddt.numero/fornitore_nome`, `oda.numero`, `documenti_commessa.categoria`, `gare.codice_gara`, `varianti.descrizione`, `voci_variante.commessa_id`, `sal_passivi.contratto_sub_id/ritenuta_importo`, `sal_attivi.stato`, `wbs_nodes.descrizione`, `wbs_commessa.etichetta`, `wbs_templates.template_id`, `wbs_template.parent_id`, `azienda.carta_intestata_header_url`, `utenti.moduli_abilitati`
@@ -156,7 +163,9 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 
 ### 4.4 Debito tecnico / idee aperte
 - Auth solo client-side: `middleware.ts` vuoto — valutare protezione server-side delle route.
-- Tabella `piano_costi_voce` e tabelle WBS legacy (`wbs_commessa`, `wbs_template`) ancora in DB: pianificare migrazione/rimozione.
+- Tabelle legacy ancora in DB ma non più usate dal codice: `piano_costi_voce` (eliminata), `wbs_commessa`, `wbs_template` (libreria WBS standard globale, 220 righe), `sal_attivi` (i SAL sono in `sal`), `fornitori` (34 righe; l'unico `contratti_sub` punta ancora lì → FK `NOT VALID`): pianificare migrazione/rimozione.
+- Due tabelle azienda (`azienda` + `aziende`) con FK divise: unificare su `azienda`.
+- `/register`: il campo Provincia del form non viene salvato (nessuna colonna corrispondente in `azienda`).
 - Checklist offerta gare in `localStorage`: non condivisa tra utenti/dispositivi — valutare persistenza in DB.
 - Tipi Supabase non generati (`any` ovunque): valutare `supabase gen types`.
 - **Sicurezza RLS da verificare tabella per tabella**: con la sola chiave anon (pubblica, senza login) è stato possibile leggere righe di `computo_metrico` → alcune policy sono aperte al ruolo anon. Contraddice "multi-tenant completamente sicura".
@@ -321,4 +330,5 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 | 2026-10-31 | `18e1550` | Fix import misurazioni XPWE (parser `PweVCMisure/RGItem`, schema reale tabella, formule, deduzioni, vedi voce, errore bloccante su INSERT); computo e SAL Attivi mostrano la descrizione della riga invece della categoria |
 | 2026-10-31 | `d3ece43` | Fix build Vercel: committata `getCurrentUserModuli()` in `src/lib/supabase.ts` (usata da Sidebar e layout commessa, era rimasta fuori dai commit); rimosso il relativo debito tecnico |
 | 2026-10-31 | `e03ee42` | `/api/xpwe-parse` e `/api/xpwe-parse-sal` con client Supabase sul token dell'utente (`getUserClient`, 401 se token mancante/scaduto) — risolve l'INSERT misurazioni bloccato dalle RLS e toglie la service role da xpwe-parse-sal; pagine Computo e SAL Attivi inviano il Bearer token; reimport con cancellazioni verificate prima degli insert (niente duplicati) |
-| 2026-10-31 | (questo commit) | Smoke test Playwright in sola lettura (`scripts/smoke-test.mjs`, `playwright` devDependency, output esclusi da git); esito in §4.3 |
+| 2026-10-31 | `aba8858` | Smoke test Playwright in sola lettura (`scripts/smoke-test.mjs`, `playwright` devDependency, output esclusi da git); esito in §4.3 |
+| 2026-10-31 | (questo commit) | Migrazione `20261031_allineamento_schema.sql` (eseguita) + allineamento codice: crash `/dashboard/sal` (stati minuscoli), `/register` su route server `/api/register`, carta intestata da `azienda`, WBS senza fallback legacy e senza scrittura automatica in Impostazioni, CE da `sal`, alias colonne (ODA/DDT/fatture/gare/varianti/SAL passivi/documenti), verifica righe aggiornate su `azienda` |

@@ -114,9 +114,9 @@ export default function GarePage() {
     setLoading(true)
     const aziendaId = await getAziendaId()
     const { data } = await supabase.from('gare')
-      .select('id,codice_gara,nome,committente,importo_base,data_scadenza,stato,criterio_aggiudicazione,provincia,categoria_prevalente,cig,cup,tipo_committente,data_pubblicazione,link_bando,note,commessa_id,ribasso_offerto,punteggio_tecnico,punteggio_economico')
+      .select('id,codice_gara:codice,nome,committente,importo_base,data_scadenza:scadenza_presentazione,stato,criterio_aggiudicazione,provincia,categoria_prevalente:categoria_opera,cig,cup,tipo_committente,data_pubblicazione,link_bando,note,commessa_id,ribasso_offerto,punteggio_tecnico,punteggio_economico')
       .eq('azienda_id', aziendaId)
-      .order('data_scadenza', { ascending: true })
+      .order('scadenza_presentazione', { ascending: true })
     if (data) setGare(data as Gara[])
     setLoading(false)
   }
@@ -213,12 +213,12 @@ export default function GarePage() {
     const { data: utData } = await supabase.from('utenti').select('azienda_id').eq('id', ut.user?.id || '').single()
     const codice = form.codice_gara || generaCodiceGara(new Date().getFullYear(), gare.length + 1)
     const { data } = await supabase.from('gare').insert([{
-      azienda_id: utData?.azienda_id, codice_gara: codice,
+      azienda_id: utData?.azienda_id, codice,
       nome: form.nome, committente: form.committente,
       cig: form.cig||null, cup: form.cup||null, importo_base: form.importo_base,
-      categoria_prevalente: form.categoria_prevalente, provincia: form.provincia,
+      categoria_opera: form.categoria_prevalente, provincia: form.provincia,
       tipo_committente: form.tipo_committente,
-      data_scadenza: form.data_scadenza||null, data_pubblicazione: form.data_pubblicazione||null,
+      scadenza_presentazione: form.data_scadenza||null, data_pubblicazione: form.data_pubblicazione||null,
       criterio_aggiudicazione: form.criterio_aggiudicazione,
       link_bando: form.link_bando||null, note: form.note||null, stato: 'IN_ANALISI',
     }]).select().single()

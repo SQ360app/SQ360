@@ -5,7 +5,7 @@ import { Plus, X, Send, ThumbsUp, FileText, AlertTriangle } from 'lucide-react'
 import { supabase, getAziendaId } from '@/lib/supabase'
 
 type TipoSAL = 'ATTIVO' | 'PASSIVO'
-type StatoSAL = 'BOZZA' | 'INVIATO' | 'APPROVATO' | 'APPROVATO_NOTE' | 'RIFIUTATO' | 'PAGATO'
+type StatoSAL = 'BOZZA' | 'EMESSO' | 'INVIATO' | 'APPROVATO' | 'APPROVATO_NOTE' | 'RIFIUTATO' | 'PAGATO'
 
 interface VoceSAL {
   id: string
@@ -43,12 +43,20 @@ interface SAL {
 
 const STATO_META: Record<StatoSAL, { label: string; color: string }> = {
   BOZZA: { label: 'Bozza', color: '#6b7280' },
+  EMESSO: { label: 'Emesso', color: '#6366f1' },
   INVIATO: { label: 'Inviato', color: '#3b82f6' },
   APPROVATO: { label: 'Approvato ✓', color: '#10b981' },
   APPROVATO_NOTE: { label: 'Approvato con note', color: '#f59e0b' },
   RIFIUTATO: { label: 'Rifiutato', color: '#ef4444' },
   PAGATO: { label: 'Pagato ✓', color: '#10b981' },
 }
+
+// Nel DB lo stato è testo libero: SAL Attivi (commessa) scrive minuscolo
+// ('bozza', 'emesso'), questa pagina in passato scriveva MAIUSCOLO.
+// In memoria si usa sempre la forma MAIUSCOLA; nel DB si scrive minuscolo.
+const STATO_FALLBACK = { label: '—', color: '#94a3b8' }
+const normStato = (s: string | null | undefined) => (s || 'BOZZA').toUpperCase() as StatoSAL
+const metaStato = (s: string) => STATO_META[normStato(s)] ?? { ...STATO_FALLBACK, label: s || '—' }
 
 function fmt(n: number) { return n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
 
@@ -69,7 +77,7 @@ export default function SALPage() {
       .from('sal')
       .select('*, voci_sal(*)')
       .order('created_at', { ascending: false })
-    if (!error && data) setSalList(data)
+    if (!error && data) setSalList((data as SAL[]).map(s => ({ ...s, stato: normStato(s.stato) })))
     setLoading(false)
   }
 
@@ -83,18 +91,18 @@ export default function SALPage() {
   async function approva(esito: 'APPROVATO' | 'APPROVATO_NOTE' | 'RIFIUTATO') {
     if (!selected) return
     const { data, error } = await supabase.from('sal').update({
-      stato: esito, approvatore, note_approvazione: noteApprovazione,
+      stato: esito.toLowerCase(), approvatore, note_approvazione: noteApprovazione,
       data_approvazione: new Date().toISOString().slice(0, 10)
     }).eq('id', selected).select().single()
     if (!error && data) {
-      setSalList(prev => prev.map(s => s.id === selected ? { ...s, ...data } : s))
+      setSalList(prev => prev.map(s => s.id === selected ? { ...s, ...data, stato: normStato(data.stato) } : s))
     }
     setShowApprovaModal(false); setNoteApprovazione(''); setApprovatore('')
   }
 
   async function inviaADL() {
     if (!selected) return
-    const { data, error } = await supabase.from('sal').update({ stato: 'INVIATO' }).eq('id', selected).select().single()
+    const { data, error } = await supabase.from('sal').update({ stato: 'inviato' }).eq('id', selected).select().single()
     if (!error && data) setSalList(prev => prev.map(s => s.id === selected ? { ...s, stato: 'INVIATO' } : s))
   }
 
@@ -136,7 +144,7 @@ export default function SALPage() {
         <div style={{ display: 'grid', gridTemplateColumns: salSelezionato ? '420px 1fr' : '1fr', gap: 16 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {filtered.map(sal => {
-              const sm = STATO_META[sal.stato]
+              const sm = metaStato(sal.stato)
               const isSelected = selected === sal.id
               const scaduto = sal.data_scadenza_pagamento && new Date(sal.data_scadenza_pagamento) < new Date() && sal.stato !== 'PAGATO'
               return (

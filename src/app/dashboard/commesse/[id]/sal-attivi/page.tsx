@@ -399,7 +399,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
   useEffect(() => {
     getAziendaId().then(async azId => {
       if (!azId) return
-      const { data } = await supabase.from('aziende').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', azId).single()
+      const { data } = await supabase.from('azienda').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', azId).single()
       setAziendaDoc(data || null)
     })
   }, [])

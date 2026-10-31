@@ -127,7 +127,7 @@ export default function ContrattiPage({ params: pp }: { params: Promise<{ id: st
     setLoading(true)
     const [{ data: c }, { data: f }, { data: comm }] = await Promise.all([
       supabase.from('contratti_sub')
-        .select('*, fornitore:professionisti_fornitori(ragione_sociale, piva)')
+        .select('*, fornitore:professionisti_fornitori(ragione_sociale,piva:partita_iva)')
         .eq('commessa_id', id).order('created_at', { ascending: false }),
       supabase.from('professionisti_fornitori').select('id,ragione_sociale').order('ragione_sociale'),
       supabase.from('commesse').select('importo_contratto,codice,nome,committente,cig,cup').eq('id', id).single(),

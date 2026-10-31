@@ -48,7 +48,7 @@ export default function DocumentiPage({ params: p }: { params: Promise<{ id: str
     setLoading(true)
     const { data } = await supabase
       .from('documenti_commessa')
-      .select('*')
+      .select('*, url:file_url, dimensione:file_size')
       .eq('commessa_id', id)
       .order('created_at', { ascending: false })
     setDocs((data as Documento[]) || [])
@@ -77,9 +77,9 @@ export default function DocumentiPage({ params: p }: { params: Promise<{ id: str
         commessa_id: id,
         nome: newDoc.nome.trim(),
         categoria: newDoc.categoria,
-        url: urlData.publicUrl,
+        file_url: urlData.publicUrl,
         tipo_mime: file.type,
-        dimensione: file.size,
+        file_size: file.size,
         note: newDoc.note,
       })
       showToast('Documento caricato')

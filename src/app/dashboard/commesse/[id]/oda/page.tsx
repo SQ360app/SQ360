@@ -113,14 +113,21 @@ export default function ODAPage() {
   async function load(pagina = 0) {
     setLoading(true)
     const [{ data }, { data: forn }, { data: comm }] = await Promise.all([
-      supabase.from('oda').select('*, fornitore:professionisti_fornitori(id,ragione_sociale)')
+      // oda.codice è il numero documento (es. ODA-2026-001) → esposto come `numero`.
+      // oda.fornitore è una colonna di TESTO (nome): il join usa un alias diverso
+      // per non collidere, poi viene rimappato su `fornitore` (oggetto) qui sotto.
+      supabase.from('oda').select('*, numero:codice, fornitore_rel:professionisti_fornitori(id,ragione_sociale)')
         .eq('commessa_id', commessaId).order('created_at', { ascending: false })
         .range(pagina * ODA_LIMIT, (pagina + 1) * ODA_LIMIT - 1),
       supabase.from('professionisti_fornitori').select('id, ragione_sociale, nome, cognome').order('id', { ascending: true }),
       supabase.from('commesse').select('cig').eq('id', commessaId).maybeSingle(),
     ])
     if ((comm as any)?.cig) setCigCommessa((comm as any).cig)
-    const lista = data || []
+    const lista = ((data || []) as any[]).map(o => ({
+      ...o,
+      fornitore_nome: o.fornitore,
+      fornitore: o.fornitore_rel ?? (o.fornitore ? { id: o.fornitore_id, ragione_sociale: o.fornitore } : null),
+    }))
     setOda(prev => pagina === 0 ? lista : [...prev, ...lista])
     setOdaHasMore(lista.length === ODA_LIMIT)
     setFornitori(forn || [])
@@ -172,9 +179,13 @@ export default function ODAPage() {
     const aziendaId = await getAziendaId()
     const { count } = await supabase.from('oda').select('*', { count: 'exact', head: true }).eq('commessa_id', commessaId)
     const numero = `ODA-${new Date().getFullYear()}-${String((count || 0) + 1).padStart(3, '0')}`
+    // oda.fornitore (testo) è obbligatorio nel DB: nome del fornitore scelto
+    const fSel: any = fornitori.find((f: any) => f.id === fornitoreId)
+    const nomeFornitore = fSel ? (fSel.ragione_sociale || [fSel.nome, fSel.cognome].filter(Boolean).join(' ')) : ''
     const { data: odaData, error } = await supabase.from('oda').insert({
       commessa_id: commessaId, azienda_id: aziendaId || null,
-      numero, tipo, tipo_oda: tipo, oggetto: oggetto.trim(),
+      codice: numero, fornitore: nomeFornitore || '—',
+      tipo, tipo_oda: tipo, oggetto: oggetto.trim(),
       fornitore_id: fornitoreId, importo_netto: importoNum, iva_pct: parseFloat(ivaPct),
       ritenuta_pct: parseFloat(ritenuta), condizioni_pagamento: condPag || null,
       data_consegna_prevista: dataConsegna || null, note: note || null, stato: 'EMESSO',
@@ -194,7 +205,7 @@ export default function ODAPage() {
       if (cs) await supabase.from('oda').update({ contratto_sub_id: cs.id }).eq('id', odaData.id)
     }
     const fornitoreNome = fornitori.find((f: any) => f.id === fornitoreId)?.ragione_sociale || ''
-    const emailData = { numero: odaData?.numero || '', oggetto: oggetto.trim(), fornitore: fornitoreNome, importo: importoNum }
+    const emailData = { numero: odaData?.codice || numero, oggetto: oggetto.trim(), fornitore: fornitoreNome, importo: importoNum }
     setSaving(false); setModalOpen(false)
     setOggetto(''); setFornitoreId(''); setImportoNetto(''); setNote('')
     await load()
@@ -256,7 +267,8 @@ export default function ODAPage() {
     const numero = `ODA-${new Date().getFullYear()}-${String((count || 0) + 1).padStart(3, '0')}`
     const { error } = await (supabase as any).from('oda').insert({
       commessa_id: o.commessa_id, azienda_id: aziendaId || null,
-      numero, tipo: o.tipo, tipo_oda: o.tipo_oda || o.tipo,
+      codice: numero, fornitore: o.fornitore_nome || o.fornitore?.ragione_sociale || '—',
+      tipo: o.tipo, tipo_oda: o.tipo_oda || o.tipo,
       oggetto: o.oggetto, fornitore_id: o.fornitore_id,
       importo_netto: o.importo_netto, iva_pct: o.iva_pct,
       ritenuta_pct: o.ritenuta_pct, condizioni_pagamento: o.condizioni_pagamento,

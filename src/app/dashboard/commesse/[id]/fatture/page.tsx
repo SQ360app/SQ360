@@ -52,12 +52,17 @@ export default function FatturePage({ params: p }: { params: Promise<{ id: strin
     setLoading(true)
     const [{ data: fp }, { data: oda }, { data: ddt }] = await Promise.all([
       supabase.from('fatture_passive').select('*').eq('commessa_id', id).order('data_fattura', { ascending: false }),
-      supabase.from('oda').select('id,numero,oggetto').eq('commessa_id', id).neq('stato', 'ANNULLATO'),
-      supabase.from('ddt').select('id,numero_ddt,fornitore_nome,data_ddt').eq('commessa_id', id).order('data_ddt', { ascending: false }),
+      supabase.from('oda').select('id,numero:codice,oggetto').eq('commessa_id', id).neq('stato', 'ANNULLATO'),
+      // ddt non ha fornitore_nome: il nome arriva dal join sul fornitore (FK ddt.fornitore_id)
+      supabase.from('ddt').select('id,numero_ddt,data_ddt,fornitore:professionisti_fornitori(ragione_sociale,nome,cognome)').eq('commessa_id', id).order('data_ddt', { ascending: false }),
     ])
     setFatture((fp as Fattura[]) || [])
     setOdaList((oda as ODA[]) || [])
-    setDdtList((ddt as DDTItem[]) || [])
+    setDdtList(((ddt || []) as any[]).map(d => {
+      const f = Array.isArray(d.fornitore) ? d.fornitore[0] : d.fornitore
+      const fornitore_nome = f ? (f.ragione_sociale || [f.nome, f.cognome].filter(Boolean).join(' ')) : undefined
+      return { id: d.id, numero_ddt: d.numero_ddt, data_ddt: d.data_ddt, fornitore_nome } as DDTItem
+    }))
     setLoading(false)
   }, [id])
 

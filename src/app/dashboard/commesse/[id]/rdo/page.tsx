@@ -75,7 +75,7 @@ function FlowThreadRDO({ rdoId, rdaId, supabase: sb }: { rdoId: string; rdaId?: 
   const [oda, setOda] = React.useState<{numero:string;stato:string}|null>(null)
   React.useEffect(() => {
     if (rdaId) sb.from('rda').select('codice,stato').eq('id', rdaId).single().then(({ data }: any) => data && setRda(data))
-    sb.from('oda').select('numero,stato').eq('rdo_id', rdoId).limit(1).then(({ data }: any) => data?.[0] && setOda(data[0]))
+    sb.from('oda').select('numero:codice,stato').eq('rdo_id', rdoId).limit(1).then(({ data }: any) => data?.[0] && setOda(data[0]))
   }, [rdoId, rdaId])
   if (!rda && !oda) return null
   const C: Record<string,string> = { bozza:'#f59e0b',approvata:'#3b82f6',inviata:'#8b5cf6',aggiudicata:'#10b981',EVASO:'#10b981',EMESSO:'#3b82f6',BOZZA:'#f59e0b' }
@@ -318,7 +318,7 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
   useEffect(() => {
     getAziendaId().then(async azId => {
       if (!azId) return
-      const { data } = await supabase.from('aziende').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', azId).single()
+      const { data } = await supabase.from('azienda').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', azId).single()
       setAziendaDoc(data || null)
     })
   }, [])

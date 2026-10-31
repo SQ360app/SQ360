@@ -415,7 +415,7 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
   useEffect(() => {
     getAziendaId().then(async azId => {
       if (!azId) return
-      const { data } = await supabase.from('aziende').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', azId).single()
+      const { data } = await supabase.from('azienda').select('logo_url,carta_intestata_header_url,carta_intestata_footer_url').eq('id', azId).single()
       setAziendaDoc(data || null)
     })
   }, [])
@@ -470,11 +470,9 @@ export default function AnagraficaCommessa({ params: paramsPromise }: { params: 
           const azId = comm.azienda_id || ''
           setAziendaId(azId)
           if (azId) {
-            loadWbsNodes(supabase, 'wbs_nodes', { commessa_id: id, azienda_id: azId }).then(async nodes => {
-              if (nodes.length > 0) { setWbsNodes(nodes); return }
-              // Fallback legacy wbs_commessa
-              const legacy = await loadWbsNodes(supabase, 'wbs_commessa', { commessa_id: id, azienda_id: azId })
-              if (legacy.length > 0) setWbsNodes(legacy)
+            loadWbsNodes(supabase, 'wbs_nodes', { commessa_id: id, azienda_id: azId }).then(({ nodes, error }) => {
+              if (error) console.error('Lettura WBS commessa:', error)
+              if (nodes.length > 0) setWbsNodes(nodes)
               else setWbsNodes(wbsFlatToNodes(DEFAULT_WBS_FLAT, () => crypto.randomUUID()))
             })
           }

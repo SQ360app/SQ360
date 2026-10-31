@@ -156,9 +156,9 @@ export default function ArchivioPage() {
       { count: cRdo }, { count: cDdt }, { count: cFat },
     ] = await Promise.all([
       supabase.from('commesse').select('id,codice,nome,stato').eq('id', id).single(),
-      supabase.from('documenti_commessa').select('id,nome,categoria,url,tipo_mime,dimensione,note').eq('commessa_id', id),
+      supabase.from('documenti_commessa').select('id,nome,categoria,url:file_url,tipo_mime,dimensione:file_size,note').eq('commessa_id', id),
       supabase.from('documenti_sicurezza').select('id,tipo,soggetto,soggetto_tipo,data_scadenza,numero_documento').eq('commessa_id', id),
-      supabase.from('contratti_sub').select('id,stato,importo_netto,durc_ok,pos_approvato,comunicazione_sa,antimafia_ok,durc_scadenza,fornitore:professionisti_fornitori(ragione_sociale,piva)').eq('commessa_id', id),
+      supabase.from('contratti_sub').select('id,stato,importo_netto,durc_ok,pos_approvato,comunicazione_sa,antimafia_ok,durc_scadenza,fornitore:professionisti_fornitori(ragione_sociale,piva:partita_iva)').eq('commessa_id', id),
       supabase.from('oda').select('*', { count: 'exact', head: true }).eq('commessa_id', id),
       supabase.from('dam').select('*', { count: 'exact', head: true }).eq('commessa_id', id),
       supabase.from('rda').select('*', { count: 'exact', head: true }).eq('commessa_id', id),
@@ -205,9 +205,9 @@ export default function ArchivioPage() {
             azienda_id: aziendaId || null,
             nome: `${uForm.tipo} — ${uploadModal.fornitoreNome}`,
             categoria: 'subappaltatore',
-            url: urlData.publicUrl,
+            file_url: urlData.publicUrl,
             tipo_mime: uFile.type,
-            dimensione: uFile.size,
+            file_size: uFile.size,
             note: `sub:${uploadModal.fornitoreNome}`,
           })
         }

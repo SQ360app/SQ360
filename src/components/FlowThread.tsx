@@ -58,7 +58,7 @@ export function FlowThread({ rdoId, rdaId, richiedeSam }: FlowThreadProps) {
           })
         }
 
-        const { data: odaArr } = await (supabase as any).from('oda').select('numero,stato').eq('rdo_id', rdoId).limit(1)
+        const { data: odaArr } = await (supabase as any).from('oda').select('numero:codice,stato').eq('rdo_id', rdoId).limit(1)
         const oda = odaArr?.[0]
         if (oda) {
           newSteps.push({ label: 'ODA', emoji: '📦', codice: oda.numero, stato: oda.stato })
