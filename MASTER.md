@@ -1,7 +1,7 @@
 # SQ360 — MASTER
 
 > Documento di stato unico del progetto. **Va aggiornato ad ogni commit.**
-> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: fix import misurazioni XPWE (successivo a `7ee7dff`)
+> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: fix build — `getCurrentUserModuli` (successivo a `18e1550`)
 >
 > Fonti: `CLAUDE.md` (storico sessioni), `DEPLOY.md`, struttura `src/app`.
 
@@ -147,7 +147,6 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 - Tabella `piano_costi_voce` e tabelle WBS legacy (`wbs_commessa`, `wbs_template`) ancora in DB: pianificare migrazione/rimozione.
 - Checklist offerta gare in `localStorage`: non condivisa tra utenti/dispositivi — valutare persistenza in DB.
 - Tipi Supabase non generati (`any` ovunque): valutare `supabase gen types`.
-- Modifica non committata in `src/lib/supabase.ts` (+15 righe) al momento della creazione di questo file.
 - `voci_computo_misurazioni.is_parziale`: colonna non valorizzata dall'import (nessun flag corrispondente individuato nel file di esempio).
 - Riferimento "vedi voce" salvato come testo in `formula` (non esiste colonna con l'ID XPWE della voce): se la voce collegata cambia, il testo non si aggiorna.
 - Roadmap 43–46 (registro contabilità, export ZIP strutturato, KB AI edile, billing Stripe).
@@ -304,4 +303,5 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 | 2026-10-31 | — | Creazione iniziale da CLAUDE.md + DEPLOY.md + struttura codice |
 | 2026-10-31 | `ebc47e1` | Completate sezione 5 (stato 16 prompt da `sq360-prompts.md`) e sezione 6 (test checklist da `TEST_CHECKLIST.md`); aggiunti i due file al repo |
 | 2026-10-31 | `7ee7dff` | Rimossa nota "file non presenti nel repo"; aggiunta riga changelog per `ebc47e1` |
-| 2026-10-31 | (questo commit) | Fix import misurazioni XPWE (parser `PweVCMisure/RGItem`, schema reale tabella, formule, deduzioni, vedi voce, errore bloccante su INSERT); computo e SAL Attivi mostrano la descrizione della riga invece della categoria |
+| 2026-10-31 | `18e1550` | Fix import misurazioni XPWE (parser `PweVCMisure/RGItem`, schema reale tabella, formule, deduzioni, vedi voce, errore bloccante su INSERT); computo e SAL Attivi mostrano la descrizione della riga invece della categoria |
+| 2026-10-31 | (questo commit) | Fix build Vercel: committata `getCurrentUserModuli()` in `src/lib/supabase.ts` (usata da Sidebar e layout commessa, era rimasta fuori dai commit); rimosso il relativo debito tecnico |
