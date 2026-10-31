@@ -13,12 +13,14 @@ import { NextRequest, NextResponse } from 'next/server'
 interface Esito {
   db: any // eslint-disable-line @typescript-eslint/no-explicit-any
   userId: string | null
+  email: string | null
   response: NextResponse | null // valorizzato solo in caso di 401
 }
 
 const nonAutorizzato = (error: string): Esito => ({
   db: null,
   userId: null,
+  email: null,
   response: NextResponse.json({ ok: false, error }, { status: 401 }),
 })
 
@@ -42,5 +44,5 @@ export async function getUserClient(req: NextRequest): Promise<Esito> {
   if (error || !data?.user) {
     return nonAutorizzato('Sessione scaduta o non valida: effettua di nuovo il login e riprova.')
   }
-  return { db, userId: data.user.id, response: null }
+  return { db, userId: data.user.id, email: data.user.email ?? null, response: null }
 }

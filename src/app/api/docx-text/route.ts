@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getUserClient } from '@/lib/supabaseServer'
 import mammoth from 'mammoth'
 
 export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
+  // Solo utenti collegati: evita uso anonimo (e costi AI) della route
+  const auth = await getUserClient(req)
+  if (auth.response) return auth.response
+
   try {
     const formData = await req.formData()
     const file = formData.get('file') as File | null

@@ -5,7 +5,7 @@ import React from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { supabase, getAziendaId } from '@/lib/supabase'
 import { Plus, FileText, Loader2, ChevronDown, ChevronRight, Package, Wrench, Truck, ShoppingCart, Receipt } from 'lucide-react'
-import { emailOdaCreato } from '@/lib/emailTemplates'
+import { fetchConToken } from '@/lib/authFetch'
 import { DEFAULT_WBS_FLAT } from '@/lib/wbs'
 import { loadWbs } from '@/lib/wbsLoader'
 
@@ -212,15 +212,15 @@ export default function ODAPage() {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user?.email) return
       const { data: commessa } = await supabase.from('commesse').select('codice,nome').eq('id', commessaId).single()
-      const { subject, html } = emailOdaCreato({
-        codiceOda: emailData.numero,
-        oggetto: emailData.oggetto,
-        fornitore: emailData.fornitore,
-        importo: fmt(emailData.importo),
-        commessa: commessa ? `${commessa.codice} — ${commessa.nome}` : '',
-      })
-      fetch('/api/email', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: user.email, subject, html }) }).catch(() => {})
+      // Il server genera l'email dal modello e la invia all'utente stesso
+      fetchConToken('/api/email', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: 'oda_creato', dati: {
+          codiceOda: emailData.numero,
+          oggetto: emailData.oggetto,
+          fornitore: emailData.fornitore,
+          importo: fmt(emailData.importo),
+          commessa: commessa ? `${commessa.codice} — ${commessa.nome}` : '',
+        } }) }).catch(() => {})
     })
   }
 

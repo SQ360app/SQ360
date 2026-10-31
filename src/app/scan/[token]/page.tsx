@@ -1,17 +1,17 @@
 'use client'
 
-import { supabase } from '@/lib/supabase'
-
+// Pagina pubblica: nessun accesso diretto al DB. Lettura e registrazione
+// presenze passano da /api/scan/[token] (solo il lavoratore di quel badge).
 import { useState, useEffect, use } from 'react'
 interface Lavoratore {
-  id: string; nome: string; cognome: string
+  nome: string; cognome: string
   tipo_rapporto: string; azienda_appartenenza?: string; mansione?: string
   durc_scadenza?: string; formazione_scadenza?: string
-  patente_crediti_punti?: number; commessa_id: string
+  patente_crediti_punti?: number
 }
 
-interface Commessa { id: string; codice: string; nome: string; committente?: string }
-interface Presenza { id: string; data: string; ora_entrata?: string; ora_uscita?: string }
+interface Commessa { codice: string; nome: string; committente?: string }
+interface Presenza { ora_entrata?: string | null; ora_uscita?: string | null }
 
 function docStatus(date?: string | null): 'ok' | 'warning' | 'expired' | 'missing' {
   if (!date) return 'missing'
@@ -31,8 +31,6 @@ function patenteStatus(punti?: number | null): 'ok' | 'warning' | 'alert' | 'mis
 }
 
 const fmtData = (s?: string) => s ? new Date(s).toLocaleDateString('it-IT') : '—'
-const oggi = new Date().toISOString().split('T')[0]
-const ora = () => new Date().toTimeString().slice(0, 5)
 
 export default function ScanPage({ params: p }: { params: Promise<{ token: string }> }) {
   const { token } = use(p)
@@ -44,65 +42,46 @@ export default function ScanPage({ params: p }: { params: Promise<{ token: strin
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState<'entrata' | 'uscita' | null>(null)
 
+  const [errore, setErrore] = useState('')
+
   useEffect(() => {
     async function load() {
-      const { data: lavData } = await supabase
-        .from('lavoratori_commessa')
-        .select('*')
-        .eq('qr_token', token)
-        .eq('attivo', true)
-        .single()
-
-      if (!lavData) { setNotFound(true); setLoading(false); return }
-      setLav(lavData as Lavoratore)
-
-      const [{ data: com }, { data: pres }] = await Promise.all([
-        supabase.from('commesse').select('id,codice,nome,committente').eq('id', lavData.commessa_id).single(),
-        supabase.from('presenze_cantiere').select('*').eq('lavoratore_id', lavData.id).eq('data', oggi).order('created_at', { ascending: false }).limit(1),
-      ])
-      setCommessa(com as Commessa)
-      setPresenzaOggi(pres?.[0] as Presenza || null)
-      setLoading(false)
+      try {
+        const res = await fetch(`/api/scan/${encodeURIComponent(token)}`)
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok || !data.ok) { setNotFound(true); return }
+        setLav(data.lavoratore as Lavoratore)
+        setCommessa(data.commessa as Commessa)
+        setPresenzaOggi(data.presenzaOggi as Presenza | null)
+      } catch {
+        setNotFound(true)
+      } finally {
+        setLoading(false)
+      }
     }
     load()
   }, [token])
 
-  const registraEntrata = async () => {
+  // Data e ora le decide il server (fuso Europe/Rome)
+  const registra = async (azione: 'entrata' | 'uscita') => {
     if (!lav) return
-    setSaving(true)
-    await supabase.from('presenze_cantiere').insert({
-      lavoratore_id: lav.id,
-      commessa_id: lav.commessa_id,
-      data: oggi,
-      ora_entrata: ora(),
-      tipo: 'qr_scan',
-    })
-    setSaving(false)
-    setDone('entrata')
-    setPresenzaOggi({ id: '', data: oggi, ora_entrata: ora() })
-  }
-
-  const registraUscita = async () => {
-    if (!lav || !presenzaOggi) return
-    setSaving(true)
-    const uscita = ora()
-    if (presenzaOggi.id) {
-      await supabase.from('presenze_cantiere')
-        .update({ ora_uscita: uscita, tipo: 'qr_scan' })
-        .eq('id', presenzaOggi.id)
-    } else {
-      await supabase.from('presenze_cantiere').insert({
-        lavoratore_id: lav.id,
-        commessa_id: lav.commessa_id,
-        data: oggi,
-        ora_uscita: uscita,
-        tipo: 'qr_scan',
+    setSaving(true); setErrore('')
+    try {
+      const res = await fetch(`/api/scan/${encodeURIComponent(token)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione }),
       })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.ok) { setErrore(data.error || 'Registrazione non riuscita'); return }
+      setPresenzaOggi(data.presenzaOggi as Presenza)
+      setDone(azione)
+    } catch {
+      setErrore('Errore di rete: riprova')
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
-    setDone('uscita')
-    setPresenzaOggi(p => p ? { ...p, ora_uscita: uscita } : null)
   }
+  const registraEntrata = () => registra('entrata')
+  const registraUscita = () => registra('uscita')
 
   // ─── Stato documenti ─────────────────────────────────────────────────────
 
@@ -212,7 +191,13 @@ export default function ScanPage({ params: p }: { params: Promise<{ token: strin
           <p style={{ fontSize: 18, fontWeight: 700, color: done === 'entrata' ? '#15803d' : '#1d4ed8', margin: 0 }}>
             {done === 'entrata' ? '✓ Entrata registrata' : '✓ Uscita registrata'}
           </p>
-          <p style={{ fontSize: 13, color: '#6b7280', margin: '4px 0 0' }}>{ora()}</p>
+          <p style={{ fontSize: 13, color: '#6b7280', margin: '4px 0 0' }}>{done === 'entrata' ? presenzaOggi?.ora_entrata : presenzaOggi?.ora_uscita}</p>
+        </div>
+      )}
+
+      {errore && (
+        <div style={{ margin: '12px 16px 0', background: '#fef2f2', borderRadius: 12, padding: '12px 16px', border: '1px solid #fecaca', textAlign: 'center', fontSize: 14, color: '#b91c1c' }}>
+          ⚠ {errore}
         </div>
       )}
 

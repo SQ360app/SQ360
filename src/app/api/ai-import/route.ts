@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getUserClient } from '@/lib/supabaseServer'
 
 export async function POST(req: NextRequest) {
+  // Solo utenti collegati: evita uso anonimo (e costi AI) della route
+  const auth = await getUserClient(req)
+  if (auth.response) return auth.response
+
   try {
     const body = await req.json()
     const { prompt, base64, tipo_file, tipo_uso } = body

@@ -1,7 +1,7 @@
 # SQ360 — MASTER
 
 > Documento di stato unico del progetto. **Va aggiornato ad ogni commit.**
-> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: sicurezza passo 1 (successivo a `ba5aa25`)
+> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: sicurezza passo 3 (successivo a `c958331`)
 >
 > Fonti: `CLAUDE.md` (storico sessioni), `DEPLOY.md`, struttura `src/app`.
 
@@ -83,6 +83,9 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 
 - **Stack**: Next.js 15 (App Router) + Supabase + Vercel. AI principale Gemini 2.0 Flash (server-side, `GEMINI_API_KEY`); eccezione: AI import fornitore su Claude Haiku.
 - **Supabase client tipato `any`** (`src/lib/supabase.ts`): nessun tipo generato; evita TS2769 su build Vercel. Nelle route API: `const db = client as any`.
+- **Pagine pubbliche (`/offerta/[token]`, `/scan/[token]`) senza accesso diretto al DB**: passano da `/api/offerta/[token]` e `/api/scan/[token]`, che con la service role (`getAdminClient`) usano solo la riga del token (UUID) e restituiscono solo i campi necessari; importi offerta ricalcolati dal server, data/ora presenze del server (Europe/Rome).
+- **Email**: unico invio server-side (`src/lib/emailServer.ts`), mittente fisso, reply-to dell'utente; `/api/email` richiede il token e accetta solo un *tipo* (`oda_creato`, `dam_approvato`, `durc_report`, `rdo_invito`) + dati: l'HTML lo genera il server dai modelli con testi escapati (`escHtml`). Niente HTML/from dal client.
+- **Route AI** (`ai-*`, `docx-text`, `rdo-extract-offerta`) solo per utenti collegati (`getUserClient`); i client usano `fetchConToken` (`src/lib/authFetch.ts`). `/api/cron/durc` chiusa se `CRON_SECRET` manca.
 - **Link nelle email Supabase** (invito, recupero password) = `<dominio della richiesta>/auth/conferma`: niente URL fissi, `NEXT_PUBLIC_APP_URL` non è più usata. Ogni dominio va aggiunto in Supabase → Authentication → URL Configuration → Redirect URLs (vedi DEPLOY.md).
 - **Client Supabase/Resend istanziati dentro gli handler**, mai a livello modulo (evita errori di build "supabaseKey is required").
 - **Route API che scrivono/leggono dati utente usano il token dell'utente**: il client invia `Authorization: Bearer <access_token>`, la route crea il client con `getUserClient(req)` (`src/lib/supabaseServer.ts`) → le RLS si applicano come nel browser; 401 con messaggio se token mancante/scaduto. Vietati il client anon senza sessione (utente anonimo per il DB) e la service role nelle route chiamate dagli utenti. Applicato a `/api/xpwe-parse` e `/api/xpwe-parse-sal`.
@@ -134,6 +137,7 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 
 ### 4.1 Da eseguire su Supabase (bloccanti per moduli già scritti)
 - [x] **Sicurezza passo 1 — eseguito il 31/10/2026**: `REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon` + default privileges; anon mantiene solo SELECT su `commesse`, `rda`, `rdo`, `utenti`, `voci_computo`, `lavoratori_commessa`, `presenze_cantiere`, UPDATE su `rdo`, INSERT su `presenze_cantiere` (pagine pubbliche `/offerta`, `/scan`). Verifica con chiave anon: 96/103 tabelle/viste negate; **ancora leggibili senza login: `utenti` (3 righe) e `voci_computo` (1.630)** → da chiudere dopo il passo 3. Ritorno: `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon`.
+- [ ] **Sicurezza passo 3b — REVOKE finale su anon** (da eseguire DOPO le prove manuali di `/offerta` e `/scan`): `REVOKE ALL ON public.commesse, public.rda, public.rdo, public.utenti, public.voci_computo, public.lavoratori_commessa, public.presenze_cantiere FROM anon;` — ritorno: `GRANT SELECT ON …; GRANT UPDATE ON public.rdo; GRANT INSERT ON public.presenze_cantiere TO anon`
 - [ ] Sicurezza passo 0: fotografia RLS/regole/funzioni/permessi (query di sola lettura) — necessaria per i passi 4–8 (regole per azienda con `get_azienda_id()`, tabelle figlie, `aziende`/`mia_azienda_id`, bucket `documenti` privato)
 - [x] `supabase/migrations/20261031_allineamento_schema.sql` — **eseguita il 31/10/2026** (colonne mancanti su fatture_passive/oda/documenti_commessa/gare/varianti/voci_variante/sal_passivi/contratti_sub/azienda/wbs_nodes, enum `stato_gara`, FK verso `professionisti_fornitori`)
 - [ ] Regola RLS **UPDATE su `azienda`** limitata alla propria azienda (oggi solo SELECT → Impostazioni non può salvare dati azienda, email, logo/carta intestata; la pagina ora lo segnala)
@@ -345,4 +349,5 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 | 2026-10-31 | `0bd18e8` | Migrazione `20261031_allineamento_schema.sql` (eseguita) + allineamento codice: crash `/dashboard/sal` (stati minuscoli), `/register` su route server `/api/register`, carta intestata da `azienda`, WBS senza fallback legacy e senza scrittura automatica in Impostazioni, CE da `sal`, alias colonne (ODA/DDT/fatture/gare/varianti/SAL passivi/documenti), verifica righe aggiornate su `azienda` |
 | 2026-10-31 | `51d26cd` | Smoke test: login robusto all'idratazione React; esito dopo le correzioni 44/44 ok (§4.3) |
 | 2026-10-31 | `ba5aa25` | Flusso inviti e password: nuova pagina `/auth/conferma` (invito + recupero, link scaduto), `/api/invite-user` con token del chiamante e azienda dal suo profilo + controllo upsert, "Password dimenticata?" nel login, stop a `NEXT_PUBLIC_APP_URL`; DEPLOY.md con le Redirect URLs Supabase |
-| 2026-10-31 | (questo commit) | Sicurezza passo 1 eseguito (REVOKE su anon; restano leggibili senza login `utenti` e `voci_computo`); smoke test: lettura testo senza timeout sulle pagine grandi e senza falsi errori dai dati RSC, attesa della rete dopo il login; esito 44/44 ok dopo il passo 1 |
+| 2026-10-31 | `c958331` | Sicurezza passo 1 eseguito (REVOKE su anon; restano leggibili senza login `utenti` e `voci_computo`); smoke test: lettura testo senza timeout sulle pagine grandi e senza falsi errori dai dati RSC, attesa della rete dopo il login; esito 44/44 ok dopo il passo 1 |
+| 2026-10-31 | (questo commit) | Sicurezza passo 3: `/offerta` e `/scan` su route server legate al token; `/api/email` con token, mittente fisso e solo modelli server (RDO: messaggio aggiuntivo in testo semplice, niente HTML/allegati dal client); 11 route AI con token + pagine aggiornate; cron DURC chiuso senza `CRON_SECRET`; REVOKE finale su anon in attesa (§4.1) |

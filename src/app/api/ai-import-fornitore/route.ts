@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getUserClient } from '@/lib/supabaseServer'
 
 export const runtime = 'nodejs'
 
@@ -27,6 +28,10 @@ const SCHEMA_FORNITORE = JSON.stringify({
 const PROMPT = `Sei un esperto di appalti pubblici italiani. Analizza il documento ed estrai i dati del fornitore/impresa. Rispondi SOLO con JSON valido, nessun testo, nessun markdown. Schema: ${SCHEMA_FORNITORE}. Regole: provincia come sigla 2 lettere maiuscole, lascia vuoto se non trovato.`
 
 export async function POST(req: NextRequest) {
+  // Solo utenti collegati: evita uso anonimo (e costi AI) della route
+  const auth = await getUserClient(req)
+  if (auth.response) return auth.response
+
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) return NextResponse.json({ ok: false, errore: 'ANTHROPIC_API_KEY non configurata' })

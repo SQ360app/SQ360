@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { supabase, getAziendaId } from '@/lib/supabase'
+import { fetchConToken } from '@/lib/authFetch'
 
 const fi = (n: number, d = 2) => n?.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? '—'
 
@@ -86,7 +87,7 @@ export default function FatturePage({ params: p }: { params: Promise<{ id: strin
     setAiLoading(true)
     try {
       const fd = new FormData(); fd.append('file', file)
-      const res = await fetch('/api/ai-fattura', { method: 'POST', body: fd })
+      const res = await fetchConToken('/api/ai-fattura', { method: 'POST', body: fd })
       const json = await res.json()
       if (json.ok && json.dati) {
         const d = json.dati

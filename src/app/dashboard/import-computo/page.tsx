@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react'
 import { Upload, FileText, X, CheckCircle, AlertCircle, ChevronDown, ChevronRight, Sparkles, Plus, Trash2 } from 'lucide-react'
+import { fetchConToken } from '@/lib/authFetch'
 
 type TipoImport = 'pdf' | 'word' | 'xpwe' | 'excel' | 'six'
 type FaseImport = 'idle' | 'caricamento' | 'analisi_ai' | 'revisione' | 'completato'
@@ -141,7 +142,7 @@ export default function ImportComputoPage() {
     reader.onload = async () => {
       try {
         const base64 = (reader.result as string).split(',')[1] || ''
-        const response = await fetch('/api/ai-import', {
+        const response = await fetchConToken('/api/ai-import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ base64, tipo_file: tipo, tipo_uso: tipoUso })

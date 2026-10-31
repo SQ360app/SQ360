@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { supabase, getAziendaId } from '@/lib/supabase'
-import { emailDurcReport } from '@/lib/emailTemplates'
+import { fetchConToken } from '@/lib/authFetch'
 
 // ─── Tipi documento ──────────────────────────────────────────────────────────
 
@@ -94,9 +94,9 @@ export default function SicurezzaPage({ params: p }: { params: Promise<{ id: str
       commessa: commessaLabel,
       giorniRimanenti: ggAllaScadenza(d) ?? 0,
     }))
-    const { subject, html } = emailDurcReport(scadenze)
-    const res = await fetch('/api/email', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to: user.email, subject, html }) })
+    // Il server genera il report dal modello e lo invia all'utente stesso
+    const res = await fetchConToken('/api/email', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tipo: 'durc_report', dati: { scadenze } }) })
     const json = await res.json()
     showToast(json.ok ? '✓ Alert DURC inviato via email' : '⚠ Errore invio email')
   }
@@ -120,7 +120,7 @@ export default function SicurezzaPage({ params: p }: { params: Promise<{ id: str
     setAiLoading(true)
     try {
       const fd = new FormData(); fd.append('file', file)
-      const res = await fetch('/api/ai-sicurezza', { method: 'POST', body: fd })
+      const res = await fetchConToken('/api/ai-sicurezza', { method: 'POST', body: fd })
       const json = await res.json()
       if (json.ok && json.dati) {
         const d = json.dati

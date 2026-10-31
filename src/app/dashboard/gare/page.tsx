@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getAziendaId } from '@/lib/supabase'
 import { Search, Plus, Upload, Sparkles, X, Save, CheckCircle, AlertCircle, ArrowRight, FileText, TrendingUp, ChevronDown, ChevronRight } from 'lucide-react'
+import { fetchConToken } from '@/lib/authFetch'
 
 interface Gara {
   id: string; codice_gara: string; nome: string; committente: string
@@ -194,7 +195,7 @@ export default function GarePage() {
     try {
       const testo = await file.text()
       setAiStatus('AI estrae i dati dal bando...')
-      const res  = await fetch('/api/ai-estrai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ testo: testo.slice(0,8000), tipo: 'gara' }) })
+      const res  = await fetchConToken('/api/ai-estrai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ testo: testo.slice(0,8000), tipo: 'gara' }) })
       const json = await res.json() as { ok: boolean; dati?: Record<string,string> }
       if (json.ok && json.dati) {
         const d = json.dati

@@ -1,5 +1,6 @@
 'use client'
 import { useState, useRef, useCallback } from 'react'
+import { fetchConToken } from '@/lib/authFetch'
 
 export interface AIImportConfig {
   endpoint?: string
@@ -27,7 +28,7 @@ export function AIImportButton({
     setStato('loading'); setErrore(''); setNomeFile(file.name)
     try {
       const fd = new FormData(); fd.append('file', file)
-      const res = await fetch(endpoint, { method: 'POST', body: fd })
+      const res = await fetchConToken(endpoint, { method: 'POST', body: fd })
       const json = await res.json() as { ok?: boolean; dati?: Record<string, unknown>; errore?: string; content?: string }
       let dati: Record<string, unknown> | null = null
       if (json.ok && json.dati) {

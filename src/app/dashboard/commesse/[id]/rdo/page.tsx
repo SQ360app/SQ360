@@ -5,7 +5,8 @@ import { supabase, getAziendaId } from '@/lib/supabase'
 import { FlowThread } from '@/components/FlowThread'
 import { EmailPreviewModal } from '@/components/EmailPreviewModal'
 import { saveEmailLog } from '@/lib/emailLog'
-import { templateEmail } from '@/lib/emailTemplates'
+import { emailRdoInvito } from '@/lib/emailTemplates'
+import { fetchConToken } from '@/lib/authFetch'
 
 const fi = (n: number, d = 2) => n?.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? '—'
 
@@ -158,7 +159,7 @@ function PdfUploadModal({ rdo, onClose, onSaved }: { rdo: RDO; onClose: () => vo
       fd.append('file', file)
       fd.append('rdo_id', rdo.id)
       fd.append('voci_rda', JSON.stringify(vociRda))
-      const res = await fetch('/api/rdo-extract-offerta', { method: 'POST', body: fd })
+      const res = await fetchConToken('/api/rdo-extract-offerta', { method: 'POST', body: fd })
       const json = await res.json()
       if (!json.ok) throw new Error(json.error || 'Errore API')
       setResult(json.data)
@@ -448,37 +449,29 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
     showToast('RDO aggiornata'); carica()
   }
 
-  const buildRdoHtml = (r: RDO) => {
-    const portalUrl = r.token_offerta ? `${window.location.origin}/offerta/${r.token_offerta}` : null
-    const corpo = `
-      <p style="color:#374151;font-size:13px">Gentile <b>${r.fornitore}</b>,</p>
-      <p style="color:#374151;font-size:13px">siete invitati a compilare la vostra offerta per la seguente richiesta:</p>
-      ${r.oggetto ? `<p style="padding:10px 14px;background:#f0f9ff;border-left:4px solid #3b82f6;color:#1e40af;font-size:13px;margin:12px 0"><b>${r.oggetto}</b></p>` : ''}
-      ${r.data_scadenza ? `<p style="color:#ef4444;font-size:12px;margin:6px 0">⏰ Scadenza: <strong>${new Date(r.data_scadenza).toLocaleDateString('it-IT')}</strong></p>` : ''}
-      ${r.note ? `<p style="color:#6b7280;font-size:12px;margin:10px 0">Note: ${r.note}</p>` : ''}
-      ${portalUrl ? `<div style="text-align:center;margin:20px 0"><a href="${portalUrl}" style="background:#3b82f6;color:#fff;padding:13px 26px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">📤 Compila la tua offerta →</a></div><p style="color:#9ca3af;font-size:10px;text-align:center;word-break:break-all">${portalUrl}</p>` : ''}
-    `
-    return templateEmail({
-      ragioneSociale: 'SQ360 — Gestionale Edile',
-      mittente: 'Ufficio Acquisti',
-      oggetto: `Richiesta d'Offerta ${r.codice}${r.oggetto ? ' — ' + r.oggetto : ''}`,
-      corpo,
-    })
-  }
+  // Anteprima: stesso modello usato dal server per l'invio (/api/email, tipo rdo_invito)
+  const buildRdoHtml = (r: RDO, messaggio = '') => emailRdoInvito({
+    fornitore: r.fornitore, codice: r.codice, oggetto: r.oggetto,
+    dataScadenza: r.data_scadenza, note: r.note,
+    portalUrl: r.token_offerta ? `${window.location.origin}/offerta/${r.token_offerta}` : null,
+    messaggio,
+  }).html
 
-  const inviaEmailRdo = async (r: RDO, params: { from: string; to: string[]; cc: string[]; subject: string; html: string }) => {
-    const res = await fetch('/api/email', {
+  const inviaEmailRdo = async (r: RDO, params: { to: string[]; cc: string[]; subject: string; messaggio: string }) => {
+    // Mittente fisso e HTML generato dal server dalla RDO (letta con i permessi dell'utente)
+    const res = await fetchConToken('/api/email', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to: params.to, subject: params.subject, html: params.html, from: params.from, cc: params.cc.length ? params.cc : undefined }),
+      body: JSON.stringify({ tipo: 'rdo_invito', rdo_id: r.id, to: params.to, cc: params.cc, oggetto: params.subject, messaggio: params.messaggio }),
     })
-    const result = await res.json()
-    await supabase.from('rdo').update({ email_inviata: true, email_inviata_at: new Date().toISOString(), email_destinatario: params.to[0] }).eq('id', r.id)
+    const result = await res.json().catch(() => ({}))
+    if (!res.ok || !result.ok) { showToast('⚠ Email non inviata: ' + (result.error || 'errore')); return }
+    await supabase.from('rdo').update({ email_inviata: true, email_inviata_at: new Date().toISOString(), email_destinatario: result.to?.[0] || params.to[0] }).eq('id', r.id)
     const aziendaId = await getAziendaId()
     if (aziendaId) {
       saveEmailLog({
         azienda_id: aziendaId, commessa_id: id, tipo_doc: 'rdo',
-        doc_id: r.id, doc_codice: r.codice, mittente: params.from,
-        destinatari: params.to, cc: params.cc, oggetto: params.subject, html: params.html,
+        doc_id: r.id, doc_codice: r.codice, mittente: result.mittente,
+        destinatari: result.to || params.to, cc: result.cc || params.cc, oggetto: result.subject || params.subject, html: result.html,
         resend_id: result?.id,
       })
     }
@@ -1112,7 +1105,7 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
         <EmailPreviewModal
           defaultTo={[emailCompose.email_fornitore || '']}
           defaultSubject={`Richiesta d'offerta ${emailCompose.codice}${emailCompose.oggetto ? ' — ' + emailCompose.oggetto : ''}`}
-          html={buildRdoHtml(emailCompose)}
+          anteprima={msg => buildRdoHtml(emailCompose, msg)}
           onSend={params => inviaEmailRdo(emailCompose, params)}
           onClose={() => setEmailCompose(null)}
         />

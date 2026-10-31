@@ -1,3 +1,62 @@
+/** Escape HTML: ogni testo che finisce in un'email passa da qui. */
+export function escHtml(v: unknown): string {
+  return String(v ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
+
+/** Invito RDO al fornitore. Usato dal server (/api/email, tipo 'rdo_invito') e
+ *  dall'anteprima nella pagina RDO: l'HTML inviato è sempre quello generato qui. */
+export function emailRdoInvito(params: {
+  fornitore?: string | null
+  codice: string
+  oggetto?: string | null
+  dataScadenza?: string | null
+  note?: string | null
+  portalUrl?: string | null
+  messaggio?: string | null
+}): { subject: string; html: string } {
+  const p = params
+  const scad = p.dataScadenza ? new Date(p.dataScadenza).toLocaleDateString('it-IT') : ''
+  const corpo = `
+      <p style="color:#374151;font-size:13px">Gentile <b>${escHtml(p.fornitore || 'Fornitore')}</b>,</p>
+      <p style="color:#374151;font-size:13px">siete invitati a compilare la vostra offerta per la seguente richiesta:</p>
+      ${p.oggetto ? `<p style="padding:10px 14px;background:#f0f9ff;border-left:4px solid #3b82f6;color:#1e40af;font-size:13px;margin:12px 0"><b>${escHtml(p.oggetto)}</b></p>` : ''}
+      ${scad ? `<p style="color:#ef4444;font-size:12px;margin:6px 0">⏰ Scadenza: <strong>${escHtml(scad)}</strong></p>` : ''}
+      ${p.note ? `<p style="color:#6b7280;font-size:12px;margin:10px 0">Note: ${escHtml(p.note)}</p>` : ''}
+      ${p.messaggio ? `<p style="color:#374151;font-size:13px;margin:14px 0;white-space:pre-wrap">${escHtml(p.messaggio).replace(/\n/g, '<br>')}</p>` : ''}
+      ${p.portalUrl ? `<div style="text-align:center;margin:20px 0"><a href="${escHtml(p.portalUrl)}" style="background:#3b82f6;color:#fff;padding:13px 26px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">📤 Compila la tua offerta →</a></div><p style="color:#9ca3af;font-size:10px;text-align:center;word-break:break-all">${escHtml(p.portalUrl)}</p>` : ''}
+    `
+  const titolo = `Richiesta d'Offerta ${p.codice}${p.oggetto ? ' — ' + p.oggetto : ''}`
+  return {
+    subject: titolo,
+    html: templateEmail({ ragioneSociale: 'SQ360 — Gestionale Edile', mittente: 'Ufficio Acquisti', oggetto: escHtml(titolo), corpo }),
+  }
+}
+
+/** Notifica all'azienda: il fornitore ha inviato l'offerta dal portale /offerta. */
+export function emailOffertaRicevuta(params: {
+  codiceRdo: string
+  fornitore?: string | null
+  importo: string
+}): { subject: string; html: string } {
+  return {
+    subject: `Offerta ricevuta: ${params.codiceRdo} da ${params.fornitore || 'Fornitore'}`,
+    html: base(`
+      <div class="alert-box" style="background:#f0fdf4;border:1px solid #bbf7d0">
+        <p style="margin:0 0 4px;font-size:15px;font-weight:700;color:#16a34a">📥 Nuova offerta ricevuta</p>
+        <p style="margin:0;font-size:13px;color:#64748b">Il fornitore ha compilato l'offerta dal portale</p>
+      </div>
+      <div>
+        <div class="kv"><span class="kv-lbl">RDO</span><span class="kv-val" style="font-family:monospace">${escHtml(params.codiceRdo)}</span></div>
+        <div class="kv"><span class="kv-lbl">Fornitore</span><span class="kv-val">${escHtml(params.fornitore || '—')}</span></div>
+        <div class="kv"><span class="kv-lbl">Importo offerta</span><span class="kv-val">€ ${escHtml(params.importo)}</span></div>
+      </div>
+      <p style="color:#64748b;font-size:12px;margin-top:16px">Accedi a SQ360 per il dettaglio e la comparativa.</p>
+    `),
+  }
+}
+
 export function templateEmail(params: {
   logoUrl?: string
   ragioneSociale: string

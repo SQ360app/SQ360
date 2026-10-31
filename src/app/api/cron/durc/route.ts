@@ -12,7 +12,9 @@ export async function GET(req: NextRequest) {
   const resend = new Resend(process.env.RESEND_API_KEY)
   // Vercel cron verifica l'header Authorization
   const auth = req.headers.get('authorization')
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+  // Senza CRON_SECRET configurata la route è sempre chiusa (evita "Bearer undefined")
+  const secret = process.env.CRON_SECRET
+  if (!secret || auth !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

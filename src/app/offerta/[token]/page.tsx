@@ -1,7 +1,7 @@
 'use client'
 
-import { supabase } from '@/lib/supabase'
-
+// Pagina pubblica: nessun accesso diretto al DB. Lettura e invio passano da
+// /api/offerta/[token], che usa solo la RDO collegata al token.
 import { useState, useEffect, use } from 'react'
 const fi = (n: number, d = 2) =>
   (n ?? 0).toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d })
@@ -9,9 +9,7 @@ const fi = (n: number, d = 2) =>
 interface VoceRDA { id: string; codice: string; descrizione: string; um: string; quantita: number }
 interface RDO {
   id: string; codice: string; oggetto: string; fornitore: string
-  data_scadenza: string; note: string; stato_offerta: string
-  rda_id?: string; commessa_id?: string; azienda_id?: string
-  token_offerta?: string
+  data_scadenza: string; note: string
   note_tecniche?: string; specifiche?: string; condizioni_particolari?: string
 }
 interface Commessa { codice: string; nome: string; committente: string }
@@ -43,7 +41,6 @@ export default function OffertaPage({ params: p }: { params: Promise<{ token: st
   const [inviata, setInviata] = useState(false)
   const [sending, setSending] = useState(false)
   const [errore, setErrore]   = useState('')
-  const [adminEmail, setAdminEmail] = useState('')
 
   // ── Form state ────────────────────────────────────────────────────────────
   const [prezziVoci, setPrezziVoci] = useState<Record<string, number>>({})
@@ -67,43 +64,23 @@ export default function OffertaPage({ params: p }: { params: Promise<{ token: st
   useEffect(() => {
     if (!token) return
     ;(async () => {
-      const { data: rdoData } = await supabase
-        .from('rdo')
-        .select('id,codice,oggetto,fornitore,data_scadenza,note,stato_offerta,rda_id,commessa_id,azienda_id,token_offerta,note_tecniche,specifiche,condizioni_particolari')
-        .eq('token_offerta', token)
-        .maybeSingle()
-
-      if (!rdoData) { setErrore('Token non valido o offerta già inviata.'); setLoading(false); return }
-      if (rdoData.stato_offerta === 'ricevuta') { setInviata(true); setLoading(false); return }
-      setRdo(rdoData)
-
-      if (rdoData.commessa_id) {
-        const { data: com } = await supabase
-          .from('commesse').select('codice,nome,committente').eq('id', rdoData.commessa_id).single()
-        if (com) setCommessa(com)
+      try {
+        const res = await fetch(`/api/offerta/${encodeURIComponent(token)}`)
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok || !data.ok) { setErrore(data.error || 'Token non valido o offerta già inviata.'); return }
+        if (data.commessa) setCommessa(data.commessa)
+        if (data.inviata) { setInviata(true); return }
+        setRdo(data.rdo)
+        const v = (data.voci || []) as VoceRDA[]
+        setVoci(v)
+        const init: Record<string, number> = {}
+        v.forEach(x => { init[x.id] = 0 })
+        setPrezziVoci(init)
+      } catch {
+        setErrore('Errore di rete: riprova tra qualche istante.')
+      } finally {
+        setLoading(false)
       }
-
-      if (rdoData.rda_id) {
-        const { data: rda } = await supabase
-          .from('rda').select('voci_ids').eq('id', rdoData.rda_id).single()
-        if (rda?.voci_ids?.length) {
-          const { data: v } = await supabase
-            .from('voci_computo')
-            .select('id,codice,descrizione,um,quantita')
-            .in('id', rda.voci_ids)
-          setVoci((v as VoceRDA[]) || [])
-          const init: Record<string, number> = {}
-          ;(v || []).forEach((x: VoceRDA) => { init[x.id] = 0 })
-          setPrezziVoci(init)
-        }
-      }
-
-      if (rdoData.azienda_id) {
-        const { data: admin } = await (supabase as any).from('utenti').select('email').eq('azienda_id', rdoData.azienda_id).eq('ruolo', 'admin').limit(1).maybeSingle()
-        if (admin?.email) setAdminEmail(admin.email)
-      }
-
-      setLoading(false)
     })()
   }, [token])
 
@@ -116,56 +93,36 @@ export default function OffertaPage({ params: p }: { params: Promise<{ token: st
     if (!rdo) return
     setSending(true)
     try {
-      // Upload PDF allegato se presente
-      let pdfUrl: string | undefined
-      if (pdfAllegato && rdo.token_offerta) {
+      // Upload PDF allegato se presente (la route verifica RDO + token)
+      if (pdfAllegato) {
         setUploadingPdf(true)
         const fd = new FormData()
         fd.append('file', pdfAllegato)
         fd.append('rdo_id', rdo.id)
-        fd.append('token', rdo.token_offerta)
+        fd.append('token', token)
         try {
           const res = await fetch('/api/upload-offerta-pdf', { method: 'POST', body: fd })
           const json = await res.json()
-          if (json.ok) pdfUrl = json.url
+          if (json.ok) setPdfCaricato(true)
         } catch { /* non bloccante */ } finally { setUploadingPdf(false) }
       }
 
-      const offertaVoci = voci.map(v => ({
-        voce_id: v.id, codice: v.codice, descrizione: v.descrizione,
-        um: v.um, quantita: v.quantita,
-        prezzo_unitario: prezziVoci[v.id] || 0,
-        importo: (prezziVoci[v.id] || 0) * (v.quantita || 0),
-      }))
-
-      const { error } = await supabase.from('rdo').update({
-        stato_offerta: 'ricevuta',
-        data_risposta: new Date().toISOString(),
-        importo_offerta: totOfferta,
-        offerta_voci: offertaVoci,
-        trasporto_importo: trasportoImporto,
-        trasporto_tipo: trasportoTipo,
-        pagamento_giorni: pagamentoGiorni,
-        anticipo_pct: anticipoPct,
-        sconto_anticipato_pct: scontoAnticipato,
-        forma_pagamento: formaPagamento,
-        disponibilita,
-        validita_giorni: validitaGiorni,
-        luogo_consegna: luogoConsegna,
-        note_offerta: noteOfferta + (osservazioni ? '\n\nOsservazioni tecniche:\n' + osservazioni : ''),
-        stato: 'risposta_ricevuta',
-        ...(pdfUrl ? { offerta_pdf_url: pdfUrl } : {}),
-      }).eq('id', rdo.id)
-
-      if (error) { setErrore('Errore invio: ' + error.message); return }
-
-      if (adminEmail && rdo) {
-        const sub = `Offerta ricevuta: ${rdo.codice} da ${rdo.fornitore || 'Fornitore'}`
-        const notHtml = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto"><div style="background:#1e3a5f;padding:20px;text-align:center"><span style="font-size:22px;font-weight:800;color:#fff">SQ360</span></div><div style="padding:24px;background:#fff;border:1px solid #e5e7eb"><h2 style="color:#1e3a5f;font-size:16px">Nuova offerta ricevuta</h2><p style="color:#374151;font-size:13px">Il fornitore <b>${rdo.fornitore || '—'}</b> ha inviato la propria offerta per la RDO <b>${rdo.codice}</b>.</p><div style="padding:12px 16px;background:#f0fdf4;border-left:4px solid #10b981;border-radius:4px;margin:16px 0"><span style="font-size:20px;font-weight:800;color:#059669">€ ${fi(totOfferta)}</span><span style="font-size:12px;color:#6b7280;margin-left:8px">importo offerta</span></div><p style="color:#6b7280;font-size:12px">Accedi a SQ360 per visualizzare il dettaglio e procedere con la comparativa.</p></div><p style="text-align:center;color:#9ca3af;font-size:10px;padding:12px">Notifica automatica SQ360</p></div>`
-        fetch('/api/email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: adminEmail, subject: sub, html: notHtml }) }).catch(() => {})
-      }
-
+      // Il server ricalcola gli importi con le quantità del DB e avvisa l'azienda
+      const res = await fetch(`/api/offerta/${encodeURIComponent(token)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prezzi: prezziVoci,
+          trasporto_importo: trasportoImporto, trasporto_tipo: trasportoTipo, imballo,
+          pagamento_giorni: pagamentoGiorni, anticipo_pct: anticipoPct, sconto_anticipato_pct: scontoAnticipato,
+          forma_pagamento: formaPagamento, disponibilita, validita_giorni: validitaGiorni,
+          luogo_consegna: luogoConsegna, note_offerta: noteOfferta, osservazioni,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.ok) { setErrore('Errore invio: ' + (data.error || 'riprova')); return }
       setInviata(true)
+    } catch {
+      setErrore('Errore di rete durante l’invio: riprova.')
     } finally { setSending(false) }
   }
 

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase, getAziendaId } from '@/lib/supabase'
 import { AddressAutocomplete } from '@/components/AddressAutocomplete'
+import { fetchConToken } from '@/lib/authFetch'
 
 /* ── Types ────────────────────────────────────────────────────────────────── */
 interface SoaItem { categoria: string; classifica: string; scadenza: string }
@@ -202,7 +203,7 @@ function AiImportModal({ onImport, onClose }: {
     const fd = new FormData()
     fd.append('file', f)
     try {
-      const res = await fetch('/api/ai-import-fornitore', { method: 'POST', body: fd })
+      const res = await fetchConToken('/api/ai-import-fornitore', { method: 'POST', body: fd })
       const json = await res.json()
       if (!json.ok) { setErr(json.errore || 'Errore AI'); setLoading(false); return }
       const d = json.dati as Record<string, string>

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getUserClient } from '@/lib/supabaseServer'
 
 export const runtime = 'nodejs'
 
@@ -58,6 +59,10 @@ async function callGemini(prompt: string, apiKey: string, attempt = 0): Promise<
 }
 
 export async function POST(req: NextRequest) {
+  // Solo utenti collegati: evita uso anonimo (e costi AI) della route
+  const auth = await getUserClient(req)
+  if (auth.response) return auth.response
+
   try {
     const { testo, tipo = 'commessa' } = await req.json() as { testo?: string; tipo?: string }
     if (!testo || testo.trim().length < 20) return NextResponse.json({ ok: false, errore: 'Testo troppo breve' })

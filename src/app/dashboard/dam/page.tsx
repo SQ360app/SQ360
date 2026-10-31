@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Search, X, Send, FileText, Upload, AlertTriangle, CheckCircle } from 'lucide-react'
 import { supabase, getAziendaId } from '@/lib/supabase'
-import { emailDamApprovato } from '@/lib/emailTemplates'
+import { fetchConToken } from '@/lib/authFetch'
 
 type StatoDAM = 'BOZZA' | 'INVIATO_DL' | 'APPROVATO' | 'APPROVATO_NOTE' | 'RIFIUTATO' | 'REV_1' | 'REV_2'
 
@@ -133,14 +133,14 @@ export default function DAMPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user?.email) return
     const { data: commessa } = await supabase.from('commesse').select('codice,nome').eq('id', dam.commessa_id).single()
-    const { subject, html } = emailDamApprovato({
-      materiale: dam.materiale,
-      codice: dam.codice,
-      commessa: commessa ? `${(commessa as any).codice} — ${(commessa as any).nome}` : '',
-      dlNome: dam.dl_nome,
-    })
-    fetch('/api/email', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to: user.email, subject, html }) }).catch(() => {})
+    // Il server genera l'email dal modello e la invia all'utente stesso
+    fetchConToken('/api/email', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tipo: 'dam_approvato', dati: {
+        materiale: dam.materiale,
+        codice: dam.codice,
+        commessa: commessa ? `${(commessa as any).codice} — ${(commessa as any).nome}` : '',
+        dlNome: dam.dl_nome,
+      } }) }).catch(() => {})
   }
 
   async function rifiutaDAM(id: string) {
