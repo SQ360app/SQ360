@@ -1,5 +1,7 @@
 # SQ360 — Contesto progetto
 
+> **REGOLA**: ad ogni commit aggiornare `MASTER.md` (stato moduli, decisioni/regole di dominio, pendenti, stato dei 16 prompt, changelog) e includerlo nello stesso commit.
+
 ## Stack
 - Next.js 15, Supabase, Vercel
 - AI: Gemini 2.0 Flash (GEMINI_API_KEY server-side)
