@@ -4,6 +4,10 @@ import React, { useState, useEffect, useRef, useCallback, use, useMemo } from 'r
 import { supabase, getAziendaId } from '@/lib/supabase'
 import { DEFAULT_WBS_FLAT, WbsVoce } from '@/lib/wbs'
 import { loadWbs } from '@/lib/wbsLoader'
+import {
+  Misurazione, DimField, DIM_FIELDS, caricaMisurazioni, parseFormula, buildFormula,
+  parseValoreXpwe, calcolaQuantita, sommaQuantita, isDeduzione, fmtMis,
+} from '@/lib/misurazioni'
 
 // ─── Tipi ───────────────────────────────────────────────────────────────────
 interface VoceDB {
@@ -14,11 +18,6 @@ interface VoceDB {
   sic_interna_importo?: number; sic_interna_percentuale?: number
   manuale?: boolean
   visibile_in_computo?: boolean
-}
-interface Misurazione {
-  id: string; voce_id: string; commessa_id: string
-  nota: string; nr: number; lunghezza: number; larghezza: number; h_peso: number
-  quantita: number; ordine: number
 }
 interface EpItem {
   id: string; codice: string; descrizione: string; um: string; prezzo_unitario: number
@@ -270,7 +269,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
       if (!computo) { setCaricamento(false); return }
       setComputoId(computo.id)
 
-      const [{ data: v }, { data: rda }, { data: analisiData }, { data: extraData }, { data: misData }] = await Promise.all([
+      const [{ data: v }, { data: rda }, { data: analisiData }, { data: extraData }, misMap] = await Promise.all([
         supabase.from('voci_computo')
           .select('id,codice,descrizione,um,quantita,prezzo_unitario,importo,capitolo,categoria,note,wbs_id,wbs_label,sic_interna_importo,sic_interna_percentuale,manuale,visibile_in_computo')
           .eq('computo_id', computo.id)
@@ -279,20 +278,13 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
         supabase.from('rda').select('id,wbs_id,stato,tipo').eq('commessa_id', id),
         supabase.from('analisi_prezzi_tariffa').select('*').eq('commessa_id', id),
         supabase.from('analisi_extra_voce').select('*').eq('commessa_id', id),
-        (supabase as any).from('voci_computo_misurazioni').select('*').eq('commessa_id', id).order('ordine'),
+        caricaMisurazioni(supabase, computo.id).catch((e: Error) => { showToast(`⚠ ${e.message}`); return {} as Record<string, Misurazione[]> }),
       ])
       if (v) { setVoci(v); setTotale(v.reduce((s, x) => s + (x.importo || 0), 0)) }
       if (rda) setRdaList(rda as RDADB[])
       if (analisiData) setAnalisi(analisiData as AnalisiPrezzo[])
       if (extraData) setAnalisiExtra(extraData as AnalisiExtraVoce[])
-      if (misData) {
-        const misMap: Record<string, Misurazione[]> = {}
-        for (const m of misData) {
-          if (!misMap[m.voce_id]) misMap[m.voce_id] = []
-          misMap[m.voce_id].push(m as Misurazione)
-        }
-        setMisurazioni(misMap)
-      }
+      setMisurazioni(misMap)
     } finally { setCaricamento(false) }
   }, [id])
 
@@ -317,21 +309,26 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
 
   // ─── Misurazioni CRUD ────────────────────────────────────────────────────
 
-  const aggiornaMisurazione = async (mis: Misurazione, field: string, rawVal: string, voceId: string) => {
-    const val: string | number = field === 'nota' ? rawVal : (parseFloat(rawVal) || 0)
-    const updated = { ...mis, [field]: val }
-    const newQty = field !== 'nota'
-      ? parseFloat((updated.nr * updated.lunghezza * updated.larghezza * updated.h_peso).toFixed(4))
-      : mis.quantita
-    await (supabase as any).from('voci_computo_misurazioni')
-      .update({ [field]: val, ...(field !== 'nota' ? { quantita: newQty } : {}) })
-      .eq('id', mis.id)
-    const voceRows = (misurazioni[voceId] || []).map(m =>
-      m.id === mis.id ? { ...m, [field]: val, quantita: newQty } : m
-    )
-    const nuovoTotale = parseFloat(voceRows.reduce((s, m) => s + m.quantita, 0).toFixed(4))
+  // Righe editabili solo sulle voci manuali (le voci XPWE sono read-only).
+  // Nei campi misura si può scrivere un numero o una formula ("(2.10+2.96)/2"):
+  // valore calcolato nel campo, testo originale nella colonna `formula`.
+  const aggiornaMisurazione = async (mis: Misurazione, field: 'descrizione' | DimField, rawVal: string, voceId: string) => {
+    let patch: Partial<Misurazione>
+    if (field === 'descrizione') {
+      patch = { descrizione: rawVal.trim() || null }
+    } else {
+      const { valore, formula: testo } = parseValoreXpwe(rawVal)
+      const f = parseFormula(mis.formula)
+      if (testo) f.campi[field] = testo; else delete f.campi[field]
+      patch = { [field]: valore, formula: buildFormula(f), quantita_calc: calcolaQuantita({ ...mis, [field]: valore }) }
+    }
+    const { error } = await (supabase as any).from('voci_computo_misurazioni').update(patch).eq('id', mis.id)
+    setMisEdit(prev => { const n = { ...prev }; delete n[`${mis.id}_${field}`]; return n })
+    if (error) { showToast(`⚠ Errore salvataggio misura: ${error.message}`); return }
+    const voceRows = (misurazioni[voceId] || []).map(m => m.id === mis.id ? { ...m, ...patch } : m)
+    const nuovoTotale = sommaQuantita(voceRows)
     setMisurazioni(prev => ({ ...prev, [voceId]: voceRows }))
-    if (field !== 'nota') {
+    if (field !== 'descrizione') {
       const voce = voci.find(v => v.id === voceId)
       if (voce) {
         const newImporto = parseFloat((nuovoTotale * voce.prezzo_unitario).toFixed(2))
@@ -340,24 +337,28 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
         setTotale(prev => parseFloat((prev - voce.importo + newImporto).toFixed(2)))
       }
     }
-    setMisEdit(prev => { const n = { ...prev }; delete n[`${mis.id}_${field}`]; return n })
   }
 
   const aggiungiMisurazione = async (voceId: string) => {
-    const ordine = (misurazioni[voceId] || []).length + 1
-    const { data } = await (supabase as any).from('voci_computo_misurazioni').insert({
-      voce_id: voceId, commessa_id: id,
-      nota: '', nr: 1, lunghezza: 1, larghezza: 1, h_peso: 1, quantita: 1, ordine,
+    const righe = misurazioni[voceId] || []
+    const ordine = righe.reduce((mx, m) => Math.max(mx, m.ordine ?? 0), 0) + 1
+    // Riga vuota: tutti i campi null, nessuna quantità finché non viene compilata
+    const { data, error } = await (supabase as any).from('voci_computo_misurazioni').insert({
+      voce_computo_id: voceId, descrizione: null,
+      parti_uguali: null, lunghezza: null, larghezza: null, altezza_peso: null,
+      formula: null, quantita_calc: null, is_negativo: false, ordine,
     }).select().single()
+    if (error) { showToast(`⚠ Errore aggiunta misura: ${error.message}`); return }
     if (data) {
       setMisurazioni(prev => ({ ...prev, [voceId]: [...(prev[voceId] || []), data as Misurazione] }))
     }
   }
 
   const eliminaMisurazione = async (misId: string, voceId: string) => {
-    await (supabase as any).from('voci_computo_misurazioni').delete().eq('id', misId)
+    const { error } = await (supabase as any).from('voci_computo_misurazioni').delete().eq('id', misId)
+    if (error) { showToast(`⚠ Errore eliminazione misura: ${error.message}`); return }
     const voceRows = (misurazioni[voceId] || []).filter(m => m.id !== misId)
-    const nuovoTotale = parseFloat(voceRows.reduce((s, m) => s + m.quantita, 0).toFixed(4))
+    const nuovoTotale = sommaQuantita(voceRows)
     setMisurazioni(prev => ({ ...prev, [voceId]: voceRows }))
     const voce = voci.find(v => v.id === voceId)
     if (voce) {
@@ -1242,61 +1243,83 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
                       const v = row.v; const mis = row.mis
                       const inpSt: React.CSSProperties = { width: '100%', border: 'none', background: 'transparent', textAlign: 'right', fontFamily: 'monospace', fontSize: 10, outline: 'none', color: '#374151', padding: '0 2px' }
                       if (mis.length > 0) {
+                        const editabile = v.manuale === true
                         return (
                           <React.Fragment key={`mi_${v.id}`}>
-                            {mis.map(m => (
-                              <tr key={`mis_${m.id}`} className="cmp-rmi">
-                                <td /><td /><td />
-                                <td style={{ paddingLeft: 28 }}>
-                                  <input value={misEdit[`${m.id}_nota`] ?? m.nota} placeholder="nota..."
-                                    style={{ ...inpSt, textAlign: 'left', fontStyle: 'italic', fontSize: 10, color: '#374151' }}
-                                    onChange={e => setMisEdit(p => ({ ...p, [`${m.id}_nota`]: e.target.value }))}
-                                    onBlur={() => aggiornaMisurazione(m, 'nota', misEdit[`${m.id}_nota`] ?? m.nota, v.id)}
-                                    onClick={e => e.stopPropagation()} />
+                            {mis.map(m => {
+                              const ded = isDeduzione(m)
+                              const fp = parseFormula(m.formula)
+                              const col = ded ? '#dc2626' : '#374151'
+                              const cellaDim = (field: DimField) => {
+                                const k = `${m.id}_${field}`
+                                const testoFormula = fp.campi[field]
+                                if (editabile) {
+                                  return (
+                                    <td key={field}>
+                                      <input value={misEdit[k] ?? testoFormula ?? (m[field] ?? '')} style={{ ...inpSt, color: col }}
+                                        title={testoFormula ? `${testoFormula} = ${fmtMis(m[field])}` : undefined}
+                                        onChange={e => setMisEdit(p => ({ ...p, [k]: e.target.value }))}
+                                        onBlur={() => { if (misEdit[k] !== undefined) aggiornaMisurazione(m, field, misEdit[k], v.id) }}
+                                        onClick={e => e.stopPropagation()} />
+                                    </td>
+                                  )
+                                }
+                                return (
+                                  <td key={field} title={testoFormula ? `${testoFormula} = ${fmtMis(m[field])}` : undefined}
+                                    style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 10, color: col, cursor: testoFormula ? 'help' : undefined }}>
+                                    {fmtMis(m[field])}{testoFormula && <sup style={{ color: '#6b7280', marginLeft: 1 }}>ƒ</sup>}
+                                  </td>
+                                )
+                              }
+                              return (
+                                <tr key={`mis_${m.id}`} className="cmp-rmi">
+                                  <td /><td /><td />
+                                  <td style={{ paddingLeft: 28, color: col }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                      {ded && (
+                                        <span style={{ flexShrink: 0, fontSize: 8, fontWeight: 700, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 3, padding: '0 4px', textTransform: 'uppercase' }}>
+                                          a detrarre
+                                        </span>
+                                      )}
+                                      {editabile ? (
+                                        <input value={misEdit[`${m.id}_descrizione`] ?? m.descrizione ?? ''} placeholder="descrizione..."
+                                          style={{ ...inpSt, textAlign: 'left', fontStyle: 'italic', fontSize: 10, color: col }}
+                                          onChange={e => setMisEdit(p => ({ ...p, [`${m.id}_descrizione`]: e.target.value }))}
+                                          onBlur={() => { const k = `${m.id}_descrizione`; if (misEdit[k] !== undefined) aggiornaMisurazione(m, 'descrizione', misEdit[k], v.id) }}
+                                          onClick={e => e.stopPropagation()} />
+                                      ) : (
+                                        <span style={{ fontStyle: 'italic', fontSize: 10, fontWeight: m.quantita_calc === null ? 600 : 400 }}>{m.descrizione ?? ''}</span>
+                                      )}
+                                      {fp.rif && (
+                                        <span style={{ flexShrink: 0, fontSize: 9, color: '#1d4ed8', background: '#eff6ff', borderRadius: 3, padding: '0 4px' }}>
+                                          ↪ {fp.rif}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  {DIM_FIELDS.map(cellaDim)}
+                                  <td style={{ textAlign: 'right', fontWeight: 600, fontSize: 10, fontFamily: 'monospace', color: col }}>{fmtMis(m.quantita_calc)}</td>
+                                  <td />
+                                  <td style={{ textAlign: 'center' }}>
+                                    {editabile && (
+                                      <button onClick={e => { e.stopPropagation(); eliminaMisurazione(m.id, v.id) }}
+                                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 11, padding: 0 }}>🗑</button>
+                                    )}
+                                  </td>
+                                  <td /><td /><td /><td />
+                                </tr>
+                              )
+                            })}
+                            {editabile && (
+                              <tr className="cmp-rmi">
+                                <td colSpan={15} style={{ paddingLeft: 28 }}>
+                                  <button onClick={e => { e.stopPropagation(); aggiungiMisurazione(v.id) }}
+                                    style={{ fontSize: 9, color: '#14532d', border: '1px dashed #4ade80', background: 'transparent', borderRadius: 3, cursor: 'pointer', padding: '1px 7px' }}>
+                                    + riga
+                                  </button>
                                 </td>
-                                <td>
-                                  <input type="number" value={misEdit[`${m.id}_nr`] ?? m.nr} style={inpSt}
-                                    onChange={e => setMisEdit(p => ({ ...p, [`${m.id}_nr`]: e.target.value }))}
-                                    onBlur={() => aggiornaMisurazione(m, 'nr', misEdit[`${m.id}_nr`] ?? String(m.nr), v.id)}
-                                    onClick={e => e.stopPropagation()} />
-                                </td>
-                                <td>
-                                  <input type="number" value={misEdit[`${m.id}_lunghezza`] ?? m.lunghezza} style={inpSt}
-                                    onChange={e => setMisEdit(p => ({ ...p, [`${m.id}_lunghezza`]: e.target.value }))}
-                                    onBlur={() => aggiornaMisurazione(m, 'lunghezza', misEdit[`${m.id}_lunghezza`] ?? String(m.lunghezza), v.id)}
-                                    onClick={e => e.stopPropagation()} />
-                                </td>
-                                <td>
-                                  <input type="number" value={misEdit[`${m.id}_larghezza`] ?? m.larghezza} style={inpSt}
-                                    onChange={e => setMisEdit(p => ({ ...p, [`${m.id}_larghezza`]: e.target.value }))}
-                                    onBlur={() => aggiornaMisurazione(m, 'larghezza', misEdit[`${m.id}_larghezza`] ?? String(m.larghezza), v.id)}
-                                    onClick={e => e.stopPropagation()} />
-                                </td>
-                                <td>
-                                  <input type="number" value={misEdit[`${m.id}_h_peso`] ?? m.h_peso} style={inpSt}
-                                    onChange={e => setMisEdit(p => ({ ...p, [`${m.id}_h_peso`]: e.target.value }))}
-                                    onBlur={() => aggiornaMisurazione(m, 'h_peso', misEdit[`${m.id}_h_peso`] ?? String(m.h_peso), v.id)}
-                                    onClick={e => e.stopPropagation()} />
-                                </td>
-                                <td style={{ textAlign: 'right', fontWeight: 600, fontSize: 10, fontFamily: 'monospace' }}>{f3(m.quantita)}</td>
-                                <td />
-                                <td style={{ textAlign: 'center' }}>
-                                  {v.manuale === true && (
-                                    <button onClick={e => { e.stopPropagation(); eliminaMisurazione(m.id, v.id) }}
-                                      style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 11, padding: 0 }}>🗑</button>
-                                  )}
-                                </td>
-                                <td /><td /><td /><td />
                               </tr>
-                            ))}
-                            <tr className="cmp-rmi">
-                              <td colSpan={15} style={{ paddingLeft: 28 }}>
-                                <button onClick={e => { e.stopPropagation(); aggiungiMisurazione(v.id) }}
-                                  style={{ fontSize: 9, color: '#14532d', border: '1px dashed #4ade80', background: 'transparent', borderRadius: 3, cursor: 'pointer', padding: '1px 7px' }}>
-                                  + riga
-                                </button>
-                              </td>
-                            </tr>
+                            )}
                           </React.Fragment>
                         )
                       }

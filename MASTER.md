@@ -1,7 +1,7 @@
 # SQ360 — MASTER
 
 > Documento di stato unico del progetto. **Va aggiornato ad ogni commit.**
-> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: `79e24bc` (contatti AI import + alert scadenze)
+> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: fix import misurazioni XPWE (successivo a `7ee7dff`)
 >
 > Fonti: `CLAUDE.md` (storico sessioni), `DEPLOY.md`, struttura `src/app`.
 
@@ -40,7 +40,7 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 |---|---|---|---|
 | Contratto 📋 | anagrafica | ✅ | WBS commessa, verbale consegna PDF, toggle sicurezza interna |
 | | elenco-prezzi | ✅ | Popolazione auto dal computo, analisi BASE, NP/xxx concordato DL |
-| | computo | ✅ | XPWE + misurazioni reali, voce da EP, analisi prezzi BASE+EXTRA, voci XPWE read-only |
+| | computo | ✅ | XPWE + misurazioni reali (descrizione riga, formule, deduzioni "a detrarre", "vedi voce"), voce da EP, analisi prezzi BASE+EXTRA, voci XPWE read-only — **reimportare l'XPWE** per vedere le misurazioni |
 | | varianti | ✅ | Iter D.Lgs.36/2023; esecutiva → `visibile_in_computo=true` |
 | | ordini-servizio | ✅ | Firma / riserva / chiudi, genera variante |
 | | nuovi-prezzi | ⚠️ | **SQL `nuovi_prezzi` da eseguire** |
@@ -55,7 +55,7 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 | | persone | ✅ | QR badge, scanner PWA, presenze, coda offline |
 | | sicurezza | ✅ | 24 tipologie AI Gemini |
 | | ddt | ✅ | AI Gemini Vision, paginazione |
-| Economico 💰 | sal-attivi (+ SalGrid) | ⚠️ | Completo; **SQL `sal.pdf_*_url` da eseguire** |
+| Economico 💰 | sal-attivi (+ SalGrid) | ⚠️ | Completo; righe di misura reali (read-only) al posto del nome categoria; **SQL `sal.pdf_*_url` da eseguire** |
 | | sal-passivi | ✅ | Blocco autorizzazione se DURC non valido |
 | | fatturazione / fatture | ✅ | Fatture passive AI, paginazione |
 | | conto-economico | ✅ | Doppio margine, breakdown tipo ODA, previsti per WBS |
@@ -89,7 +89,8 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 - **SalGrid = copia meccanica del computo** (`cp`) con 3 differenze; pannello analisi disabilitato con `{false && …}`.
 - **Analisi prezzi**: BASE condivisa per `codice_tariffa` (`analisi_prezzi_tariffa`) + EXTRA per singola voce (`analisi_extra_voce`). Home canonica: Elenco Prezzi. `piano_costi_voce` deprecato (tabella resta per storico).
 - **WBS a 2 livelli**: `wbs_templates` (azienda) → `wbs_nodes` (commessa) con `template_id`; `loadWbs()` fallback a 4 livelli fino a `DEFAULT_WBS_FLAT`.
-- **XPWE reimport**: delete misurazioni SEMPRE prima del reimport; UUID client-side pre-assegnati per linkare misurazioni senza re-query.
+- **XPWE reimport**: delete misurazioni SEMPRE prima del reimport (via `voce_computo_id` delle voci del computo precedente); UUID client-side pre-assegnati per linkare misurazioni senza re-query.
+- **Misurazioni XPWE** (`voci_computo_misurazioni`, schema reale: `voce_computo_id`, `descrizione`, `parti_uguali`, `lunghezza`, `larghezza`, `altezza_peso`, `formula`, `quantita_calc`, `is_negativo`, `is_parziale`, `flags`, `rif_idvv`, `ordine` — nessun `commessa_id`): parser su `<PweVCMisure>/<RGItem>` (vecchi `<Misure>/<MisureItem>` come alternativa); quantità = `<Quantita>` del file (non ricalcolata); campi vuoti = `null`; numeri con spazi (`3 679.00`); formule → valore calcolato nel campo + testo originale in `formula` (formato `VV=… · PU=… · L=… · La=… · H=…`); se l'INSERT fallisce l'import fallisce con messaggio. Logica condivisa in `src/lib/misurazioni.ts`; caricamento paginato (>1000 righe) con join `voci_computo!inner(computo_id)`.
 - **Codici documento**: MAX+1 con `UNIQUE(commessa_id, azienda_id, codice)`; revisioni `-R1/-R2`.
 - **Computo**: render diretto, virtualizzatore rimosso (`@tanstack/react-virtual` installato ma non usato lì).
 - **Paginazione**: ODA / DDT / fatture passive a blocchi da 50 con "Carica altri".
@@ -107,7 +108,8 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 - **SAL passivi**: `ricevuto → in_verifica → autorizzato → pagato`; autorizzazione bloccata se DURC sub non valido.
 - **Ritenuta di garanzia**: default 5% su SAL attivi e passivi.
 - **Sicurezza interna (formula 3 livelli, Primus-compatibile)**: `quotaLavori = (PU − sic) × (1 − ribasso) × q` + `quotaSicurezza = sic × q`; di default sicurezza NON ribassabile (`sicurezza_interna_esclusa_ribasso = true`).
-- **Voci XPWE read-only** (quantità/PU non editabili, misurazioni non eliminabili); voci manuali (`manuale = true`) editabili.
+- **Voci XPWE read-only** (quantità/PU e righe di misura non editabili né eliminabili); voci manuali (`manuale = true`) editabili, anche con formule nei campi misura.
+- **Righe di misura PriMus**: `Flags & 1` = deduzione (quantità già negativa nel file) → rosso con etichetta "a detrarre"; `Flags & 32768` = "vedi voce" → `IDVV` è l'ID della voce collegata, quantità = fattori riga × quantità di quella voce, mostrata come "↪ Vedi voce n. N (tariffa)"; righe titolo (tutti i campi vuoti) solo descrizione, senza quantità.
 - **Voci da variante** visibili nel computo solo quando la variante diventa `esecutiva`; voci `soppressione` barrate e non quantificabili nel SAL.
 - **Varianti**: soglie RUP/SA secondo D.Lgs. 36/2023; iter proposta → RUP → SA → esecutiva.
 - **Nuovi prezzi**: proposta → in_negoziazione → concordato → inserito_ep; codici `NP/001…` (fonte `concordato_dl`).
@@ -146,6 +148,8 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 - Checklist offerta gare in `localStorage`: non condivisa tra utenti/dispositivi — valutare persistenza in DB.
 - Tipi Supabase non generati (`any` ovunque): valutare `supabase gen types`.
 - Modifica non committata in `src/lib/supabase.ts` (+15 righe) al momento della creazione di questo file.
+- `voci_computo_misurazioni.is_parziale`: colonna non valorizzata dall'import (nessun flag corrispondente individuato nel file di esempio).
+- Riferimento "vedi voce" salvato come testo in `formula` (non esiste colonna con l'ID XPWE della voce): se la voce collegata cambia, il testo non si aggiorna.
 - Roadmap 43–46 (registro contabilità, export ZIP strutturato, KB AI edile, billing Stripe).
 
 ---
@@ -299,3 +303,5 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 |---|---|---|
 | 2026-10-31 | — | Creazione iniziale da CLAUDE.md + DEPLOY.md + struttura codice |
 | 2026-10-31 | `ebc47e1` | Completate sezione 5 (stato 16 prompt da `sq360-prompts.md`) e sezione 6 (test checklist da `TEST_CHECKLIST.md`); aggiunti i due file al repo |
+| 2026-10-31 | `7ee7dff` | Rimossa nota "file non presenti nel repo"; aggiunta riga changelog per `ebc47e1` |
+| 2026-10-31 | (questo commit) | Fix import misurazioni XPWE (parser `PweVCMisure/RGItem`, schema reale tabella, formule, deduzioni, vedi voce, errore bloccante su INSERT); computo e SAL Attivi mostrano la descrizione della riga invece della categoria |

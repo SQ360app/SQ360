@@ -1,6 +1,10 @@
 import { randomUUID } from 'crypto'
 import { supabase } from '@/lib/supabase'
 import { NextRequest, NextResponse } from 'next/server'
+import {
+  DIM_FIELDS, DimField, FLAG_DEDUZIONE, FLAG_VEDI_VOCE,
+  buildFormula, calcolaQuantita, parseValoreXpwe,
+} from '@/lib/misurazioni'
 // ─── Parser XML per XPWE Primus ──────────────────────────────────────────────
 // Struttura REALE verificata su file CM_Variante_CPM.xpwe:
 // - EPItem usa ATTRIBUTO ID="614" e ELEMENTI FIGLI <Tariffa>, <DesEstesa>, ecc.
@@ -23,6 +27,24 @@ function getChild(xml: string, tag: string): string {
     .replace(/&apos;/g, "'")
     .replace(/&quot;/g, '"')
     .trim()
+}
+
+/**
+ * Valore di un tag con nome ESATTO (getChild con "Lung" catturerebbe anche "<Lunghezza>").
+ * Prova i nomi in ordine; tag vuoto o autochiuso (<Lunghezza/>) → ''.
+ */
+function getTag(xml: string, ...tags: string[]): string {
+  for (const tag of tags) {
+    const m = new RegExp(`<${tag}(?:\\s[^>]*)?>([^<]*)</${tag}>`, 'i').exec(xml)
+    if (m) {
+      return m[1]
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+        .replace(/&apos;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&')
+        .trim()
+    }
+    if (new RegExp(`<${tag}(?:\\s[^>]*)?/>`, 'i').test(xml)) return ''
+  }
+  return ''
 }
 
 function getChildLong(xml: string, tag: string): string {
@@ -142,13 +164,17 @@ export async function POST(req: NextRequest) {
       epById[xpweId] = parsed
     }
 
-    // ── 4. Parse VCItem (Voci Computo) con Misure ────────────────────────────
+    // ── 4. Parse VCItem (Voci Computo) con righe di misura ───────────────────
+    // Formato PriMus reale: <PweVCMisure><RGItem> con Descrizione, PartiUguali,
+    // Lunghezza, Larghezza, HPeso, Quantita, Flags, IDVV.
+    // Vecchi nomi mantenuti come alternativa: <Misure><MisureItem> con Nota, NR, Lung, Larg.
     interface MisuraParsed {
-      nota: string
-      nr: number
-      lunghezza: number
-      larghezza: number
-      h_peso: number
+      descrizione: string | null
+      dims: Record<DimField, number | null>
+      formule: Partial<Record<DimField, string>>
+      quantita: number | null
+      flags: number | null
+      idvv: number | null
     }
     interface VCParsed {
       idep: string
@@ -160,46 +186,89 @@ export async function POST(req: NextRequest) {
     }
     const vcList: VCParsed[] = []
     const vcItems = findAllElements(xml, 'VCItem')
+    // ID XPWE della voce → numero progressivo nel file (come "Vedi voce n." di PriMus) + IDEP
+    const vcRifById: Record<string, { n: number; idep: string }> = {}
 
-    for (const vc of vcItems) {
+    vcItems.forEach((vc, idx) => {
+      const vcId = getAttr(vc.slice(0, vc.indexOf('>') + 1), 'ID')
       const idep = getChild(vc, 'IDEP')
-      if (!idep) continue
+      if (vcId) vcRifById[vcId] = { n: idx + 1, idep }
+      if (!idep) return
       const qStr = getChild(vc, 'Quantita') || '0'
 
-      // Parse <Misure> block
       const misure: MisuraParsed[] = []
-      const misureBlockMatch = /<Misure(?:[^>]*)>([\s\S]*?)<\/Misure>/i.exec(vc)
-      if (misureBlockMatch) {
-        const misXml = misureBlockMatch[1]
-        const miRe = /<MisureItem(?:[^>]*)>([\s\S]*?)<\/MisureItem>/gi
-        let miMatch
-        while ((miMatch = miRe.exec(misXml)) !== null) {
-          const mi = miMatch[0]
-          const nota     = getChild(mi, 'Nota')
-          const nrStr    = getChild(mi, 'NR')
-          const lungStr  = getChild(mi, 'Lung')
-          const largStr  = getChild(mi, 'Larg')
-          const hpesoStr = getChild(mi, 'HPeso')
-          const nr    = nrStr    ? (parseFloat(nrStr.replace(',', '.'))    || 0) : 1
-          const lung  = lungStr  ? (parseFloat(lungStr.replace(',', '.'))  || 0) : 1
-          const larg  = largStr  ? (parseFloat(largStr.replace(',', '.'))  || 0) : 1
-          const hpeso = hpesoStr ? (parseFloat(hpesoStr.replace(',', '.')) || 0) : 1
-          misure.push({ nota, nr, lunghezza: lung, larghezza: larg, h_peso: hpeso })
+      const blocco = /<(PweVCMisure|Misure)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/i.exec(vc)
+      if (blocco) {
+        const riRe = /<(RGItem|MisureItem)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/gi
+        let ri
+        while ((ri = riRe.exec(blocco[2])) !== null) {
+          const r = ri[2]
+          const dims = {} as Record<DimField, number | null>
+          const formule: Partial<Record<DimField, string>> = {}
+          const raw: Record<DimField, string> = {
+            parti_uguali: getTag(r, 'PartiUguali', 'NR'),
+            lunghezza:    getTag(r, 'Lunghezza', 'Lung'),
+            larghezza:    getTag(r, 'Larghezza', 'Larg'),
+            altezza_peso: getTag(r, 'HPeso'),
+          }
+          for (const f of DIM_FIELDS) {
+            const { valore, formula } = parseValoreXpwe(raw[f])
+            dims[f] = valore
+            if (formula) formule[f] = formula
+          }
+          const flagsStr = getTag(r, 'Flags')
+          const idvvStr  = getTag(r, 'IDVV')
+          const flags = flagsStr ? parseInt(flagsStr, 10) : null
+          const idvv  = idvvStr  ? parseInt(idvvStr, 10)  : null
+          const tutteVuote = DIM_FIELDS.every(f => dims[f] === null)
+          let quantita = parseValoreXpwe(getTag(r, 'Quantita')).valore
+          if (quantita === null) {
+            // Vecchio formato senza <Quantita>: prodotto dei soli campi valorizzati
+            quantita = calcolaQuantita({ ...dims, is_negativo: null, flags })
+          }
+          // Riga titolo (es. "Piano terra"): nessuna misura → nessuna quantità
+          if (tutteVuote && quantita === 0) quantita = null
+          misure.push({
+            descrizione: getTag(r, 'Descrizione', 'Nota') || null,
+            dims, formule, quantita,
+            flags: Number.isFinite(flags) ? flags : null,
+            idvv:  Number.isFinite(idvv)  ? idvv  : null,
+          })
         }
       }
 
       vcList.push({
         idep,
-        quantita:  parseFloat(qStr.replace(',', '.')) || 0,
+        quantita:  parseValoreXpwe(qStr).valore ?? 0,
         idSpCat:   getChild(vc, 'IDSpCat') || '0',
         idCat:     getChild(vc, 'IDCat')   || '0',
         idSbCat:   getChild(vc, 'IDSbCat') || '0',
         misure,
       })
-    }
+    })
 
     // ── 5. Gestisci computo_metrico ──────────────────────────────────────────
     const db = supabase as any
+
+    // Cancella le misurazioni delle voci del computo precedente (la tabella non ha
+    // commessa_id: si risale tramite voce_computo_id → voci_computo → computo_metrico)
+    const { data: vecchiComputi } = await db.from('computo_metrico').select('id').eq('commessa_id', commessaId)
+    const vecchiComputoIds: string[] = (vecchiComputi || []).map((c: { id: string }) => c.id)
+    if (vecchiComputoIds.length > 0) {
+      const vecchieVoci: string[] = []
+      for (let from = 0; ; from += 1000) {
+        const { data: vv, error: errVV } = await db.from('voci_computo').select('id')
+          .in('computo_id', vecchiComputoIds).order('id').range(from, from + 999)
+        if (errVV) throw new Error(`Errore lettura voci precedenti: ${errVV.message}`)
+        vecchieVoci.push(...(vv || []).map((v: { id: string }) => v.id))
+        if (!vv || vv.length < 1000) break
+      }
+      for (let i = 0; i < vecchieVoci.length; i += 200) {
+        const { error: errDel } = await db.from('voci_computo_misurazioni').delete()
+          .in('voce_computo_id', vecchieVoci.slice(i, i + 200))
+        if (errDel) throw new Error(`Errore cancellazione misurazioni precedenti: ${errDel.message}`)
+      }
+    }
 
     await db.from('computo_metrico').delete().eq('commessa_id', commessaId)
 
@@ -324,38 +393,57 @@ export async function POST(req: NextRequest) {
       if (errV) throw new Error(`Errore insert voci: ${errV.message}`)
     }
 
-    // ── 9. Insert misurazioni con ID pre-generati ────────────────────────────
+    // ── 9. Insert misurazioni (voce_computo_id = ID voce pre-generato) ───────
     const misurazioniAll: Array<{
-      voce_id: string; commessa_id: string; nota: string
-      nr: number; lunghezza: number; larghezza: number; h_peso: number
-      quantita: number; ordine: number
+      voce_computo_id: string
+      descrizione: string | null
+      parti_uguali: number | null; lunghezza: number | null
+      larghezza: number | null; altezza_peso: number | null
+      formula: string | null
+      quantita_calc: number | null
+      is_negativo: boolean
+      flags: number | null
+      rif_idvv: number | null
+      ordine: number
     }> = []
 
     for (const v of vociWithMeta) {
       for (let j = 0; j < v.misure.length; j++) {
         const m = v.misure[j]
+        const vediVoce = ((m.flags ?? 0) & FLAG_VEDI_VOCE) !== 0 && m.idvv !== null && m.idvv > 0
+        let rif: string | null = null
+        if (vediVoce) {
+          const ref = vcRifById[String(m.idvv)]
+          const tariffa = ref ? epById[ref.idep]?.tariffa : undefined
+          rif = ref ? `Vedi voce n. ${ref.n}${tariffa ? ` (${tariffa})` : ''}` : `Vedi voce ID ${m.idvv}`
+        }
         misurazioniAll.push({
-          voce_id:     v.id,
-          commessa_id: commessaId,
-          nota:        m.nota,
-          nr:          m.nr,
-          lunghezza:   m.lunghezza,
-          larghezza:   m.larghezza,
-          h_peso:      m.h_peso,
-          quantita:    parseFloat((m.nr * m.lunghezza * m.larghezza * m.h_peso).toFixed(4)),
-          ordine:      j + 1,
+          voce_computo_id: v.id,
+          descrizione:     m.descrizione,
+          parti_uguali:    m.dims.parti_uguali,
+          lunghezza:       m.dims.lunghezza,
+          larghezza:       m.dims.larghezza,
+          altezza_peso:    m.dims.altezza_peso,
+          formula:         buildFormula({ rif, campi: m.formule }),
+          quantita_calc:   m.quantita,
+          is_negativo:     ((m.flags ?? 0) & FLAG_DEDUZIONE) !== 0 || (m.quantita ?? 0) < 0,
+          flags:           m.flags,
+          rif_idvv:        m.idvv,
+          ordine:          j + 1,
         })
       }
     }
 
-    // Cancella sempre le vecchie misurazioni (evita orfane se il nuovo XPWE non ha <Misure>)
-    await db.from('voci_computo_misurazioni').delete().eq('commessa_id', commessaId)
-    if (misurazioniAll.length > 0) {
-      for (let i = 0; i < misurazioniAll.length; i += BATCH) {
-        const { error: errMis } = await db
-          .from('voci_computo_misurazioni')
-          .insert(misurazioniAll.slice(i, i + BATCH))
-        if (errMis) console.warn('Misurazioni insert warning:', errMis.message)
+    for (let i = 0; i < misurazioniAll.length; i += BATCH) {
+      const { error: errMis } = await db
+        .from('voci_computo_misurazioni')
+        .insert(misurazioniAll.slice(i, i + BATCH))
+      if (errMis) {
+        throw new Error(
+          `Import interrotto: errore nel salvataggio delle righe di misura ` +
+          `(righe ${i + 1}–${Math.min(i + BATCH, misurazioniAll.length)} di ${misurazioniAll.length}): ${errMis.message}. ` +
+          `Le voci del computo sono state importate ma le misurazioni sono incomplete: risolvi il problema e reimporta il file.`
+        )
       }
     }
 

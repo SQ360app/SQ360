@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback, use, useMemo } from 'r
 import { supabase, getAziendaId } from '@/lib/supabase'
 import { DEFAULT_WBS_FLAT, WbsVoce } from '@/lib/wbs'
 import { loadWbs } from '@/lib/wbsLoader'
+import { Misurazione, DIM_FIELDS, caricaMisurazioni, parseFormula, isDeduzione, fmtMis } from '@/lib/misurazioni'
 
 // ─── Tipi ───────────────────────────────────────────────────────────────────
 interface VoceDB {
@@ -173,6 +174,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
   const { id } = use(paramsPromise)
 
   const [voci, setVoci] = useState<VoceDB[]>([])
+  const [misurazioni, setMisurazioni] = useState<Record<string, Misurazione[]>>({})
   const [rdaList, setRdaList] = useState<RDADB[]>([])
   const [totale, setTotale] = useState(0)
   const [caricamento, setCaricamento] = useState(true)
@@ -345,7 +347,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
       if (!computo) { setCaricamento(false); return }
       setComputoId(computo.id)
 
-      const [{ data: v }, { data: rda }, { data: analisiData }, { data: extraData }, { data: comm }] = await Promise.all([
+      const [{ data: v }, { data: rda }, { data: analisiData }, { data: extraData }, { data: comm }, misMap] = await Promise.all([
         supabase.from('voci_computo')
           .select('id,codice,descrizione,um,quantita,prezzo_unitario,importo,capitolo,categoria,note,wbs_id,wbs_label,sic_interna_importo,sic_interna_percentuale')
           .eq('computo_id', computo.id).order('capitolo').order('codice'),
@@ -353,7 +355,9 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
         supabase.from('analisi_prezzi_tariffa').select('*').eq('commessa_id', id),
         supabase.from('analisi_extra_voce').select('*').eq('commessa_id', id),
         supabase.from('commesse').select('codice,nome,committente,importo_contratto,cig,cup,sicurezza_interna_esclusa_ribasso').eq('id', id).single(),
+        caricaMisurazioni(supabase, computo.id).catch((e: Error) => { showToast(`⚠ ${e.message}`); return {} as Record<string, Misurazione[]> }),
       ])
+      setMisurazioni(misMap)
       if (v) { setVoci(v); setTotale(v.reduce((s, x) => s + (x.importo || 0), 0)) }
       if (rda) setRdaList(rda as RDADB[])
       if (analisiData) setAnalisi(analisiData as AnalisiPrezzo[])
@@ -1278,11 +1282,51 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
 
                     if (row.type === 'mi') {
                       const v = row.v; const isSel = sel === v.id
+                      const mis = misurazioni[v.id] || []
+                      const nColSal = salList.filter((s: any) => s.id !== salSel?.id).length + 3
+                      if (mis.length > 0) {
+                        return (
+                          <React.Fragment key={`mi_${v.id}`}>
+                            {mis.map(m => {
+                              const ded = isDeduzione(m)
+                              const fp = parseFormula(m.formula)
+                              const col = ded ? '#dc2626' : '#374151'
+                              return (
+                                <tr key={`mis_${m.id}`} className={`cmp-rmi${isSel ? ' sel' : ''}`}>
+                                  <td />
+                                  <td /><td style={{ paddingLeft: 28, color: col, fontSize: 10 }}>
+                                    {ded && (
+                                      <span style={{ fontSize: 8, fontWeight: 700, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 3, padding: '0 4px', marginRight: 4, textTransform: 'uppercase' }}>
+                                        a detrarre
+                                      </span>
+                                    )}
+                                    <span style={{ fontStyle: 'italic', fontWeight: m.quantita_calc === null ? 600 : 400 }}>{m.descrizione ?? ''}</span>
+                                    {fp.rif && (
+                                      <span style={{ fontSize: 9, color: '#1d4ed8', background: '#eff6ff', borderRadius: 3, padding: '0 4px', marginLeft: 4 }}>↪ {fp.rif}</span>
+                                    )}
+                                  </td>
+                                  {DIM_FIELDS.map(field => {
+                                    const tf = fp.campi[field]
+                                    return (
+                                      <td key={field} title={tf ? `${tf} = ${fmtMis(m[field])}` : undefined}
+                                        style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 10, color: col, cursor: tf ? 'help' : undefined }}>
+                                        {fmtMis(m[field])}{tf && <sup style={{ color: '#6b7280', marginLeft: 1 }}>ƒ</sup>}
+                                      </td>
+                                    )
+                                  })}
+                                  <td style={{ textAlign: 'right', fontWeight: 600, fontSize: 10, fontFamily: 'monospace', color: col }}>{fmtMis(m.quantita_calc)}</td>
+                                  <td /><td />{Array.from({ length: nColSal }).map((_, i) => <td key={i} />)}
+                                </tr>
+                              )
+                            })}
+                          </React.Fragment>
+                        )
+                      }
                       return (
                         <tr key={`mi_${v.id}`} className={`cmp-rmi${isSel ? ' sel' : ''}`}>
                           <td />
                           <td /><td style={{ paddingLeft: 28, color: '#6b7280', fontSize: 10, fontStyle: 'italic' }}>
-                            {v.note?.split('>').pop()?.trim() || 'misura da XPWE'}
+                            misura da XPWE
                           </td>
                           <td><span className="cmp-edt">1</span></td>
                           <td><span className="cmp-edt cmp-mono">{f3(v.quantita)}</span></td>
