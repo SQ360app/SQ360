@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto'
-import { supabase } from '@/lib/supabase'
 import { NextRequest, NextResponse } from 'next/server'
+import { getUserClient } from '@/lib/supabaseServer'
 import {
   DIM_FIELDS, DimField, FLAG_DEDUZIONE, FLAG_VEDI_VOCE,
   buildFormula, calcolaQuantita, parseValoreXpwe,
@@ -80,6 +80,11 @@ function findAllElements(xml: string, tag: string): string[] {
 // ─── Handler ─────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  // Client Supabase con il token dell'utente: le RLS si applicano come nel browser
+  const auth = await getUserClient(req)
+  if (auth.response) return auth.response
+  const db = auth.db
+
   try {
     const formData = await req.formData()
     const file = formData.get('file') as File
@@ -247,13 +252,23 @@ export async function POST(req: NextRequest) {
       })
     })
 
-    // ── 5. Gestisci computo_metrico ──────────────────────────────────────────
-    const db = supabase as any
+    // ── 5. Sostituzione del computo precedente ───────────────────────────────
+    // Tutte le cancellazioni avvengono PRIMA di qualsiasi insert e ognuna viene
+    // verificata ricontando le righe: con le RLS una DELETE non permessa non dà
+    // errore ma cancella 0 righe. Se qualcosa resta, l'import si ferma senza
+    // inserire nulla → niente voci/tariffe duplicate.
+    // Ordine: misurazioni → voci → computo_metrico → tariffe.
+    const conta = async (q: any): Promise<number> => { // eslint-disable-line @typescript-eslint/no-explicit-any
+      const { count, error } = await q
+      if (error) throw new Error(`Errore verifica cancellazione: ${error.message}`)
+      return count ?? 0
+    }
+    const permessi = 'Verifica i permessi dell\'utente su questa commessa.'
 
-    // Cancella le misurazioni delle voci del computo precedente (la tabella non ha
-    // commessa_id: si risale tramite voce_computo_id → voci_computo → computo_metrico)
-    const { data: vecchiComputi } = await db.from('computo_metrico').select('id').eq('commessa_id', commessaId)
+    const { data: vecchiComputi, error: errVC } = await db.from('computo_metrico').select('id').eq('commessa_id', commessaId)
+    if (errVC) throw new Error(`Errore lettura computo precedente: ${errVC.message}`)
     const vecchiComputoIds: string[] = (vecchiComputi || []).map((c: { id: string }) => c.id)
+
     if (vecchiComputoIds.length > 0) {
       const vecchieVoci: string[] = []
       for (let from = 0; ; from += 1000) {
@@ -263,14 +278,40 @@ export async function POST(req: NextRequest) {
         vecchieVoci.push(...(vv || []).map((v: { id: string }) => v.id))
         if (!vv || vv.length < 1000) break
       }
+
+      // 5a. misurazioni delle voci precedenti (la tabella non ha commessa_id)
       for (let i = 0; i < vecchieVoci.length; i += 200) {
         const { error: errDel } = await db.from('voci_computo_misurazioni').delete()
           .in('voce_computo_id', vecchieVoci.slice(i, i + 200))
         if (errDel) throw new Error(`Errore cancellazione misurazioni precedenti: ${errDel.message}`)
       }
+
+      // 5b. voci precedenti
+      for (let i = 0; i < vecchieVoci.length; i += 200) {
+        const { error: errDel } = await db.from('voci_computo').delete().in('id', vecchieVoci.slice(i, i + 200))
+        if (errDel) throw new Error(`Errore cancellazione voci precedenti: ${errDel.message}`)
+      }
+      const vociRimaste = await conta(db.from('voci_computo').select('id', { count: 'exact', head: true }).in('computo_id', vecchiComputoIds))
+      if (vociRimaste > 0) {
+        throw new Error(`Import interrotto prima di inserire dati: ${vociRimaste} voci del computo precedente non sono state eliminate. ${permessi}`)
+      }
+
+      // 5c. testata computo precedente
+      const { error: errDelC } = await db.from('computo_metrico').delete().eq('commessa_id', commessaId)
+      if (errDelC) throw new Error(`Errore cancellazione computo precedente: ${errDelC.message}`)
+      const computiRimasti = await conta(db.from('computo_metrico').select('id', { count: 'exact', head: true }).eq('commessa_id', commessaId))
+      if (computiRimasti > 0) {
+        throw new Error(`Import interrotto prima di inserire dati: il computo precedente non è stato eliminato. ${permessi}`)
+      }
     }
 
-    await db.from('computo_metrico').delete().eq('commessa_id', commessaId)
+    // 5d. tariffe precedenti della commessa
+    const { error: errDelT } = await db.from('tariffe').delete().eq('commessa_id', commessaId)
+    if (errDelT) throw new Error(`Errore cancellazione tariffe precedenti: ${errDelT.message}`)
+    const tariffeRimaste = await conta(db.from('tariffe').select('id', { count: 'exact', head: true }).eq('commessa_id', commessaId))
+    if (tariffeRimaste > 0) {
+      throw new Error(`Import interrotto prima di inserire dati: ${tariffeRimaste} tariffe precedenti non sono state eliminate. ${permessi}`)
+    }
 
     const { data: computo, error: errComputo } = await db
       .from('computo_metrico')
@@ -289,9 +330,6 @@ export async function POST(req: NextRequest) {
     const computoId = computo.id as string
 
     // ── 6. Insert tariffe in batch ───────────────────────────────────────────
-    await db.from('tariffe').delete().eq('commessa_id', commessaId)
-    await db.from('voci_computo').delete().eq('computo_id', computoId)
-
     const BATCH = 50
     for (let i = 0; i < epList.length; i += BATCH) {
       const batch = epList.slice(i, i + BATCH).map(ep => ({

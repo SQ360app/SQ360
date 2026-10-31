@@ -427,8 +427,13 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
     if (!['xpwe', 'pwe', 'xml'].includes(ext || '')) { setRisultatoImport({ error: 'Formato non supportato.' }); return }
     setImportando(true); setRisultatoImport(null)
     try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) { setRisultatoImport({ error: 'Sessione scaduta: effettua di nuovo il login e riprova.' }); return }
       const fd = new FormData(); fd.append('file', file); fd.append('commessa_id', id)
-      const res = await fetch('/api/xpwe-parse', { method: 'POST', body: fd })
+      const res = await fetch('/api/xpwe-parse', {
+        method: 'POST', body: fd,
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
       const data = await res.json()
       setRisultatoImport(data)
       if (data.ok) { await caricaDati(); showToast(`✓ ${data.voci} voci importate`) }

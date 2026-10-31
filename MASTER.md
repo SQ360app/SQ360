@@ -1,7 +1,7 @@
 # SQ360 — MASTER
 
 > Documento di stato unico del progetto. **Va aggiornato ad ogni commit.**
-> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: fix build — `getCurrentUserModuli` (successivo a `18e1550`)
+> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: route XPWE con token utente (successivo a `d3ece43`)
 >
 > Fonti: `CLAUDE.md` (storico sessioni), `DEPLOY.md`, struttura `src/app`.
 
@@ -82,6 +82,7 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 - **Stack**: Next.js 15 (App Router) + Supabase + Vercel. AI principale Gemini 2.0 Flash (server-side, `GEMINI_API_KEY`); eccezione: AI import fornitore su Claude Haiku.
 - **Supabase client tipato `any`** (`src/lib/supabase.ts`): nessun tipo generato; evita TS2769 su build Vercel. Nelle route API: `const db = client as any`.
 - **Client Supabase/Resend istanziati dentro gli handler**, mai a livello modulo (evita errori di build "supabaseKey is required").
+- **Route API che scrivono/leggono dati utente usano il token dell'utente**: il client invia `Authorization: Bearer <access_token>`, la route crea il client con `getUserClient(req)` (`src/lib/supabaseServer.ts`) → le RLS si applicano come nel browser; 401 con messaggio se token mancante/scaduto. Vietati il client anon senza sessione (utente anonimo per il DB) e la service role nelle route chiamate dagli utenti. Applicato a `/api/xpwe-parse` e `/api/xpwe-parse-sal`.
 - **Multi-tenant**: `getAziendaId()` (`auth.uid → utenti.azienda_id`) in ogni INSERT + RLS con `get_azienda_id()` su DB. Doppia protezione: codice + DB.
 - **Params Next 15**: pattern `use(paramsPromise)` al posto di `useParams` nelle pagine commessa.
 - **Layout commessa**: array `GRUPPI` (id, color, tabs[]); gruppo attivo da `pathname`, nessuno state; `MODULO_KEY` mappa href → permesso.
@@ -89,7 +90,7 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 - **SalGrid = copia meccanica del computo** (`cp`) con 3 differenze; pannello analisi disabilitato con `{false && …}`.
 - **Analisi prezzi**: BASE condivisa per `codice_tariffa` (`analisi_prezzi_tariffa`) + EXTRA per singola voce (`analisi_extra_voce`). Home canonica: Elenco Prezzi. `piano_costi_voce` deprecato (tabella resta per storico).
 - **WBS a 2 livelli**: `wbs_templates` (azienda) → `wbs_nodes` (commessa) con `template_id`; `loadWbs()` fallback a 4 livelli fino a `DEFAULT_WBS_FLAT`.
-- **XPWE reimport**: delete misurazioni SEMPRE prima del reimport (via `voce_computo_id` delle voci del computo precedente); UUID client-side pre-assegnati per linkare misurazioni senza re-query.
+- **XPWE reimport = sostituzione**: prima di qualsiasi insert cancella in ordine misurazioni → voci → `computo_metrico` → tariffe della commessa, verificando dopo ogni passo (ricontando) che non resti nulla; se una DELETE è bloccata (le RLS cancellano 0 righe senza errore) l'import si ferma senza inserire → niente duplicati. UUID client-side pre-assegnati per linkare misurazioni senza re-query.
 - **Misurazioni XPWE** (`voci_computo_misurazioni`, schema reale: `voce_computo_id`, `descrizione`, `parti_uguali`, `lunghezza`, `larghezza`, `altezza_peso`, `formula`, `quantita_calc`, `is_negativo`, `is_parziale`, `flags`, `rif_idvv`, `ordine` — nessun `commessa_id`): parser su `<PweVCMisure>/<RGItem>` (vecchi `<Misure>/<MisureItem>` come alternativa); quantità = `<Quantita>` del file (non ricalcolata); campi vuoti = `null`; numeri con spazi (`3 679.00`); formule → valore calcolato nel campo + testo originale in `formula` (formato `VV=… · PU=… · L=… · La=… · H=…`); se l'INSERT fallisce l'import fallisce con messaggio. Logica condivisa in `src/lib/misurazioni.ts`; caricamento paginato (>1000 righe) con join `voci_computo!inner(computo_id)`.
 - **Codici documento**: MAX+1 con `UNIQUE(commessa_id, azienda_id, codice)`; revisioni `-R1/-R2`.
 - **Computo**: render diretto, virtualizzatore rimosso (`@tanstack/react-virtual` installato ma non usato lì).
@@ -147,6 +148,9 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 - Tabella `piano_costi_voce` e tabelle WBS legacy (`wbs_commessa`, `wbs_template`) ancora in DB: pianificare migrazione/rimozione.
 - Checklist offerta gare in `localStorage`: non condivisa tra utenti/dispositivi — valutare persistenza in DB.
 - Tipi Supabase non generati (`any` ovunque): valutare `supabase gen types`.
+- **Sicurezza RLS da verificare tabella per tabella**: con la sola chiave anon (pubblica, senza login) è stato possibile leggere righe di `computo_metrico` → alcune policy sono aperte al ruolo anon. Contraddice "multi-tenant completamente sicura".
+- Reimport XPWE: le voci vengono ricreate con nuovi UUID → i riferimenti esterni alle voci vecchie (`rda.voci_ids`, `sal_voci`, `analisi_extra_voce`) non vengono riallineati.
+- `/api/xpwe-parse-sal` non è chiamata da nessuna pagina (codice non usato).
 - `voci_computo_misurazioni.is_parziale`: colonna non valorizzata dall'import (nessun flag corrispondente individuato nel file di esempio).
 - Riferimento "vedi voce" salvato come testo in `formula` (non esiste colonna con l'ID XPWE della voce): se la voce collegata cambia, il testo non si aggiorna.
 - Roadmap 43–46 (registro contabilità, export ZIP strutturato, KB AI edile, billing Stripe).
@@ -304,4 +308,5 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 | 2026-10-31 | `ebc47e1` | Completate sezione 5 (stato 16 prompt da `sq360-prompts.md`) e sezione 6 (test checklist da `TEST_CHECKLIST.md`); aggiunti i due file al repo |
 | 2026-10-31 | `7ee7dff` | Rimossa nota "file non presenti nel repo"; aggiunta riga changelog per `ebc47e1` |
 | 2026-10-31 | `18e1550` | Fix import misurazioni XPWE (parser `PweVCMisure/RGItem`, schema reale tabella, formule, deduzioni, vedi voce, errore bloccante su INSERT); computo e SAL Attivi mostrano la descrizione della riga invece della categoria |
-| 2026-10-31 | (questo commit) | Fix build Vercel: committata `getCurrentUserModuli()` in `src/lib/supabase.ts` (usata da Sidebar e layout commessa, era rimasta fuori dai commit); rimosso il relativo debito tecnico |
+| 2026-10-31 | `d3ece43` | Fix build Vercel: committata `getCurrentUserModuli()` in `src/lib/supabase.ts` (usata da Sidebar e layout commessa, era rimasta fuori dai commit); rimosso il relativo debito tecnico |
+| 2026-10-31 | (questo commit) | `/api/xpwe-parse` e `/api/xpwe-parse-sal` con client Supabase sul token dell'utente (`getUserClient`, 401 se token mancante/scaduto) — risolve l'INSERT misurazioni bloccato dalle RLS e toglie la service role da xpwe-parse-sal; pagine Computo e SAL Attivi inviano il Bearer token; reimport con cancellazioni verificate prima degli insert (niente duplicati) |

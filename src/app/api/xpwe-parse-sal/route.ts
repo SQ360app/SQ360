@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { getUserClient } from '@/lib/supabaseServer'
 // Stessa logica di parsing di /api/xpwe-parse, ma invece di salvare in voci_computo
 // restituisce un mapping voce XPWE ↔ voce_computo esistente per la preview SAL.
 
@@ -37,6 +37,11 @@ function findAllElements(xml: string, tag: string): string[] {
 }
 
 export async function POST(req: NextRequest) {
+  // Client Supabase con il token dell'utente (niente service role: le RLS devono applicarsi)
+  const auth = await getUserClient(req)
+  if (auth.response) return auth.response
+  const db = auth.db
+
   try {
     const formData    = await req.formData()
     const file        = formData.get('file') as File | null
@@ -80,12 +85,6 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Carica voci_computo dal DB per questa commessa ────────────────────────
-    const supabaseClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-    const db = supabaseClient as any
-
     const { data: computo } = await db
       .from('computo_metrico').select('id').eq('commessa_id', commessa_id).single()
 
