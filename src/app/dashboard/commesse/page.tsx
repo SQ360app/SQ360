@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getAziendaId } from '@/lib/supabase'
+import { scritturaVerificata } from '@/lib/scritture'
 import { Plus, Search, Loader2, Building2, RefreshCw, AlertTriangle, CheckCircle2, Clock, XCircle, FileText } from  'lucide-react'
 import { AIImportButton } from '@/components/AIImportButton'
 const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })
@@ -642,13 +643,16 @@ export default function CommessePage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filtroStato, setFiltroStato] = useState('TUTTE')
+  // false = commesse operative (non archiviate); true = solo archiviate (con "Ripristina")
+  const [vistaArchiviate, setVistaArchiviate] = useState(false)
+  const [ripristinoId, setRipristinoId] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     const aziendaId = await getAziendaId()
     const { data } = await supabase.from('commesse')
-      .select('id,codice,nome,committente,stato,importo_contratto,provincia,categoria,data_aggiudicazione,data_fine_contrattuale,giorni_contrattuali,data_inizio_lavori,tipo_contratto,fonte_finanziamento')
+      .select('id,archiviata_at,codice,nome,committente,stato,importo_contratto,provincia,categoria,data_aggiudicazione,data_fine_contrattuale,giorni_contrattuali,data_inizio_lavori,tipo_contratto,fonte_finanziamento')
       .eq('azienda_id', aziendaId)
       .order('created_at', { ascending: false })
     setCommesse(data || [])
@@ -657,15 +661,28 @@ export default function CommessePage() {
 
   useEffect(() => { load() }, [load])
 
-  const filtered = commesse.filter(c => {
+  const operative = commesse.filter(c => !c.archiviata_at)
+  const archiviate = commesse.filter(c => !!c.archiviata_at)
+
+  const filtered = (vistaArchiviate ? archiviate : operative).filter(c => {
     const matchSearch = !search || c.nome?.toLowerCase().includes(search.toLowerCase()) ||
       c.codice?.toLowerCase().includes(search.toLowerCase()) || c.committente?.toLowerCase().includes(search.toLowerCase())
     const matchStato = filtroStato === 'TUTTE' || c.stato === filtroStato
     return matchSearch && matchStato
   })
 
-  const totPortafoglio = filtered.reduce((s, c) => s + (c.importo_contratto || 0), 0)
-  const attive = commesse.filter(c => c.stato === 'IN_ESECUZIONE').length
+  // Intestazione: solo commesse non archiviate
+  const totPortafoglio = (vistaArchiviate ? operative : filtered).reduce((s, c) => s + (c.importo_contratto || 0), 0)
+  const attive = operative.filter(c => c.stato === 'IN_ESECUZIONE').length
+
+  const ripristina = async (c: any) => {
+    if (!window.confirm(`Ripristinare la commessa "${c.nome}"? Tornerà nella lista, nella dashboard e nella mappa.`)) return
+    setRipristinoId(c.id)
+    const esito = await scritturaVerificata(supabase.from('commesse').update({ archiviata_at: null, archiviata_da: null }).eq('id', c.id).select('id'))
+    setRipristinoId(null)
+    if (!esito.ok) { alert('⚠ Commessa non ripristinata: ' + esito.errore); return }
+    await load()
+  }
 
   // Calcola giorni rimanenti
   const giorniRimanenti = (c: any) => {
@@ -708,7 +725,18 @@ export default function CommessePage() {
             </button>
           )
         })}
+        <button onClick={() => setVistaArchiviate(v => !v)}
+          title="Commesse archiviate: dati conservati, ripristinabili"
+          style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, border: '1px solid', borderRadius: 20, cursor: 'pointer', whiteSpace: 'nowrap',
+            borderColor: vistaArchiviate ? '#475569' : '#e5e7eb', background: vistaArchiviate ? '#f1f5f9' : '#fff', color: vistaArchiviate ? '#334155' : '#6b7280' }}>
+          🗄 Archiviate ({archiviate.length})
+        </button>
       </div>
+      {vistaArchiviate && (
+        <div style={{ marginBottom: 12, padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 12, color: '#475569' }}>
+          Commesse archiviate: non compaiono nella lista operativa, nella dashboard e nella mappa. Tutti i dati sono conservati; con <strong>Ripristina</strong> tornano operative.
+        </div>
+      )}
 
       {/* Lista */}
       {loading ? (
@@ -718,7 +746,7 @@ export default function CommessePage() {
       ) : filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 60, background: '#f9fafb', borderRadius: 16, border: '2px dashed #e5e7eb', color: '#9ca3af' }}>
           <Building2 size={48} style={{ marginBottom: 12, opacity: 0.3 }} />
-          <p style={{ fontSize: 14, margin: '0 0 4px' }}>Nessuna commessa {search ? 'trovata' : '— clicca "+ Nuova commessa"'}</p>
+          <p style={{ fontSize: 14, margin: '0 0 4px' }}>{vistaArchiviate ? 'Nessuna commessa archiviata' : `Nessuna commessa ${search ? 'trovata' : '— clicca "+ Nuova commessa"'}`}</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -760,6 +788,15 @@ export default function CommessePage() {
                     EUR {fmt(c.importo_contratto || 0)}
                   </div>
                   <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>importo contratto</div>
+                  {c.archiviata_at && (
+                    <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+                      <span style={{ fontSize: 10, color: '#64748b' }}>Archiviata il {new Date(c.archiviata_at).toLocaleDateString('it-IT')}</span>
+                      <button onClick={e => { e.stopPropagation(); ripristina(c) }} disabled={ripristinoId === c.id}
+                        style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, border: '1px solid #16a34a', color: '#15803d', background: '#f0fdf4', borderRadius: 8, cursor: 'pointer' }}>
+                        {ripristinoId === c.id ? '…' : '↩ Ripristina'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )

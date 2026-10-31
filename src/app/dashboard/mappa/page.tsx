@@ -432,10 +432,11 @@ export default function MappaCantieri() {
         .from('commesse')
         .select('id,indirizzo_cantiere,comune_cantiere,cap_cantiere,provincia,lat,lng')
         .eq('azienda_id', aziendaId)
-      console.log('[Mappa] Indirizzi da commesse:', addrData?.length)
+        .is('archiviata_at', null)   // commesse archiviate escluse dalla mappa
 
       const addrMap = new Map<string, any>((addrData || []).map((r: any) => [r.id, r]))
-      const allData: CommessaKPI[] = (kpiData || []).map((c: any) => {
+      // v_commesse_kpi non ha archiviata_at: si tengono solo le commesse non archiviate (presenti in addrMap)
+      const allData: CommessaKPI[] = (kpiData || []).filter((c: any) => addrMap.has(c.id)).map((c: any) => {
         const addr = addrMap.get(c.id) || {}
         return {
           ...c,

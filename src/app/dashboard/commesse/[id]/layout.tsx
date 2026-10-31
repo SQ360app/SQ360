@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter, usePathname } from 'next/navigation'
 import { supabase, getCurrentUserModuli } from '@/lib/supabase'
-import { ArrowLeft, Trash2 } from 'lucide-react'
+import { ArrowLeft, Archive } from 'lucide-react'
+import { scritturaVerificata } from '@/lib/scritture'
 
 // href tab → chiave moduli_abilitati (null = sempre visibile)
 const MODULO_KEY: Record<string, string | null> = {
@@ -28,6 +29,7 @@ const MODULO_KEY: Record<string, string | null> = {
 interface Commessa {
   id: string; codice: string; nome: string
   stato: string; importo_contratto: number; committente: string
+  archiviata_at?: string | null
 }
 
 const GRUPPI = [
@@ -110,13 +112,14 @@ export default function CommessaLayout({ children }: { children: React.ReactNode
   const [commessa,          setCommessa]          = useState<Commessa | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting,          setDeleting]          = useState(false)
+  const [erroreArchivio,    setErroreArchivio]    = useState('')
   const [moduli,            setModuli]            = useState<Record<string, boolean>>({})
   const [ruolo,             setRuolo]             = useState('')
   const [moduliLoaded,      setModuliLoaded]      = useState(false)
 
   useEffect(() => {
     supabase.from('commesse')
-      .select('id,codice,nome,stato,importo_contratto,committente')
+      .select('id,codice,nome,stato,importo_contratto,committente,archiviata_at')
       .eq('id', id).single()
       .then(({ data }) => setCommessa(data))
     getCurrentUserModuli().then(({ moduli: m, ruolo: r }) => {
@@ -145,10 +148,17 @@ export default function CommessaLayout({ children }: { children: React.ReactNode
     return moduli[key] !== false
   }
 
-  async function handleDelete() {
-    setDeleting(true)
-    const { error: delErr } = await supabase.from('commesse').delete().eq('id', id)
-    if (delErr) { setDeleting(false); return }
+  // Archiviazione (non cancellazione): i dati restano, la commessa sparisce da
+  // lista operativa, dashboard e mappa ed è ripristinabile dal filtro "Archiviate".
+  async function handleArchivia() {
+    setDeleting(true); setErroreArchivio('')
+    const { data: { user } } = await supabase.auth.getUser()
+    const esito = await scritturaVerificata(supabase.from('commesse')
+      .update({ archiviata_at: new Date().toISOString(), archiviata_da: user?.id ?? null })
+      .eq('id', id).select('id'))
+    setDeleting(false)
+    if (!esito.ok) { setErroreArchivio('Commessa non archiviata: ' + esito.errore); return }
+    setShowDeleteConfirm(false)
     router.push('/dashboard/commesse')
   }
 
@@ -196,10 +206,17 @@ export default function CommessaLayout({ children }: { children: React.ReactNode
               <span style={{ fontSize: 13, fontWeight: 700, color: '#059669', flexShrink: 0 }}>
                 EUR {fmt(commessa.importo_contratto || 0)}
               </span>
-              <button onClick={() => setShowDeleteConfirm(true)} title="Elimina commessa"
-                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', border: '1px solid #fca5a5', borderRadius: 6, background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: 11, flexShrink: 0 }}>
-                <Trash2 size={13} /> Elimina
-              </button>
+              {commessa.archiviata_at ? (
+                <span title="Ripristinabile da Commesse → filtro Archiviate"
+                  style={{ padding: '3px 8px', border: '1px solid #cbd5e1', borderRadius: 6, background: '#f1f5f9', color: '#475569', fontSize: 11, flexShrink: 0 }}>
+                  🗄 Archiviata il {new Date(commessa.archiviata_at).toLocaleDateString('it-IT')}
+                </span>
+              ) : (
+                <button onClick={() => { setErroreArchivio(''); setShowDeleteConfirm(true) }} title="Archivia commessa"
+                  style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', border: '1px solid #cbd5e1', borderRadius: 6, background: '#f8fafc', color: '#475569', cursor: 'pointer', fontSize: 11, flexShrink: 0 }}>
+                  <Archive size={13} /> Archivia commessa
+                </button>
+              )}
             </>
           ) : (
             <span style={{ fontSize: 12, color: '#9ca3af' }}>Caricamento...</span>
@@ -260,34 +277,42 @@ export default function CommessaLayout({ children }: { children: React.ReactNode
         {children}
       </div>
 
-      {/* Modal conferma eliminazione */}
+      {/* Finestra di conferma archiviazione */}
       {showDeleteConfirm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
-          onClick={() => setShowDeleteConfirm(false)}>
-          <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+          onClick={() => !deleting && setShowDeleteConfirm(false)}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
             onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Trash2 size={18} style={{ color: '#dc2626' }} />
+              <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Archive size={18} style={{ color: '#475569' }} />
               </div>
               <div>
-                <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Elimina commessa</h3>
-                <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Operazione irreversibile</p>
+                <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Archivia commessa</h3>
+                <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Operazione reversibile</p>
               </div>
             </div>
-            <p style={{ fontSize: 13, color: '#374151', margin: '0 0 16px', lineHeight: 1.5 }}>
-              Stai per eliminare <strong>{commessa?.nome}</strong> ({commessa?.codice}).
-              Tutti i dati collegati (computo, RDA, RDO, ODA, SAL) verranno eliminati definitivamente.
-              Il database Contatti (fornitori, professionisti) NON viene eliminato.
+            <p style={{ fontSize: 13, color: '#374151', margin: '0 0 10px', lineHeight: 1.5 }}>
+              Stai per archiviare <strong>{commessa?.nome}</strong> ({commessa?.codice}).
             </p>
+            <ul style={{ fontSize: 12, color: '#374151', margin: '0 0 16px', paddingLeft: 18, lineHeight: 1.6 }}>
+              <li><strong>Nessun dato viene cancellato</strong>: computo, RDA, RDO, ODA, DDT, SAL, fatture e documenti restano conservati.</li>
+              <li>La commessa non comparirà più nella lista operativa, nella dashboard e nella mappa.</li>
+              <li>Puoi ripristinarla quando vuoi da <strong>Commesse → Archiviate → Ripristina</strong>.</li>
+            </ul>
+            {erroreArchivio && (
+              <div style={{ margin: '0 0 14px', padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, fontSize: 12, color: '#b91c1c' }}>
+                ⚠ {erroreArchivio}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowDeleteConfirm(false)}
+              <button onClick={() => setShowDeleteConfirm(false)} disabled={deleting}
                 style={{ padding: '8px 16px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', cursor: 'pointer', fontSize: 13 }}>
                 Annulla
               </button>
-              <button onClick={handleDelete} disabled={deleting}
-                style={{ padding: '8px 16px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
-                {deleting ? 'Eliminando...' : 'Sì, elimina'}
+              <button onClick={handleArchivia} disabled={deleting}
+                style={{ padding: '8px 16px', background: '#475569', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
+                {deleting ? 'Archiviazione…' : 'Sì, archivia'}
               </button>
             </div>
           </div>

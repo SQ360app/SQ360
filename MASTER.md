@@ -1,7 +1,7 @@
 # SQ360 — MASTER
 
 > Documento di stato unico del progetto. **Va aggiornato ad ogni commit.**
-> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: allineamento salvataggi (successivo a `4fc31c2`)
+> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: archiviazione commesse (successivo a `db5a284`)
 >
 > Fonti: `CLAUDE.md` (storico sessioni), `DEPLOY.md`, struttura `src/app`.
 
@@ -33,7 +33,7 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 |---|---|---|
 | Dashboard homepage (KPI, alert, scadenziario, attività) | ✅ | 11 query in `Promise.all`, no view SQL |
 | Mappa cantieri (Mapbox) | ⚠️ | Richiede `NEXT_PUBLIC_MAPBOX_TOKEN`; colonne geo su `commesse` da verificare |
-| Commesse (lista + codifica `[AA]-[SA]-[PR]-[SOA]-[NNN]`) | ✅ | RPC `genera_codice_commessa` |
+| Commesse (lista + codifica `[AA]-[SA]-[PR]-[SOA]-[NNN]`) | ✅ | RPC `genera_codice_commessa`. **Archiviazione** al posto della cancellazione: "Archivia commessa" nel layout, filtro "Archiviate" + "Ripristina" in lista; archiviate escluse da lista operativa, dashboard (tutti i KPI) e mappa |
 | Gare (accordion, checklist offerta, migliorie, simulatore margine, crea commessa) | ✅ | Checklist offerta in `localStorage`, non DB |
 | Contatti / fornitori v2 (38 campi, 5 tab, AI import PDF, alert scadenze) | ✅ | AI import usa Claude Haiku (`/api/ai-import-fornitore`) |
 | import-computo, preventivazione, pianificazione, scadenzario, report, marginalita, sal, amministrazione, cantiere, contratti, dam | ❓ | Presenti in `src/app/dashboard` ma non documentati in CLAUDE.md — stato da verificare |
@@ -111,6 +111,7 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 - **Nessuna scrittura automatica all'apertura di una pagina** (es. template WBS): errore di lettura ≠ dato vuoto.
 - **Stati SAM** = testo, valori canonici minuscoli `bozza → inviata_dl → approvata | rifiutata | integrazione` (`src/lib/statiSam.ts`, `normalizzaStatoSam` converte i vecchi valori MAIUSCOLI); la pagina globale `/dashboard/dam` mostra stati MAIUSCOLI ma salva quelli canonici.
 - **Mappature colonne decise il 31/10/2026**: giornale lavori (operai → `operai_propri`/`operai_sub`, lavori eseguiti → `descrizione`, direttore → `redatto_da`); documenti subappalto (SOA/IBAN → `categoria_soa`/`classifica_soa`/`iban`); pagamenti subappalto (ritenuta come importo in `ritenuta`, netto in `netto_pagato`, svincolo = `svincolata`); fatture attive (`soggetto` = committente, imponibile in `importo_imponibile`, totale calcolato).
+- **Commesse: archiviazione, non cancellazione fisica** (`commesse.archiviata_at`, `archiviata_da`): i dati (computo, acquisti, DDT, SAL, fatture, documenti) restano per gli obblighi di conservazione; la cancellazione fisica non è più offerta dall'app (molte tabelle hanno `commessa_id` senza FK → resterebbero orfane). Filtro centralizzato `idCommesseOperative()` in `src/lib/commesse.ts`; `v_commesse_kpi` (senza `archiviata_at`) è filtrata nel codice con gli id operativi invece di ricreare la vista.
 - **Rename DAM → SAM** solo nelle label: URL `/dam`, variabili e tabella `dam` invariati.
 - **Pagine pubbliche senza login**: `/offerta/[token]` (fornitore), `/scan/[token]` (badge cantiere) — accesso via token univoco.
 
@@ -144,6 +145,9 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 - [ ] **Sicurezza passo 3b — REVOKE finale su anon** (da eseguire DOPO le prove manuali di `/offerta` e `/scan`): `REVOKE ALL ON public.commesse, public.rda, public.rdo, public.utenti, public.voci_computo, public.lavoratori_commessa, public.presenze_cantiere FROM anon;` — ritorno: `GRANT SELECT ON …; GRANT UPDATE ON public.rdo; GRANT INSERT ON public.presenze_cantiere TO anon`
 - [x] `ALTER TABLE ddt ADD codice, data_ricezione, fornitore_nome, voci` — eseguita il 31/10/2026 (il salvataggio DDT falliva in silenzio)
 - [x] `supabase/migrations/20261031b_allineamento_salvataggi.sql` — **eseguita il 31/10/2026**: DDT, contratti_sub, ordini_servizio, `dam.stato` → testo (default `bozza`), giornale_lavori (temperatura_min/max, n_mezzi, note), documenti_contratto_sub.nome_file. `check-scritture.mjs`: 0 colonne inesistenti, 0 obbligatori mancanti, 0 enum non validi (8 scritture con chiavi/variabili calcolate da verificare a mano)
+- [x] Archiviazione commesse: `ALTER TABLE commesse ADD archiviata_at, archiviata_da` + indice parziale — eseguita il 31/10/2026
+- [ ] Valutare `REVOKE DELETE ON commesse FROM authenticated` (cancellazione fisica solo da server) — rimandato
+- [ ] Pagine globali ancora senza filtro archiviate: scadenzario, report, marginalità, SAL, contratti, SAM globale (mostrano dati anche di commesse archiviate)
 - [ ] Sicurezza passo 0: fotografia RLS/regole/funzioni/permessi (query di sola lettura) — necessaria per i passi 4–8 (regole per azienda con `get_azienda_id()`, tabelle figlie, `aziende`/`mia_azienda_id`, bucket `documenti` privato)
 - [x] `supabase/migrations/20261031_allineamento_schema.sql` — **eseguita il 31/10/2026** (colonne mancanti su fatture_passive/oda/documenti_commessa/gare/varianti/voci_variante/sal_passivi/contratti_sub/azienda/wbs_nodes, enum `stato_gara`, FK verso `professionisti_fornitori`)
 - [ ] Regola RLS **UPDATE su `azienda`** limitata alla propria azienda (oggi solo SELECT → Impostazioni non può salvare dati azienda, email, logo/carta intestata; la pagina ora lo segnala)
@@ -359,4 +363,5 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 | 2026-10-31 | `676ffef` | Sicurezza passo 3: `/offerta` e `/scan` su route server legate al token; `/api/email` con token, mittente fisso e solo modelli server (RDO: messaggio aggiuntivo in testo semplice, niente HTML/allegati dal client); 11 route AI con token + pagine aggiornate; cron DURC chiuso senza `CRON_SECRET`; REVOKE finale su anon in attesa (§4.1) |
 | 2026-10-31 | `4e66fbd` | Gemini: `gemini-2.0-flash` (spento) e `gemini-1.5-flash` sostituiti da `src/lib/gemini.ts` (GEMINI_MODEL, predefinito `gemini-3.8-flash`, riserva `gemini-3.6-flash`, timeout, messaggi chiari) in ai-ddt, ai-fattura, ai-sicurezza, ai-estrai, rdo-extract-offerta; pagine mostrano `errore`/`error` leggibili; DEPLOY.md con le nuove variabili |
 | 2026-10-31 | `4fc31c2` | Scritture verificate: helper `src/lib/scritture.ts`, script `scripts/check-scritture.mjs`; DDT salva davvero (errore mostrato, modulo aperto); helper su fatture passive, sicurezza, SAM, documenti, RDA, RDO, SAL, varianti, ODA, gare; correzioni colonne ovvie (rdo senza `wbs_id`, `lavoratori_sub.codice_fiscale/patente_crediti`, `ordini_servizio.descrizione`, `computo_metrico.note`) |
-| 2026-10-31 | (questo commit) | Migrazione `20261031b_allineamento_salvataggi.sql` (eseguita); SAM su stati testo canonici (`statiSam.ts`, pagina globale e commessa allineate); giornale lavori, documenti/pagamenti subappalto, fatture attive adeguati alle colonne reali senza perdere funzioni; scritture verificate su queste pagine; check-scritture a 0 problemi |
+| 2026-10-31 | `db5a284` | Migrazione `20261031b_allineamento_salvataggi.sql` (eseguita); SAM su stati testo canonici (`statiSam.ts`, pagina globale e commessa allineate); giornale lavori, documenti/pagamenti subappalto, fatture attive adeguati alle colonne reali senza perdere funzioni; scritture verificate su queste pagine; check-scritture a 0 problemi |
+| 2026-10-31 | (questo commit) | Commesse archiviate al posto dell'eliminazione: layout "Archivia commessa" (conferma esplicativa, errore visibile, badge se archiviata), lista con filtro "Archiviate" + "Ripristina", dashboard e mappa filtrate (KPI, ODA, fatture, DDT, documenti, contratti sub, scadenze, v_commesse_kpi) con `src/lib/commesse.ts` |

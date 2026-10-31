@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { idCommesseOperative } from '@/lib/commesse'
 
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 const fmt  = (n: number) => (n || 0).toLocaleString('it-IT', { maximumFractionDigits: 0 })
@@ -130,6 +131,12 @@ export default function DashboardPage() {
     const tra30S = new Date(oggi.getTime() + 30 * 86400000).toISOString().slice(0, 10)
     const meseS  = new Date(oggi.getFullYear(), oggi.getMonth(), 1).toISOString()
 
+    // KPI e liste solo sulle commesse NON archiviate: prima gli id operativi,
+    // poi ogni query è filtrata su quegli id (v_commesse_kpi compresa).
+    const ids = await idCommesseOperative(supabase).catch(() => [] as string[])
+    // Nessuna commessa operativa: id fittizio → le query restituiscono 0 righe
+    if (!ids.length) ids.push('00000000-0000-0000-0000-000000000000')
+
     const [
       rC,    // commesse
       rOM,   // ODA questo mese (count)
@@ -146,17 +153,21 @@ export default function DashboardPage() {
     ] = await Promise.all([
       supabase.from('commesse')
         .select('id,codice,nome,stato,committente,importo_contratto,data_fine_contrattuale,data_proroga,comune_cantiere')
+        .is('archiviata_at', null)
         .order('created_at', { ascending: false }),
 
       supabase.from('oda')
         .select('*', { count: 'exact', head: true })
+        .in('commessa_id', ids)
         .gte('created_at', meseS),
 
       supabase.from('fatture_passive')
-        .select('id,importo_totale:totale'),
+        .select('id,importo_totale:totale')
+        .in('commessa_id', ids),
 
       supabase.from('documenti_sicurezza')
         .select('id,tipo,soggetto,data_scadenza,commessa_id')
+        .or(`commessa_id.is.null,commessa_id.in.(${ids.join(',')})`)
         .not('data_scadenza', 'is', null)
         .gte('data_scadenza', todayS)
         .lte('data_scadenza', tra30S)
@@ -164,33 +175,40 @@ export default function DashboardPage() {
 
       supabase.from('documenti_sicurezza')
         .select('*', { count: 'exact', head: true })
+        .or(`commessa_id.is.null,commessa_id.in.(${ids.join(',')})`)
         .not('data_scadenza', 'is', null)
         .lt('data_scadenza', todayS),
 
       supabase.from('contratti_sub')
-        .select('id,stato'),
+        .select('id,stato')
+        .in('commessa_id', ids),
 
       supabase.from('oda')
         .select('commessa_id,importo_netto')
+        .in('commessa_id', ids)
         .neq('stato', 'ANNULLATO'),
 
       supabase.from('oda')
         .select('id,numero:codice,commessa_id,importo_netto,created_at')
+        .in('commessa_id', ids)
         .order('created_at', { ascending: false })
         .limit(5),
 
       supabase.from('ddt')
         .select('id,numero:numero_ddt,commessa_id,stato,created_at')
+        .in('commessa_id', ids)
         .order('created_at', { ascending: false })
         .limit(5),
 
       supabase.from('documenti_commessa')
         .select('id,nome,categoria,commessa_id,created_at')
+        .in('commessa_id', ids)
         .order('created_at', { ascending: false })
         .limit(5),
 
       supabase.from('fatture_passive')
         .select('id,numero:numero_fattura,importo_totale:totale,data_scadenza,commessa_id')
+        .in('commessa_id', ids)
         .not('data_scadenza', 'is', null)
         .gte('data_scadenza', todayS)
         .lte('data_scadenza', tra30S)
@@ -198,6 +216,7 @@ export default function DashboardPage() {
 
       supabase.from('v_commesse_kpi')
         .select('id,nome,comune_cantiere,giorni_rimanenti,in_ritardo')
+        .in('id', ids)
         .order('in_ritardo', { ascending: false })
         .order('giorni_rimanenti', { ascending: true })
         .limit(5),
@@ -205,7 +224,6 @@ export default function DashboardPage() {
 
     /* ── Elaborazione dati ──────────────────────────────────────────── */
     const comm   = rC.data   || []
-    console.log('Dashboard commesse:', comm?.length, comm?.map((c: any) => c.stato))
     const fpArr  = rFP.data  || []
     const dsArr  = rDS.data  || []
     const csArr  = rCS.data  || []
