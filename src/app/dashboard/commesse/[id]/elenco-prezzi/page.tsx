@@ -206,7 +206,7 @@ export default function ElencoPrezziPage({ params: pp }: { params: Promise<{ id:
       commessa_id: id, azienda_id: aziendaId || null,
       codice, descrizione: fDesc.trim(),
       um: fUm || 'nr', prezzo_unitario: parseFloat(fPu) || 0,
-      fonte: fFonte, variante_id: fVariante || null, note: fNote || null,
+      fonte: fFonte, variante_id: fVariante || null, note: fNote || null,  // check-scritture: id (fVariante = id dalla tendina varianti)
       prezzario_riferimento: fPrezzarioRif || null,
       prezzario_anno: fPrezzarioAnno ? parseInt(fPrezzarioAnno) : null,
       prezzario_codice_originale: fPrezzarioCodice || null,

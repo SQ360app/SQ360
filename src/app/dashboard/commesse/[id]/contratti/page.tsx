@@ -181,7 +181,7 @@ export default function ContrattiPage({ params: pp }: { params: Promise<{ id: st
     const aziendaId = await getAziendaId()
     const { error } = await supabase.from('contratti_sub').insert({
       commessa_id: id, azienda_id: aziendaId || null,
-      fornitore_id: fFornitore || null, tipo: fTipo,
+      fornitore_id: fFornitore || null, tipo: fTipo,  // check-scritture: id (fFornitore = id dalla tendina fornitori)
       oggetto: fOggetto.trim(), importo_netto: parseFloat(fImporto) || 0,
       ritenuta_pct: 5, stato: 'bozza',
       data_stipula: fDataStipula || null, data_inizio: fDataInizio || null,

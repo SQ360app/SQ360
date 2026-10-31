@@ -13,6 +13,7 @@
 //       • colonne inesistenti
 //       • campi obbligatori mancanti (solo insert/upsert; NOT NULL senza default)
 //       • valori stringa non ammessi dagli enum
+//       • tipi incompatibili: testo o stringa vuota in colonne uuid/data/numeriche/booleane
 //       • tabelle inesistenti
 //   - elenca le scritture che non è riuscito a risolvere (da controllare a mano)
 // Report: scripts/report-scritture.md · exit code 1 se ci sono problemi.
@@ -152,6 +153,104 @@ function daFunzione(fn, checker, profondita, chiamata) {
   return ritorni.flatMap(r => risolvi(r, checker, profondita + 1))
 }
 
+// ─── Tipi: valori possibili di un'espressione e compatibilità con la colonna ─
+// Si analizzano solo i casi certi: letterali, rami dei ternari, valori di riserva
+// di `x || ''` / `x ?? ''`. Tutto il resto è "sconosciuto" e non viene segnalato.
+function valoriPossibili(node, prof = 0) {
+  if (!node || prof > 6) return [{ k: 'sconosciuto' }]
+  const k = node.kind
+  if (k === ts.SyntaxKind.ParenthesizedExpression || k === ts.SyntaxKind.AsExpression || k === ts.SyntaxKind.NonNullExpression) {
+    return valoriPossibili(node.expression, prof + 1)
+  }
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return [{ k: 'stringa', v: node.text }]
+  if (ts.isTemplateExpression(node)) return [{ k: 'template', v: node.getText().slice(0, 40) }]
+  if (ts.isNumericLiteral(node)) return [{ k: 'numero', v: node.text }]
+  if (ts.isPrefixUnaryExpression(node) && ts.isNumericLiteral(node.operand)) return [{ k: 'numero', v: '-' + node.operand.text }]
+  if (k === ts.SyntaxKind.TrueKeyword || k === ts.SyntaxKind.FalseKeyword) return [{ k: 'booleano', v: node.getText() }]
+  if (k === ts.SyntaxKind.NullKeyword || (ts.isIdentifier(node) && node.text === 'undefined')) return [{ k: 'null' }]
+  if (ts.isConditionalExpression(node)) return [...valoriPossibili(node.whenTrue, prof + 1), ...valoriPossibili(node.whenFalse, prof + 1)]
+  if (ts.isBinaryExpression(node) && [ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken].includes(node.operatorToken.kind)) {
+    return [{ k: 'sconosciuto' }, ...valoriPossibili(node.right, prof + 1)]
+  }
+  return [{ k: 'sconosciuto' }]
+}
+
+function categoriaColonna(col) {
+  const f = String(col.format || col.type || '').toLowerCase()
+  if (f === 'uuid') return 'uuid'
+  if (f === 'date' || f.startsWith('timestamp') || f.startsWith('time')) return 'data'
+  if (['numeric', 'integer', 'smallint', 'bigint', 'double precision', 'real', 'number'].includes(f)) return 'numero'
+  if (f === 'boolean') return 'booleano'
+  if (f.startsWith('json')) return 'json'
+  return 'testo'
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const DATA_RE = /^\d{4}-\d{2}-\d{2}([T ][\d:.]+(Z|[+-]\d{2}:?\d{2})?)?$/
+
+/** Espressioni "di base" di un valore (si scende in ||, ??, ternari, parentesi). */
+function espressioniBase(node, prof = 0) {
+  if (!node || prof > 6) return []
+  if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isNonNullExpression(node)) return espressioniBase(node.expression, prof + 1)
+  if (ts.isConditionalExpression(node)) return [...espressioniBase(node.whenTrue, prof + 1), ...espressioniBase(node.whenFalse, prof + 1)]
+  if (ts.isBinaryExpression(node) && [ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken].includes(node.operatorToken.kind)) {
+    return [...espressioniBase(node.left, prof + 1), ...espressioniBase(node.right, prof + 1)]
+  }
+  return [node]
+}
+/** Nome finale di un'espressione tipo form.direttore_cantiere / user?.id / nome. */
+function nomeFinale(node) {
+  if (ts.isIdentifier(node)) return node.text
+  if (ts.isPropertyAccessExpression(node)) return node.name.text
+  if (ts.isElementAccessExpression(node) && ts.isStringLiteralLike(node.argumentExpression)) return node.argumentExpression.text
+  if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) return nomeFinale(node.expression.expression)  // x.trim() → x
+  return null
+}
+const SEMBRA_ID = /(^id$|_id$|Id$|^uid$|uuid|^user$|utente|^ids?$)/i
+
+/** Problemi di tipo: [{ livello: 'errore'|'avviso', motivo }] */
+function problemiTipo(col, nodoValore, checker) {
+  const cat = categoriaColonna(col)
+  if (cat === 'testo' || cat === 'json' || !nodoValore) return []
+  const out = []
+  // Espressioni (non letterali): nome che non sembra un id in colonna uuid;
+  // testo grezzo (tipo string) in colonna numerica
+  for (const e of espressioniBase(nodoValore)) {
+    if (ts.isStringLiteralLike(e) || ts.isNumericLiteral(e) || e.kind === ts.SyntaxKind.NullKeyword ||
+        e.kind === ts.SyntaxKind.TrueKeyword || e.kind === ts.SyntaxKind.FalseKeyword || ts.isTemplateExpression(e)) continue
+    const nome = nomeFinale(e)
+    // Riga con commento "check-scritture: id" = valore verificato a mano come id (es. valore di una tendina)
+    const sfE = e.getSourceFile()
+    const rigaTesto = sfE.text.split(String.fromCharCode(10))[sfE.getLineAndCharacterOfPosition(e.getStart()).line] || ''
+    if (cat === 'uuid' && nome && nome !== 'undefined' && !SEMBRA_ID.test(nome) && !rigaTesto.includes('check-scritture: id')) {
+      out.push({ livello: 'avviso', motivo: `valore da "${nome}" (non sembra un id) in colonna uuid` })
+    }
+    if (cat === 'numero' && checker) {
+      const t = checker.getTypeAtLocation(e)
+      if (t && (t.flags & ts.TypeFlags.StringLike) && !(t.flags & ts.TypeFlags.Any)) {
+        out.push({ livello: 'avviso', motivo: `testo${nome ? ` "${nome}"` : ''} in colonna numerica (usare parseFloat/parseInt o null: '' viene rifiutato)` })
+      }
+    }
+  }
+  for (const v of valoriPossibili(nodoValore)) {
+    if (v.k === 'stringa') {
+      const s = v.v
+      if (s === '') { out.push({ livello: 'errore', motivo: `stringa vuota in colonna ${cat} (usare null)` }); continue }
+      if (cat === 'uuid' && !UUID_RE.test(s)) out.push({ livello: 'errore', motivo: `testo "${s.slice(0, 30)}" in colonna uuid` })
+      if (cat === 'data' && !DATA_RE.test(s)) out.push({ livello: 'errore', motivo: `testo "${s.slice(0, 30)}" in colonna data` })
+      if (cat === 'numero' && !/^-?\d+(\.\d+)?$/.test(s)) out.push({ livello: 'errore', motivo: `testo "${s.slice(0, 30)}" in colonna numerica` })
+      if (cat === 'booleano' && !['true', 'false'].includes(s)) out.push({ livello: 'errore', motivo: `testo "${s.slice(0, 30)}" in colonna booleana` })
+    } else if (v.k === 'template') {
+      out.push({ livello: 'avviso', motivo: `stringa composta \`${v.v}…\` in colonna ${cat}` })
+    } else if (v.k === 'numero' && (cat === 'uuid' || cat === 'data')) {
+      out.push({ livello: 'errore', motivo: `numero ${v.v} in colonna ${cat}` })
+    } else if (v.k === 'booleano' && cat !== 'booleano') {
+      out.push({ livello: 'errore', motivo: `valore ${v.v} in colonna ${cat}` })
+    }
+  }
+  return out
+}
+
 // ─── Individuazione tabella dalla catena .from('t').insert(...) ──────────────
 function tabellaDellaCatena(expr) {
   let e = expr
@@ -177,7 +276,7 @@ const opz = ts.parseJsonConfigFileContent(cfg.config || {}, ts.sys, ROOT).option
 const program = ts.createProgram(files, { ...opz, noLib: true, noEmit: true, skipLibCheck: true, types: [] })
 const checker = program.getTypeChecker()
 
-const problemi = { colonne: [], obbligatori: [], enum: [], tabelle: [], nonRisolte: [] }
+const problemi = { colonne: [], obbligatori: [], enum: [], tipi: [], tabelle: [], nonRisolte: [] }
 let totale = 0
 
 for (const sf of program.getSourceFiles()) {
@@ -205,6 +304,12 @@ for (const sf of program.getSourceFiles()) {
               if (col.enum && valore && ts.isStringLiteralLike(valore) && !col.enum.includes(valore.text)) {
                 problemi.enum.push({ dove, tabella, op, colonna: nome, valore: valore.text, ammessi: col.enum })
               }
+              if (!col.enum) {
+                const rigaValore = valore ? sf.getLineAndCharacterOfPosition(valore.getStart()).line + 1 : riga
+                for (const t of problemiTipo(col, valore, checker)) {
+                  problemi.tipi.push({ dove: `${rel}:${rigaValore}`, tabella, op, colonna: nome, tipo: col.format || col.type, ...t })
+                }
+              }
             }
             if ((op === 'insert' || op === 'upsert') && !o.parziale) {
               const mancanti = richiesti.filter(c => !o.props.has(c))
@@ -225,16 +330,25 @@ const unici = (arr, chiave) => [...new Map(arr.map(x => [chiave(x), x])).values(
 problemi.colonne = unici(problemi.colonne, x => `${x.dove}|${x.colonna}`)
 problemi.enum = unici(problemi.enum, x => `${x.dove}|${x.colonna}|${x.valore}`)
 problemi.nonRisolte = unici(problemi.nonRisolte, x => x.dove)
+problemi.tipi = unici(problemi.tipi, x => `${x.dove}|${x.colonna}|${x.motivo}`)
+const tipiErr = problemi.tipi.filter(x => x.livello === 'errore')
+const tipiAvv = problemi.tipi.filter(x => x.livello === 'avviso')
 
 const md = ['# Controllo scritture SQ360', '', `- Data: ${new Date().toLocaleString('it-IT', { timeZone: 'Europe/Rome' })}`,
   `- Scritture analizzate (insert/update/upsert con tabella nota): **${totale}**`,
-  `- Colonne inesistenti: **${problemi.colonne.length}** · Obbligatori mancanti: **${problemi.obbligatori.length}** · Enum non validi: **${problemi.enum.length}** · Tabelle inesistenti: **${problemi.tabelle.length}** · Non risolte: **${problemi.nonRisolte.length}**`, '']
+  `- Colonne inesistenti: **${problemi.colonne.length}** · Obbligatori mancanti: **${problemi.obbligatori.length}** · Enum non validi: **${problemi.enum.length}** · Tipi incompatibili: **${tipiErr.length}** errori, ${tipiAvv.length} avvisi · Tabelle inesistenti: **${problemi.tabelle.length}** · Non risolte: **${problemi.nonRisolte.length}**`, '']
 md.push('## Colonne inesistenti', '', problemi.colonne.length ? '| Dove | Tabella | Op | Colonna |\n|---|---|---|---|' : 'Nessuna.')
 for (const p of problemi.colonne) md.push(`| \`${p.dove}\` | ${p.tabella} | ${p.op} | \`${p.colonna}\` |`)
 md.push('', '## Campi obbligatori mancanti (insert/upsert)', '', problemi.obbligatori.length ? '| Dove | Tabella | Mancanti |\n|---|---|---|' : 'Nessuno.')
 for (const p of problemi.obbligatori) md.push(`| \`${p.dove}\` | ${p.tabella} | ${p.mancanti.map(m => '`' + m + '`').join(', ')} |`)
 md.push('', '## Valori non ammessi dagli enum', '', problemi.enum.length ? '| Dove | Tabella.colonna | Valore | Ammessi |\n|---|---|---|---|' : 'Nessuno.')
 for (const p of problemi.enum) md.push(`| \`${p.dove}\` | ${p.tabella}.${p.colonna} | \`${p.valore}\` | ${p.ammessi.join(', ')} |`)
+md.push('', '## Tipi incompatibili', '',
+  'Valori certamente (errore) o probabilmente (avviso) non compatibili con il tipo della colonna: testo o stringa vuota in colonne uuid, data, numeriche o booleane.', '',
+  problemi.tipi.length ? '| Livello | Dove | Tabella.colonna (tipo) | Problema |\n|---|---|---|---|' : 'Nessuno.')
+for (const p of [...tipiErr, ...tipiAvv]) {
+  md.push(`| ${p.livello === 'errore' ? '✗ errore' : '⚠ avviso'} | \`${p.dove}\` | ${p.tabella}.${p.colonna} (${p.tipo}) | ${p.motivo.replace(/\|/g, '\\|')} |`)
+}
 md.push('', '## Tabelle inesistenti', '', problemi.tabelle.length ? '| Dove | Tabella | Op |\n|---|---|---|' : 'Nessuna.')
 for (const p of problemi.tabelle) md.push(`| \`${p.dove}\` | ${p.tabella} | ${p.op} |`)
 md.push('', '## Scritture non risolte (da controllare a mano)', '', problemi.nonRisolte.length ? '| Dove | Tabella | Op | Motivo |\n|---|---|---|---|' : 'Nessuna.')
@@ -242,7 +356,7 @@ for (const p of problemi.nonRisolte) md.push(`| \`${p.dove}\` | ${p.tabella} | $
 fs.writeFileSync(REPORT, md.join('\n') + '\n')
 
 console.log(`Scritture analizzate: ${totale}`)
-console.log(`Colonne inesistenti: ${problemi.colonne.length} · Obbligatori mancanti: ${problemi.obbligatori.length} · Enum non validi: ${problemi.enum.length} · Tabelle inesistenti: ${problemi.tabelle.length} · Non risolte: ${problemi.nonRisolte.length}`)
+console.log(`Colonne inesistenti: ${problemi.colonne.length} · Obbligatori mancanti: ${problemi.obbligatori.length} · Enum non validi: ${problemi.enum.length} · Tipi incompatibili: ${tipiErr.length} errori, ${tipiAvv.length} avvisi · Tabelle inesistenti: ${problemi.tabelle.length} · Non risolte: ${problemi.nonRisolte.length}`)
 console.log(`Report: ${path.relative(ROOT, REPORT)}`)
-const err = problemi.colonne.length + problemi.obbligatori.length + problemi.enum.length + problemi.tabelle.length
+const err = problemi.colonne.length + problemi.obbligatori.length + problemi.enum.length + tipiErr.length + problemi.tabelle.length
 process.exit(err ? 1 : 0)

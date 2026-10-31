@@ -33,9 +33,10 @@ export default function CantierePage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    // Nomi reali delle colonne: descrizione (lavori eseguiti), redatto_da (direttore di cantiere)
+    // Nomi reali delle colonne: descrizione = lavori eseguiti; direttore_cantiere (testo);
+    // redatto_da = id dell'utente che ha compilato la giornata
     const { data } = await supabase.from('giornale_lavori')
-      .select('*, lavori_eseguiti:descrizione, direttore_cantiere:redatto_da')
+      .select('*, lavori_eseguiti:descrizione')
       .eq('commessa_id', id)
       .order('data', { ascending: false })
     setGiorni((data || []).map((g: any) => ({ ...g, n_operai: (g.operai_propri || 0) + (g.operai_sub || 0) })))
@@ -47,6 +48,7 @@ export default function CantierePage() {
   async function handleSave() {
     if (!form.lavori_eseguiti.trim()) return
     setSaving(true)
+    const { data: { user } } = await supabase.auth.getUser()
     const esito = await scritturaVerificata(supabase.from('giornale_lavori').insert({
       commessa_id: id,
       azienda_id: await getAziendaId() || null,
@@ -61,7 +63,8 @@ export default function CantierePage() {
       lavori_sospesi: form.lavori_sospesi,
       motivo_sospensione: form.lavori_sospesi ? form.motivo_sospensione : null,
       note: form.note || null,
-      redatto_da: form.direttore_cantiere || null,
+      direttore_cantiere: form.direttore_cantiere || null,
+      redatto_da: user?.id ?? null,   // uuid dell'utente collegato che compila
     }).select('id'))
     if (!esito.ok) { setSaving(false); alert('⚠ Giornale non salvato: ' + esito.errore); return }
     setSaving(false)
