@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, use } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase, getAziendaId } from '@/lib/supabase'
 import { scritturaVerificata } from '@/lib/scritture'
+import { normalizzaStatoSam } from '@/lib/statiSam'
 // pdf download functions are dynamically imported in handlers
 
 const fi = (n: number, d = 2) => n?.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? '—'
@@ -84,7 +85,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
   const carica = useCallback(async () => {
     setLoading(true)
     const { data } = await supabase.from('dam').select('*').eq('commessa_id', id).order('created_at', { ascending: false })
-    const allData = (data as DAM[]) || []
+    const allData = ((data as DAM[]) || []).map(d => ({ ...d, stato: normalizzaStatoSam(d.stato) }))
     setAllDam(allData)
     setDamList(allData.filter(d => d.is_vigente !== false))
     setLoading(false)

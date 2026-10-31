@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase, getAziendaId } from '@/lib/supabase'
+import { scritturaVerificata } from '@/lib/scritture'
 import { Plus, Loader2, Cloud, Sun, CloudRain, Wind, Thermometer, Users, Truck, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react'
 
 const METEO = [
@@ -25,18 +26,19 @@ export default function CantierePage() {
 
   const [form, setForm] = useState({
     data: today, meteo: 'SOLE', temperatura_min: '', temperatura_max: '',
-    n_operai: '', n_mezzi: '', lavori_eseguiti: '',
+    operai_propri: '', operai_sub: '', n_mezzi: '', lavori_eseguiti: '',
     lavori_sospesi: false, motivo_sospensione: '',
     note: '', direttore_cantiere: ''
   })
 
   const load = useCallback(async () => {
     setLoading(true)
+    // Nomi reali delle colonne: descrizione (lavori eseguiti), redatto_da (direttore di cantiere)
     const { data } = await supabase.from('giornale_lavori')
-      .select('*')
+      .select('*, lavori_eseguiti:descrizione, direttore_cantiere:redatto_da')
       .eq('commessa_id', id)
       .order('data', { ascending: false })
-    setGiorni(data || [])
+    setGiorni((data || []).map((g: any) => ({ ...g, n_operai: (g.operai_propri || 0) + (g.operai_sub || 0) })))
     setLoading(false)
   }, [id])
 
@@ -45,25 +47,27 @@ export default function CantierePage() {
   async function handleSave() {
     if (!form.lavori_eseguiti.trim()) return
     setSaving(true)
-    await supabase.from('giornale_lavori').insert({
+    const esito = await scritturaVerificata(supabase.from('giornale_lavori').insert({
       commessa_id: id,
       azienda_id: await getAziendaId() || null,
       data: form.data,
       meteo: form.meteo,
       temperatura_min: parseFloat(form.temperatura_min) || null,
       temperatura_max: parseFloat(form.temperatura_max) || null,
-      n_operai: parseInt(form.n_operai) || 0,
+      operai_propri: parseInt(form.operai_propri) || 0,
+      operai_sub: parseInt(form.operai_sub) || 0,
       n_mezzi: parseInt(form.n_mezzi) || 0,
-      lavori_eseguiti: form.lavori_eseguiti.trim(),
+      descrizione: form.lavori_eseguiti.trim(),
       lavori_sospesi: form.lavori_sospesi,
       motivo_sospensione: form.lavori_sospesi ? form.motivo_sospensione : null,
       note: form.note || null,
-      direttore_cantiere: form.direttore_cantiere || null,
-    })
+      redatto_da: form.direttore_cantiere || null,
+    }).select('id'))
+    if (!esito.ok) { setSaving(false); alert('⚠ Giornale non salvato: ' + esito.errore); return }
     setSaving(false)
     setShowForm(false)
     setForm({ data: today, meteo: 'SOLE', temperatura_min: '', temperatura_max: '',
-      n_operai: '', n_mezzi: '', lavori_eseguiti: '', lavori_sospesi: false,
+      operai_propri: '', operai_sub: '', n_mezzi: '', lavori_eseguiti: '', lavori_sospesi: false,
       motivo_sospensione: '', note: '', direttore_cantiere: '' })
     load()
   }
@@ -132,10 +136,15 @@ export default function CantierePage() {
               </div>
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: 12, marginBottom: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 2fr', gap: 12, marginBottom: 12 }}>
             <div>
-              <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>N° operai presenti</label>
-              <input type="number" value={form.n_operai} onChange={e => setForm({ ...form, n_operai: e.target.value })}
+              <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>Operai propri</label>
+              <input type="number" value={form.operai_propri} onChange={e => setForm({ ...form, operai_propri: e.target.value })}
+                style={{ width: '100%', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px', boxSizing: 'border-box' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>Operai subappaltatori</label>
+              <input type="number" value={form.operai_sub} onChange={e => setForm({ ...form, operai_sub: e.target.value })}
                 style={{ width: '100%', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px', boxSizing: 'border-box' }} />
             </div>
             <div>

@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { Plus, Search, X, Send, FileText, Upload, AlertTriangle, CheckCircle } from 'lucide-react'
 import { supabase, getAziendaId } from '@/lib/supabase'
 import { fetchConToken } from '@/lib/authFetch'
+import { normalizzaStatoSam, StatoSam } from '@/lib/statiSam'
+import { scritturaVerificata } from '@/lib/scritture'
 
 type StatoDAM = 'BOZZA' | 'INVIATO_DL' | 'APPROVATO' | 'APPROVATO_NOTE' | 'RIFIUTATO' | 'REV_1' | 'REV_2'
 
@@ -37,6 +39,9 @@ interface DAM {
   note_interne: string
   certificazioni_dam?: Certificazione[]
 }
+
+// Conversione tra stati della pagina (MAIUSCOLI) e stati canonici salvati nel DB
+const DA_DB: Record<StatoSam, StatoDAM> = { bozza: 'BOZZA', inviata_dl: 'INVIATO_DL', approvata: 'APPROVATO', rifiutata: 'RIFIUTATO', integrazione: 'REV_1' }
 
 const STATO_META: Record<StatoDAM, { label: string; color: string; icon: string }> = {
   BOZZA: { label: 'Bozza', color: '#6b7280', icon: '📝' },
@@ -85,7 +90,7 @@ export default function DAMPage() {
       .from('dam')
       .select('*, certificazioni_dam(*)')
       .order('created_at', { ascending: false })
-    if (!error && data) setDams(data)
+    if (!error && data) setDams(data.map((d: any) => ({ ...d, stato: DA_DB[normalizzaStatoSam(d.stato)] })))
     setLoading(false)
   }
 
@@ -110,7 +115,7 @@ export default function DAMPage() {
     const codice = `DAM-${String(dams.length + 1).padStart(3, '0')}`
     const { data: damData, error: damError } = await supabase
       .from('dam')
-      .insert([{ ...form, codice, revisione: 0, stato: 'BOZZA', azienda_id: aziendaId, data_emissione: new Date().toISOString().slice(0, 10) }])
+      .insert([{ ...form, codice, revisione: 0, stato: 'bozza', azienda_id: aziendaId, data_emissione: new Date().toISOString().slice(0, 10) }])
       .select().single()
     if (damError) { setErrore('Errore: ' + damError.message); setSaving(false); return }
     // Crea certificazioni default
@@ -121,14 +126,16 @@ export default function DAMPage() {
   }
 
   async function inviaDL(id: string) {
-    await supabase.from('dam').update({ stato: 'INVIATO_DL', data_emissione: new Date().toISOString().slice(0, 10) }).eq('id', id)
+    const esito = await scritturaVerificata(supabase.from('dam').update({ stato: 'inviata_dl', data_emissione: new Date().toISOString().slice(0, 10) }).eq('id', id).select('id'))
+    if (!esito.ok) { alert('⚠ SAM non inviata: ' + esito.errore); return }
     setDams(prev => prev.map(d => d.id === id ? { ...d, stato: 'INVIATO_DL' } : d))
   }
 
   async function approvaDAM(id: string) {
     const dam = dams.find(d => d.id === id)
     if (!dam) return
-    await supabase.from('dam').update({ stato: 'APPROVATO', data_risposta_dl: new Date().toISOString().slice(0, 10) }).eq('id', id)
+    const esito = await scritturaVerificata(supabase.from('dam').update({ stato: 'approvata', data_risposta_dl: new Date().toISOString().slice(0, 10) }).eq('id', id).select('id'))
+    if (!esito.ok) { alert('⚠ Approvazione non salvata: ' + esito.errore); return }
     setDams(prev => prev.map(d => d.id === id ? { ...d, stato: 'APPROVATO' as StatoDAM } : d))
     const { data: { user } } = await supabase.auth.getUser()
     if (!user?.email) return
@@ -144,7 +151,8 @@ export default function DAMPage() {
   }
 
   async function rifiutaDAM(id: string) {
-    await supabase.from('dam').update({ stato: 'RIFIUTATO', data_risposta_dl: new Date().toISOString().slice(0, 10) }).eq('id', id)
+    const esito = await scritturaVerificata(supabase.from('dam').update({ stato: 'rifiutata', data_risposta_dl: new Date().toISOString().slice(0, 10) }).eq('id', id).select('id'))
+    if (!esito.ok) { alert('⚠ Rifiuto non salvato: ' + esito.errore); return }
     setDams(prev => prev.map(d => d.id === id ? { ...d, stato: 'RIFIUTATO' as StatoDAM } : d))
   }
 

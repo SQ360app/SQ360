@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { supabase, getAziendaId } from '@/lib/supabase'
+import { scritturaVerificata } from '@/lib/scritture'
 import { FileText, AlertTriangle, CheckCircle2, Clock, Loader2, ChevronDown, ChevronRight, Shield, Plus, Upload } from 'lucide-react'
 
 const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -152,9 +153,21 @@ export default function ContrattiPage({ params: pp }: { params: Promise<{ id: st
       const dMap: Record<string, DocumentoSub[]> = {}
       const lMap: Record<string, LavoratoreSub[]> = {}
       const pMap: Record<string, PagamentoSub[]> = {}
-      for (const d of (docs || [])) { if (!dMap[d.contratto_sub_id]) dMap[d.contratto_sub_id] = []; dMap[d.contratto_sub_id].push(d) }
+      // documenti_contratto_sub: SOA e IBAN sono colonne (categoria_soa, classifica_soa, iban) → "extra" della pagina
+      for (const r of (docs || []) as any[]) {
+        const d: DocumentoSub = { ...r, extra: (r.categoria_soa || r.classifica_soa || r.iban) ? { categoria: r.categoria_soa || '', classifica: r.classifica_soa || '', iban: r.iban || '' } : undefined }
+        if (!dMap[d.contratto_sub_id]) dMap[d.contratto_sub_id] = []; dMap[d.contratto_sub_id].push(d)
+      }
       for (const l of (lavs || [])) { if (!lMap[l.contratto_sub_id]) lMap[l.contratto_sub_id] = []; lMap[l.contratto_sub_id].push(l) }
-      for (const p of (pags || [])) { if (!pMap[p.contratto_sub_id]) pMap[p.contratto_sub_id] = []; pMap[p.contratto_sub_id].push(p) }
+      // pagamenti_sub: ritenuta (importo), netto_pagato, svincolata → modello della pagina (ritenuta_pct, importo_netto, tipo)
+      for (const r of (pags || []) as any[]) {
+        const lordo = Number(r.importo_lordo) || 0
+        const p: PagamentoSub = { ...r, importo_lordo: lordo,
+          ritenuta_pct: lordo ? Math.round((Number(r.ritenuta) || 0) / lordo * 10000) / 100 : 0,
+          importo_netto: Number(r.netto_pagato) || 0,
+          tipo: r.svincolata ? 'svincolo_ritenuta' : 'pagamento' }
+        if (!pMap[p.contratto_sub_id]) pMap[p.contratto_sub_id] = []; pMap[p.contratto_sub_id].push(p)
+      }
       setDocumenti(dMap); setLavoratori(lMap); setPagamenti(pMap)
     }
     setLoading(false)
@@ -184,12 +197,12 @@ export default function ContrattiPage({ params: pp }: { params: Promise<{ id: st
 
   async function cambiaStato(cid: string, nuovoStato: string) {
     setSaving(true)
-    await supabase.from('contratti_sub').update({ stato: nuovoStato }).eq('id', cid)
+    { const esito = await scritturaVerificata(supabase.from('contratti_sub').update({ stato: nuovoStato }).eq('id', cid).select('id')); if (!esito.ok) { setSaving(false); alert('⚠ Stato non aggiornato: ' + esito.errore); return } }
     setSaving(false); load()
   }
 
   async function toggleCheck(cid: string, campo: string, val: boolean) {
-    await supabase.from('contratti_sub').update({ [campo]: val }).eq('id', cid)
+    { const esito = await scritturaVerificata(supabase.from('contratti_sub').update({ [campo]: val }).eq('id', cid).select('id')); if (!esito.ok) { alert('⚠ Spunta non salvata: ' + esito.errore); return } }
     load()
   }
 
@@ -202,50 +215,56 @@ export default function ContrattiPage({ params: pp }: { params: Promise<{ id: st
     const { data: pub } = supabase.storage.from('documenti').getPublicUrl(path)
     const url = pub?.publicUrl || path
     const existing = (documenti[contrattoId] || []).find(d => d.tipo === tipo)
-    if (existing) {
-      await supabase.from('documenti_contratto_sub').update({ url, nome_file: file.name, data_scadenza: scadenza || null, extra: extra || null }).eq('id', existing.id)
-    } else {
-      await supabase.from('documenti_contratto_sub').insert({ contratto_sub_id: contrattoId, commessa_id: id, tipo, url, nome_file: file.name, data_scadenza: scadenza || null, extra: extra || null })
+    const campi = {
+      url, nome_file: file.name, data_scadenza: scadenza || null,
+      ...(extra ? { categoria_soa: extra.categoria || null, classifica_soa: extra.classifica || null } : {}),
     }
-    setUploading(null); await load()
+    const esito = existing
+      ? await scritturaVerificata(supabase.from('documenti_contratto_sub').update(campi).eq('id', existing.id).select('id'))
+      : await scritturaVerificata(supabase.from('documenti_contratto_sub').insert({ contratto_sub_id: contrattoId, azienda_id: aziendaId || null, tipo, ...campi }).select('id'))
+    setUploading(null)
+    if (!esito.ok) { alert('⚠ Documento non salvato: ' + esito.errore); return }
+    await load()
   }
 
   async function saveIban(contrattoId: string, iban: string) {
     const existing = (documenti[contrattoId] || []).find(d => d.tipo === 'conto_corrente')
-    if (existing) {
-      await supabase.from('documenti_contratto_sub').update({ extra: { iban } }).eq('id', existing.id)
-    } else {
-      await supabase.from('documenti_contratto_sub').insert({ contratto_sub_id: contrattoId, commessa_id: id, tipo: 'conto_corrente', extra: { iban } })
-    }
+    const esito = existing
+      ? await scritturaVerificata(supabase.from('documenti_contratto_sub').update({ iban }).eq('id', existing.id).select('id'))
+      : await scritturaVerificata(supabase.from('documenti_contratto_sub').insert({ contratto_sub_id: contrattoId, azienda_id: (await getAziendaId()) || null, tipo: 'conto_corrente', iban }).select('id'))
+    if (!esito.ok) { alert('⚠ IBAN non salvato: ' + esito.errore); return }
     await load()
   }
 
   async function aggiungiLavoratore(contrattoId: string) {
     if (!fLNome.trim() || !fLCognome.trim()) return
     const aziendaId = await getAziendaId()
-    await supabase.from('lavoratori_sub').insert({
+    { const esito = await scritturaVerificata(supabase.from('lavoratori_sub').insert({
       contratto_sub_id: contrattoId, azienda_id: aziendaId || null,
       nome: fLNome.trim(), cognome: fLCognome.trim(), codice_fiscale: fLCF.trim(),
       patente_crediti: parseInt(fLPatente) || null,
-    })
+    }).select('id')); if (!esito.ok) { alert('⚠ Lavoratore non salvato: ' + esito.errore); return } }
     setLavFormId(null); setFLNome(''); setFLCognome(''); setFLCF(''); setFLPatente('')
     await load()
   }
 
   async function eliminaLavoratore(lavId: string) {
-    await supabase.from('lavoratori_sub').delete().eq('id', lavId); await load()
+    { const esito = await scritturaVerificata(supabase.from('lavoratori_sub').delete().eq('id', lavId).select('id')); if (!esito.ok) { alert('⚠ Lavoratore non eliminato: ' + esito.errore); return } } await load()
   }
 
   async function aggiungiPagamento(contrattoId: string) {
     if (!fPLordo || !fPData) return
     const aziendaId = await getAziendaId()
     const lordo = parseFloat(fPLordo) || 0
-    await supabase.from('pagamenti_sub').insert({
-      contratto_sub_id: contrattoId, commessa_id: id, azienda_id: aziendaId || null,
-      data_pagamento: fPData, importo_lordo: lordo, ritenuta_pct: 5,
-      importo_netto: Math.round(lordo * 0.95 * 100) / 100,
-      note: fPNote || null, tipo: 'pagamento',
-    })
+    // Ritenuta di garanzia 5% salvata come importo; netto = lordo − ritenuta
+    const ritenuta = Math.round(lordo * 0.05 * 100) / 100
+    const esito = await scritturaVerificata(supabase.from('pagamenti_sub').insert({
+      contratto_sub_id: contrattoId, azienda_id: aziendaId || null,
+      data_pagamento: fPData, importo_lordo: lordo, ritenuta,
+      netto_pagato: Math.round((lordo - ritenuta) * 100) / 100,
+      note: fPNote || null, svincolata: false,
+    }).select('id'))
+    if (!esito.ok) { alert('⚠ Pagamento non salvato: ' + esito.errore); return }
     setPagFormId(null); setFPLordo(''); setFPNote(''); await load()
   }
 
@@ -254,12 +273,14 @@ export default function ContrattiPage({ params: pp }: { params: Promise<{ id: st
     const pags = pagamenti[contrattoId] || []
     const totRit = pags.filter(p => p.tipo === 'pagamento').reduce((s, p) => s + p.importo_lordo * (p.ritenuta_pct / 100), 0)
     if (totRit <= 0) return
-    await supabase.from('pagamenti_sub').insert({
-      contratto_sub_id: contrattoId, commessa_id: id, azienda_id: aziendaId || null,
+    // Riga di svincolo: svincolata = true, nessuna ritenuta, netto = ritenute accumulate
+    const esito = await scritturaVerificata(supabase.from('pagamenti_sub').insert({
+      contratto_sub_id: contrattoId, azienda_id: aziendaId || null,
       data_pagamento: new Date().toISOString().slice(0, 10),
-      importo_lordo: totRit, ritenuta_pct: 0, importo_netto: totRit,
-      note: 'Svincolo ritenuta di garanzia a collaudo', tipo: 'svincolo_ritenuta',
-    })
+      importo_lordo: totRit, ritenuta: 0, netto_pagato: totRit,
+      note: 'Svincolo ritenuta di garanzia a collaudo', svincolata: true,
+    }).select('id'))
+    if (!esito.ok) { alert('⚠ Svincolo non salvato: ' + esito.errore); return }
     await load()
   }
 

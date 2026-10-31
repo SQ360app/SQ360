@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase, getAziendaId } from '@/lib/supabase'
+import { scritturaVerificata } from '@/lib/scritture'
 import { Plus, Loader2, CheckCircle2, Clock, AlertTriangle, FileText, TrendingUp, TrendingDown, ChevronDown, ChevronRight } from 'lucide-react'
 
 const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -50,7 +51,11 @@ export default function FatturazionePage() {
         .range(pagina * FP_LIMIT, (pagina + 1) * FP_LIMIT - 1),
       supabase.from('professionisti_fornitori').select('id, ragione_sociale').order('ragione_sociale'),
     ])
-    setFattureAttive(fa || [])
+    // importo mostrato = imponibile; totale calcolato (imponibile + IVA), non salvato
+    setFattureAttive((fa || []).map((f: any) => {
+      const imponibile = Number(f.importo_imponibile ?? f.importo_netto) || 0
+      return { ...f, importo_netto: imponibile, importo_totale: imponibile + (Number(f.importo_iva) || 0) }
+    }))
     const lista = fp || []
     setFatturePassive(prev => pagina === 0 ? lista : [...prev, ...lista])
     setFpHasMore(lista.length === FP_LIMIT)
@@ -65,14 +70,20 @@ export default function FatturazionePage() {
     setSaving(true)
     const netto = parseFloat(formA.importo_netto)
     const iva = netto * parseFloat(formA.iva_pct) / 100
-    await supabase.from('fatture').insert({
+    // Destinatario della fattura attiva = committente della commessa (campo obbligatorio "soggetto").
+    // L'imponibile va in importo_imponibile; il totale non si salva, si calcola (imponibile + IVA).
+    const { data: comm } = await supabase.from('commesse').select('committente').eq('id', id).maybeSingle()
+    const esito = await scritturaVerificata(supabase.from('fatture').insert({
       commessa_id: id, azienda_id: await getAziendaId() || null,
       tipo: 'ATTIVA', numero: formA.numero,
+      soggetto: (comm as any)?.committente || 'Committente',
       data_emissione: formA.data || new Date().toISOString().split('T')[0],
-      importo_netto: netto, importo_iva: iva, importo_totale: netto + iva,
+      importo_imponibile: netto, iva_pct: parseFloat(formA.iva_pct) || 0, importo_iva: iva,
       stato: 'EMESSA', note: formA.note || null,
-    })
-    setSaving(false); setShowForm(false)
+    }).select('id'))
+    setSaving(false)
+    if (!esito.ok) { alert('⚠ Fattura non salvata: ' + esito.errore); return }
+    setShowForm(false)
     setFormA({ numero: '', data: '', importo_netto: '', iva_pct: '22', sal_id: '', note: '' })
     load()
   }
@@ -82,7 +93,7 @@ export default function FatturazionePage() {
     setSaving(true)
     const netto = parseFloat(formP.importo_netto)
     const iva = netto * parseFloat(formP.iva_pct) / 100
-    await supabase.from('fatture_passive').insert({
+    const esito = await scritturaVerificata(supabase.from('fatture_passive').insert({
       commessa_id: id, azienda_id: await getAziendaId() || null,
       fornitore_id: formP.fornitore_id,
       numero_fattura: formP.numero_fattura,
@@ -90,17 +101,24 @@ export default function FatturazionePage() {
       imponibile: netto, importo_iva: iva, importo_netto: netto,
       oda_id: formP.oda_id || null,
       stato_pagamento: 'DA_PAGARE', note: formP.note || null,
-    })
-    setSaving(false); setShowForm(false)
+      totale: netto + iva,
+    }).select('id'))
+    setSaving(false)
+    if (!esito.ok) { alert('⚠ Fattura non salvata: ' + esito.errore); return }
+    setShowForm(false)
     setFormP({ numero_fattura: '', data_fattura: '', fornitore_id: '', importo_netto: '', iva_pct: '22', oda_id: '', note: '' })
     load()
   }
 
   async function aggiornaStatoAttiva(fid: string, stato: string) {
-    await supabase.from('fatture').update({ stato }).eq('id', fid); load()
+    const esito = await scritturaVerificata(supabase.from('fatture').update({ stato }).eq('id', fid).select('id'))
+    if (!esito.ok) { alert('⚠ Stato non aggiornato: ' + esito.errore); return }
+    load()
   }
   async function aggiornaStatoPassiva(fid: string, stato: string) {
-    await supabase.from('fatture_passive').update({ stato_pagamento: stato }).eq('id', fid); load()
+    const esito = await scritturaVerificata(supabase.from('fatture_passive').update({ stato_pagamento: stato }).eq('id', fid).select('id'))
+    if (!esito.ok) { alert('⚠ Stato non aggiornato: ' + esito.errore); return }
+    load()
   }
 
   const totEmesso = fattureAttive.filter(f => f.stato !== 'STORNATA').reduce((s, f) => s + (f.importo_netto || 0), 0)
