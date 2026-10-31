@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase, getAziendaId } from '@/lib/supabase'
 import { Search, Plus, Upload, Sparkles, X, Save, CheckCircle, AlertCircle, ArrowRight, FileText, TrendingUp, ChevronDown, ChevronRight } from 'lucide-react'
 import { fetchConToken } from '@/lib/authFetch'
+import { messaggioErroreDb } from '@/lib/scritture'
 
 interface Gara {
   id: string; codice_gara: string; nome: string; committente: string
@@ -213,7 +214,7 @@ export default function GarePage() {
     const { data: ut } = await supabase.auth.getUser()
     const { data: utData } = await supabase.from('utenti').select('azienda_id').eq('id', ut.user?.id || '').single()
     const codice = form.codice_gara || generaCodiceGara(new Date().getFullYear(), gare.length + 1)
-    const { data } = await supabase.from('gare').insert([{
+    const { data, error } = await supabase.from('gare').insert([{
       azienda_id: utData?.azienda_id, codice,
       nome: form.nome, committente: form.committente,
       cig: form.cig||null, cup: form.cup||null, importo_base: form.importo_base,
@@ -224,7 +225,8 @@ export default function GarePage() {
       link_bando: form.link_bando||null, note: form.note||null, stato: 'IN_ANALISI',
     }]).select().single()
     setSaving(false)
-    if (data) { setShowNuova(false); await carica() }
+    if (error || !data) { alert('⚠ Gara non salvata: ' + messaggioErroreDb(error)); return }
+    setShowNuova(false); await carica()
   }
 
   function apriNuova() {

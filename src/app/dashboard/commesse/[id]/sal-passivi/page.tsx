@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { supabase, getAziendaId } from '@/lib/supabase'
+import { scritturaVerificata } from '@/lib/scritture'
 
 const fi = (n: number | undefined | null, d = 2) =>
   n?.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? '—'
@@ -68,7 +69,7 @@ export default function SALPassiviPage({ params: p }: { params: Promise<{ id: st
     note: '',
   })
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), msg.startsWith('⚠') ? 7000 : 3000) }
 
   const carica = useCallback(async () => {
     setLoading(true)
@@ -154,7 +155,7 @@ export default function SALPassiviPage({ params: p }: { params: Promise<{ id: st
   }
 
   const cambiaStato = async (sal: SalPassivo, stato: string) => {
-    await supabase.from('sal_passivi').update({ stato }).eq('id', sal.id)
+    { const esito = await scritturaVerificata(supabase.from('sal_passivi').update({ stato }).eq('id', sal.id).select('id')); if (!esito.ok) { showToast('⚠ Stato SAL non aggiornato: ' + esito.errore); return } }
     setSalPassivi(prev => prev.map(s => s.id === sal.id ? {...s, stato} : s))
     showToast(`SAL ${sal.numero} → ${stato}`)
   }

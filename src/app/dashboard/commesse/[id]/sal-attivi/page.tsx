@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, use, useMemo } from 'react'
 import { supabase, getAziendaId } from '@/lib/supabase'
+import { scritturaVerificata } from '@/lib/scritture'
 import { DEFAULT_WBS_FLAT, WbsVoce } from '@/lib/wbs'
 import { loadWbs } from '@/lib/wbsLoader'
 import { Misurazione, DIM_FIELDS, caricaMisurazioni, parseFormula, isDeduzione, fmtMis } from '@/lib/misurazioni'
@@ -251,7 +252,7 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
   const showToast = (msg: string) => {
     setToast(msg)
     if (toastRef.current) clearTimeout(toastRef.current)
-    toastRef.current = setTimeout(() => setToast(''), 2800)
+    toastRef.current = setTimeout(() => setToast(''), msg.startsWith('⚠') ? 7000 : 2800)
   }
 
   // ─── Formula 3 livelli sicurezza interna (Primus-compatible) ─────────────
@@ -1019,9 +1020,14 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
               if (data) { setSalList((p: any) => [...p, data]); setSalSel(data); setQtInput({}) }
             }} style={{ padding: '4px 12px', background: 'rgba(79,142,247,.2)', border: '1px solid rgba(79,142,247,.3)', borderRadius: 6, color: '#7baff8', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>+ Nuovo SAL</button>
             <button onClick={async () => { if (!salSel) return
-              await supabase.from('sal_voci').delete().eq('sal_id', salSel.id)
+              // Ogni passo verificato: "SAL salvato" solo se voci e testata sono state scritte
+              const del = await scritturaVerificata(supabase.from('sal_voci').delete().eq('sal_id', salSel.id).select('id'), 0)
+              if (!del.ok) { showToast('⚠ SAL non salvato: ' + del.errore); return }
               const rows = Object.entries(qtInput).filter(([, q]) => q > 0).map(([vid, q]) => ({ sal_id: salSel.id, voce_computo_id: vid, quantita_periodo: q }))
-              if (rows.length) await supabase.from('sal_voci').insert(rows)
+              if (rows.length) {
+                const ins = await scritturaVerificata(supabase.from('sal_voci').insert(rows).select('id'), rows.length)
+                if (!ins.ok) { showToast('⚠ Voci SAL non salvate: ' + ins.errore); return }
+              }
               const nuovoCumul = { ...qtCumul }
               Object.entries(qtPerSal[salSel.id] || {}).forEach(([vid, q]) => { nuovoCumul[vid] = (nuovoCumul[vid] || 0) - (q as number) })
               Object.entries(qtInput).forEach(([vid, q]) => { nuovoCumul[vid] = (nuovoCumul[vid] || 0) + q })
@@ -1041,13 +1047,14 @@ export default function SalAttiviPage({ params: paramsPromise }: { params: Promi
                     return s + (q as number) * (voce?.prezzo_unitario || 0)
                   }, 0)
                 , 0)
-              await supabase.from('sal').update({
+              const upd = await scritturaVerificata(supabase.from('sal').update({
                 importo_certificato: importoPeriodo,
                 importo_cumulativo: cumulPrev + importoPeriodo,
                 ritenuta_garanzia: ritenuta,
                 importo_netto: importoPeriodo - ritenuta,
                 stato: 'emesso',
-              }).eq('id', salSel.id)
+              }).eq('id', salSel.id).select('id'))
+              if (!upd.ok) { showToast('⚠ SAL non salvato: ' + upd.errore); return }
               setSalList((p: any) => p.map((s: any) =>
                 s.id === salSel.id ? { ...s, importo_certificato: importoPeriodo, stato: 'emesso' } : s
               ))

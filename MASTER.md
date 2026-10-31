@@ -1,7 +1,7 @@
 # SQ360 — MASTER
 
 > Documento di stato unico del progetto. **Va aggiornato ad ogni commit.**
-> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: Gemini aggiornato (successivo a `676ffef`)
+> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: scritture verificate (successivo a `4e66fbd`)
 >
 > Fonti: `CLAUDE.md` (storico sessioni), `DEPLOY.md`, struttura `src/app`.
 
@@ -25,6 +25,7 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 | PDF @react-pdf (ODA, SAM, SAL, OS, Contratto Sub, RDO, Verbale consegna, NP) | ✅ | Carta intestata > logo > testo; bucket `aziende-assets` **da creare** |
 | PWA (sw.js, manifest, banner, icone edge) | ⚠️ | Da verificare in DevTools + Lighthouse |
 | Impostazioni azienda (logo, carta intestata, WBS template) | ⚠️ | Dipende da SQL `aziende` + `wbs_templates` |
+| Controllo scritture `scripts/check-scritture.mjs` | ✅ | Confronta TUTTE le insert/update/upsert del codice (anche payload costruiti a parte, `.map`, spread, funzioni) con lo schema reale: colonne inesistenti, obbligatori mancanti, enum non validi. Report `scripts/report-scritture.md` (escluso da git). Uso: `node scripts/check-scritture.mjs` |
 | Smoke test `scripts/smoke-test.mjs` (Playwright) | ✅ | Ultimo esito 31/10/2026: 44/44 ok. Login robusto (attende l'idratazione React, verifica i campi, 3 tentativi). Sola lettura (scritture bloccate a livello di rete), 44 pagine, report `scripts/report-smoke.md` + screenshot (esclusi da git); credenziali `SMOKE_EMAIL`/`SMOKE_PASSWORD` solo in `.env.local`. Uso: `node scripts/smoke-test.mjs` |
 
 ### 1.2 Area dashboard (`src/app/dashboard/*`)
@@ -106,7 +107,7 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 - **PWA**: `public/sw.js` statico committato; NetworkFirst su navigazione, pass-through per Supabase e `/api/*`.
 - **Tabella azienda canonica = `azienda`** (FK di `utenti`, `gare`, `sal`, `documenti_commessa`, `email_log`): dati e carta intestata si leggono/scrivono lì. `aziende` resta solo per le FK di `wbs_templates`/`azienda_sedi` e viene creata con lo stesso id da `/api/register`; unificazione futura da pianificare.
 - **Nomi colonna DB ≠ nomi usati nel codice**: si legge con alias PostgREST (`numero:codice`, `url:file_url`, …) e si scrive con il nome reale. Rif. `supabase/migrations/20261031_allineamento_schema.sql`.
-- **Scritture non permesse da RLS**: un UPDATE/DELETE bloccato non dà errore ma tocca 0 righe → verificare sempre le righe toccate (`.select('id')` dopo l'update, ricontare dopo la delete).
+- **Scritture non permesse da RLS**: un UPDATE/DELETE bloccato non dà errore ma tocca 0 righe → verificare sempre le righe toccate. Helper unico `scritturaVerificata(query.select('id'))` in `src/lib/scritture.ts` (errore + righe toccate + messaggio in italiano con `messaggioErroreDb`): "salvato" solo dopo la verifica, altrimenti avviso "⚠ … non salvato: motivo" e modulo aperto. Applicato a DDT, fatture passive, sicurezza, SAM, documenti, RDA, RDO, SAL attivi/passivi (stati), varianti, ODA (stati), gare.
 - **Nessuna scrittura automatica all'apertura di una pagina** (es. template WBS): errore di lettura ≠ dato vuoto.
 - **Rename DAM → SAM** solo nelle label: URL `/dam`, variabili e tabella `dam` invariati.
 - **Pagine pubbliche senza login**: `/offerta/[token]` (fornitore), `/scan/[token]` (badge cantiere) — accesso via token univoco.
@@ -139,6 +140,9 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 ### 4.1 Da eseguire su Supabase (bloccanti per moduli già scritti)
 - [x] **Sicurezza passo 1 — eseguito il 31/10/2026**: `REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon` + default privileges; anon mantiene solo SELECT su `commesse`, `rda`, `rdo`, `utenti`, `voci_computo`, `lavoratori_commessa`, `presenze_cantiere`, UPDATE su `rdo`, INSERT su `presenze_cantiere` (pagine pubbliche `/offerta`, `/scan`). Verifica con chiave anon: 96/103 tabelle/viste negate; **ancora leggibili senza login: `utenti` (3 righe) e `voci_computo` (1.630)** → da chiudere dopo il passo 3. Ritorno: `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon`.
 - [ ] **Sicurezza passo 3b — REVOKE finale su anon** (da eseguire DOPO le prove manuali di `/offerta` e `/scan`): `REVOKE ALL ON public.commesse, public.rda, public.rdo, public.utenti, public.voci_computo, public.lavoratori_commessa, public.presenze_cantiere FROM anon;` — ritorno: `GRANT SELECT ON …; GRANT UPDATE ON public.rdo; GRANT INSERT ON public.presenze_cantiere TO anon`
+- [x] `ALTER TABLE ddt ADD codice, data_ricezione, fornitore_nome, voci` — eseguita il 31/10/2026 (il salvataggio DDT falliva in silenzio)
+- [ ] SQL colonne mancanti usate dal codice: `contratti_sub` (tipo, percentuale_subappalto, cat_soa), `ordini_servizio` (tipo, variante_id, riserva, testo_riserva, importo_riserva, scadenza_riserva) — fino ad allora creazione contratti sub e ordini di servizio falliscono (ora con messaggio)
+- [ ] Decisioni aperte dal controllo scritture: stati SAM (`dam.stato` enum MAIUSCOLO vs pagina minuscola), giornale lavori (temperature min/max, operai, mezzi, note, direttore), documenti/pagamenti subappalto (struttura DB diversa dal codice), fatture attive (`importo_totale`, `soggetto` obbligatorio)
 - [ ] Sicurezza passo 0: fotografia RLS/regole/funzioni/permessi (query di sola lettura) — necessaria per i passi 4–8 (regole per azienda con `get_azienda_id()`, tabelle figlie, `aziende`/`mia_azienda_id`, bucket `documenti` privato)
 - [x] `supabase/migrations/20261031_allineamento_schema.sql` — **eseguita il 31/10/2026** (colonne mancanti su fatture_passive/oda/documenti_commessa/gare/varianti/voci_variante/sal_passivi/contratti_sub/azienda/wbs_nodes, enum `stato_gara`, FK verso `professionisti_fornitori`)
 - [ ] Regola RLS **UPDATE su `azienda`** limitata alla propria azienda (oggi solo SELECT → Impostazioni non può salvare dati azienda, email, logo/carta intestata; la pagina ora lo segnala)
@@ -352,4 +356,5 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 | 2026-10-31 | `ba5aa25` | Flusso inviti e password: nuova pagina `/auth/conferma` (invito + recupero, link scaduto), `/api/invite-user` con token del chiamante e azienda dal suo profilo + controllo upsert, "Password dimenticata?" nel login, stop a `NEXT_PUBLIC_APP_URL`; DEPLOY.md con le Redirect URLs Supabase |
 | 2026-10-31 | `c958331` | Sicurezza passo 1 eseguito (REVOKE su anon; restano leggibili senza login `utenti` e `voci_computo`); smoke test: lettura testo senza timeout sulle pagine grandi e senza falsi errori dai dati RSC, attesa della rete dopo il login; esito 44/44 ok dopo il passo 1 |
 | 2026-10-31 | `676ffef` | Sicurezza passo 3: `/offerta` e `/scan` su route server legate al token; `/api/email` con token, mittente fisso e solo modelli server (RDO: messaggio aggiuntivo in testo semplice, niente HTML/allegati dal client); 11 route AI con token + pagine aggiornate; cron DURC chiuso senza `CRON_SECRET`; REVOKE finale su anon in attesa (§4.1) |
-| 2026-10-31 | (questo commit) | Gemini: `gemini-2.0-flash` (spento) e `gemini-1.5-flash` sostituiti da `src/lib/gemini.ts` (GEMINI_MODEL, predefinito `gemini-3.8-flash`, riserva `gemini-3.6-flash`, timeout, messaggi chiari) in ai-ddt, ai-fattura, ai-sicurezza, ai-estrai, rdo-extract-offerta; pagine mostrano `errore`/`error` leggibili; DEPLOY.md con le nuove variabili |
+| 2026-10-31 | `4e66fbd` | Gemini: `gemini-2.0-flash` (spento) e `gemini-1.5-flash` sostituiti da `src/lib/gemini.ts` (GEMINI_MODEL, predefinito `gemini-3.8-flash`, riserva `gemini-3.6-flash`, timeout, messaggi chiari) in ai-ddt, ai-fattura, ai-sicurezza, ai-estrai, rdo-extract-offerta; pagine mostrano `errore`/`error` leggibili; DEPLOY.md con le nuove variabili |
+| 2026-10-31 | (questo commit) | Scritture verificate: helper `src/lib/scritture.ts`, script `scripts/check-scritture.mjs`; DDT salva davvero (errore mostrato, modulo aperto); helper su fatture passive, sicurezza, SAM, documenti, RDA, RDO, SAL, varianti, ODA, gare; correzioni colonne ovvie (rdo senza `wbs_id`, `lavoratori_sub.codice_fiscale/patente_crediti`, `ordini_servizio.descrizione`, `computo_metrico.note`) |

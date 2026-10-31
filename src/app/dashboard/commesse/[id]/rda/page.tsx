@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { supabase, getAziendaId } from '@/lib/supabase'
+import { scritturaVerificata } from '@/lib/scritture'
 import { DEFAULT_WBS_FLAT } from '@/lib/wbs'
 import { loadWbs } from '@/lib/wbsLoader'
 
@@ -147,7 +148,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
   const [wbsFlat, setWbsFlat] = useState(DEFAULT_WBS_FLAT)
   const [pendingSalva, setPendingSalva] = useState<{duplicati: RDA[]} | null>(null)
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), msg.startsWith('⚠') ? 7000 : 3000) }
 
   const carica = useCallback(async () => {
     setLoading(true)
@@ -213,7 +214,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
         rda_origine_id: origineId !== undefined ? origineId : null,
       }
       if (editRda.id) {
-        await supabase.from('rda').update(payload).eq('id', editRda.id)
+        { const esito = await scritturaVerificata(supabase.from('rda').update(payload).eq('id', editRda.id).select('id')); if (!esito.ok) { showToast('⚠ RDA non salvata: ' + esito.errore); return } }
         showToast('RDA aggiornata')
       } else {
         // Check duplicates only when called without explicit origineId
@@ -233,7 +234,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
         let maxNum = 0
         rdaCodici?.forEach((r: any) => { const n = parseInt(r.codice?.split('-')?.[2] || '0'); if (!isNaN(n) && n > maxNum) maxNum = n })
         const codice = `RDA-${anno}-${String(maxNum + 1).padStart(3, '0')}`
-        await supabase.from('rda').insert({ ...payload, codice })
+        { const esito = await scritturaVerificata(supabase.from('rda').insert({ ...payload, codice }).select('id')); if (!esito.ok) { showToast('⚠ RDA non salvata: ' + esito.errore); return } }
         showToast('RDA creata')
       }
       setForm(false); setEditRda(null); setPendingSalva(null); carica()
@@ -241,7 +242,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
   }
 
   const cambiaStato = async (rda: RDA, nuovoStato: string) => {
-    await supabase.from('rda').update({ stato: nuovoStato }).eq('id', rda.id)
+    { const esito = await scritturaVerificata(supabase.from('rda').update({ stato: nuovoStato }).eq('id', rda.id).select('id')); if (!esito.ok) { showToast('⚠ Stato non aggiornato: ' + esito.errore); return } }
     showToast(`Stato → ${nuovoStato}`)
     carica()
   }
@@ -286,13 +287,12 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
         data_scadenza: wizardScadenza || null,
         note: wizardNote,
         importo_offerta: 0,
-        wbs_id: wizardRda.wbs_id || null,
         wbs_ref: wizardRda.wbs_ref || null,
         codice: `RDO-${gruppoId.slice(0, 8).toUpperCase()}-${f.id.slice(0, 4).toUpperCase()}`,
       }))
       const { error } = await supabase.from('rdo').insert(records)
       if (error) { showToast('Errore: ' + error.message); return }
-      await supabase.from('rda').update({ stato: 'inviata' }).eq('id', wizardRda.id)
+      { const esito = await scritturaVerificata(supabase.from('rda').update({ stato: 'inviata' }).eq('id', wizardRda.id).select('id')); if (!esito.ok) { showToast('⚠ Stato RDA non aggiornato: ' + esito.errore); return } }
       showToast(`✅ RDO inviata a ${wizardFornitori.length} fornitori`)
       setWizardRda(null); setWizardFornitori([]); setWizardSearch('')
       carica()
@@ -301,7 +301,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
   const elimina = async (rda: RDA) => {
     if (!window.confirm(`Eliminare la RDA ${rda.codice}?`)) return
     if (!window.confirm(`Conferma definitiva: la RDA "${rda.codice}" verrà eliminata permanentemente.`)) return
-    await supabase.from('rda').delete().eq('id', rda.id)
+    { const esito = await scritturaVerificata(supabase.from('rda').delete().eq('id', rda.id).select('id')); if (!esito.ok) { showToast('⚠ RDA non eliminata: ' + esito.errore); return } }
     showToast('RDA eliminata'); carica()
   }
 

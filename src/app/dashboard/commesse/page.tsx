@@ -211,7 +211,7 @@ function NuovaCommessaModal({ onClose, onCreated }: { onClose: () => void; onCre
       await supabase.from('computo_metrico').insert({
         azienda_id: aziendaId,
         commessa_id: (c as any).id,
-        nome: 'Computo metrico principale',
+        note: 'Computo metrico principale',
         tipo_uso: 'CONTRATTO',
         fonte: 'MANUALE',
       })

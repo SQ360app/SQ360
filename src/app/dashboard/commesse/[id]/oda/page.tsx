@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import React from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { supabase, getAziendaId } from '@/lib/supabase'
+import { scritturaVerificata } from '@/lib/scritture'
 import { Plus, FileText, Loader2, ChevronDown, ChevronRight, Package, Wrench, Truck, ShoppingCart, Receipt } from 'lucide-react'
 import { fetchConToken } from '@/lib/authFetch'
 import { DEFAULT_WBS_FLAT } from '@/lib/wbs'
@@ -246,12 +247,12 @@ export default function ODAPage() {
   }
 
   async function cambiaStato(id: string, stato: string) {
-    await supabase.from('oda').update({ stato }).eq('id', id)
+    { const esito = await scritturaVerificata(supabase.from('oda').update({ stato }).eq('id', id).select('id')); if (!esito.ok) { alert('⚠ Stato ODA non aggiornato: ' + esito.errore); return } }
     await load()
   }
 
   async function cambiaConsegna(id: string, stato_consegna: string) {
-    await supabase.from('oda').update({ stato_consegna }).eq('id', id)
+    { const esito = await scritturaVerificata(supabase.from('oda').update({ stato_consegna }).eq('id', id).select('id')); if (!esito.ok) { alert('⚠ Consegna ODA non aggiornata: ' + esito.errore); return } }
     await load()
   }
 

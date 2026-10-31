@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { supabase, getAziendaId } from '@/lib/supabase'
+import { scritturaVerificata } from '@/lib/scritture'
 import { FlowThread } from '@/components/FlowThread'
 import { EmailPreviewModal } from '@/components/EmailPreviewModal'
 import { saveEmailLog } from '@/lib/emailLog'
@@ -297,7 +298,7 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
   const [allRdo, setAllRdo] = useState<RDO[]>([])
   const [aziendaDoc, setAziendaDoc] = useState<any>(null)
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), msg.startsWith('⚠') ? 7000 : 3000) }
 
   const carica = useCallback(async () => {
     setLoading(true)
@@ -427,7 +428,7 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
         condizioni_particolari: editRdo.condizioni_particolari || null,
       }
       if (editRdo.id) {
-        await supabase.from('rdo').update({ ...payload, codice: editRdo.codice || '' }).eq('id', editRdo.id)
+        { const esito = await scritturaVerificata(supabase.from('rdo').update({ ...payload, codice: editRdo.codice || '' }).eq('id', editRdo.id).select('id')); if (!esito.ok) { showToast('⚠ RDO non salvata: ' + esito.errore); return } }
         showToast('RDO aggiornata')
       } else {
         const anno = new Date().getFullYear().toString().slice(2)
@@ -435,7 +436,7 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
         let maxNum = 0
         rdoCodici?.forEach((r: any) => { const n = parseInt(r.codice?.split('-')?.[2] || '0'); if (!isNaN(n) && n > maxNum) maxNum = n })
         const codice = `RDO-${anno}-${String(maxNum + 1).padStart(3, '0')}`
-        await supabase.from('rdo').insert({ ...payload, codice })
+        { const esito = await scritturaVerificata(supabase.from('rdo').insert({ ...payload, codice }).select('id')); if (!esito.ok) { showToast('⚠ RDO non salvata: ' + esito.errore); return } }
         showToast('RDO creata')
       }
       setForm(false); setEditRdo(null); carica()
@@ -445,7 +446,7 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
   const cambiaStato = async (rdo: RDO, stato: string) => {
     const update: any = { stato }
     if (stato === 'inviata' && !rdo.token_offerta) update.token_offerta = crypto.randomUUID()
-    await supabase.from('rdo').update(update).eq('id', rdo.id)
+    { const esito = await scritturaVerificata(supabase.from('rdo').update(update).eq('id', rdo.id).select('id')); if (!esito.ok) { showToast('⚠ RDO non aggiornata: ' + esito.errore); return } }
     showToast('RDO aggiornata'); carica()
   }
 
@@ -482,7 +483,7 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
 
   const aggiudicaGruppo = async (vincitrice: RDO, gruppoId: string) => {
     const gruppo = rdoList.filter(r => r.rdo_gruppo_id === gruppoId)
-    await supabase.from('rdo').update({ stato: 'aggiudicata' }).eq('id', vincitrice.id)
+    { const esito = await scritturaVerificata(supabase.from('rdo').update({ stato: 'aggiudicata' }).eq('id', vincitrice.id).select('id')); if (!esito.ok) { showToast('⚠ Aggiudicazione non salvata: ' + esito.errore); return } }
     const altriIds = gruppo.filter(r => r.id !== vincitrice.id).map(r => r.id)
     if (altriIds.length) await supabase.from('rdo').update({ stato: 'annullata' }).in('id', altriIds)
     showToast(`✓ Aggiudicata a ${vincitrice.fornitore}`)

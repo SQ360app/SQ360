@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase, getAziendaId } from '@/lib/supabase'
+import { scritturaVerificata } from '@/lib/scritture'
 // pdf download functions are dynamically imported in handlers
 
 const fi = (n: number, d = 2) => n?.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? '—'
@@ -77,7 +78,8 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
   const [storicoOpen, setStoricoOpen] = useState<Record<string,boolean>>({})
   const [allDam, setAllDam] = useState<DAM[]>([])
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
+  // Gli avvisi di errore restano visibili più a lungo
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), msg.startsWith('⚠') ? 7000 : 3000) }
 
   const carica = useCallback(async () => {
     setLoading(true)
@@ -194,16 +196,18 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
         rdo_id: editDam.rdo_id || null,
       }
       if (editDam.id) {
-        await supabase.from('dam').update(payload).eq('id', editDam.id)
-        showToast('SAM aggiornata')
+        const esito = await scritturaVerificata(supabase.from('dam').update(payload).eq('id', editDam.id).select('id'))
+        if (!esito.ok) { showToast('⚠ SAM non salvata: ' + esito.errore); return }
+        showToast('✓ SAM aggiornata')
       } else {
         const anno = new Date().getFullYear().toString().slice(2)
         const { data: damCodici } = await supabase.from('dam').select('codice').eq('commessa_id', id).like('codice', `DAM-${anno}-%`)
         let maxNum = 0
         damCodici?.forEach((r: any) => { const n = parseInt(r.codice?.split('-')?.[2] || '0'); if (!isNaN(n) && n > maxNum) maxNum = n })
         const codice = `DAM-${anno}-${String(maxNum + 1).padStart(3, '0')}`
-        await supabase.from('dam').insert({ ...payload, codice })
-        showToast('SAM creata')
+        const esito = await scritturaVerificata(supabase.from('dam').insert({ ...payload, codice }).select('id'))
+        if (!esito.ok) { showToast('⚠ SAM non salvata: ' + esito.errore); return }
+        showToast('✓ SAM creata')
       }
       setForm(false); setEditDam(null); carica()
     } finally { setSaving(false) }
@@ -236,7 +240,8 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
   }
 
   const cambiaStato = async (dam: DAM, stato: string) => {
-    await supabase.from('dam').update({ stato }).eq('id', dam.id)
+    const esito = await scritturaVerificata(supabase.from('dam').update({ stato }).eq('id', dam.id).select('id'))
+    if (!esito.ok) { showToast('⚠ Stato non aggiornato: ' + esito.errore); return }
     showToast(`SAM ${dam.codice} → ${STATO_LBL[stato]}`); carica()
   }
 

@@ -50,3 +50,4 @@ public/fallback-*.js.map
 # Smoke test (contengono dati reali)
 scripts/smoke-screenshots/
 scripts/report-smoke.md
+scripts/report-scritture.md

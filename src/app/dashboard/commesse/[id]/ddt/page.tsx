@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { supabase, getAziendaId } from '@/lib/supabase'
 import { fetchConToken } from '@/lib/authFetch'
+import { scritturaVerificata } from '@/lib/scritture'
 
 const fi = (n: number, d = 2) => n?.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? '—'
 
@@ -48,7 +49,8 @@ export default function DDTPage({ params: p }: { params: Promise<{ id: string }>
   const [ddtHasMore, setDdtHasMore] = useState(false)
   const DDT_LIMIT = 50
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
+  // Gli avvisi di errore restano visibili più a lungo
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), msg.startsWith('⚠') ? 7000 : 3000) }
 
   const carica = useCallback(async (pagina = 0) => {
     setLoading(true)
@@ -127,19 +129,20 @@ export default function DDTPage({ params: p }: { params: Promise<{ id: string }>
         stato: editDdt.stato || 'ricevuto',
         note: editDdt.note || '',
       }
-      if (editDdt.id) {
-        await supabase.from('ddt').update(payload).eq('id', editDdt.id)
-        showToast('DDT aggiornato')
-      } else {
-        await supabase.from('ddt').insert(payload)
-        showToast('✓ DDT salvato')
-      }
+      // Scrittura verificata: "salvato" solo se la riga è stata davvero scritta.
+      // In caso di errore il modulo resta aperto (i dati estratti dall'AI non si perdono).
+      const esito = editDdt.id
+        ? await scritturaVerificata(supabase.from('ddt').update(payload).eq('id', editDdt.id).select('id'))
+        : await scritturaVerificata(supabase.from('ddt').insert(payload).select('id'))
+      if (!esito.ok) { showToast('⚠ DDT non salvato: ' + esito.errore); return }
+      showToast(editDdt.id ? '✓ DDT aggiornato' : '✓ DDT salvato')
       setForm(false); setEditDdt(null); setFSearch(''); carica()
     } finally { setSaving(false) }
   }
 
   const cambiaStato = async (ddt: DDT, stato: string) => {
-    await supabase.from('ddt').update({ stato }).eq('id', ddt.id)
+    const esito = await scritturaVerificata(supabase.from('ddt').update({ stato }).eq('id', ddt.id).select('id'))
+    if (!esito.ok) { showToast('⚠ Stato non aggiornato: ' + esito.errore); return }
     showToast(`DDT → ${stato}`); carica()
   }
 

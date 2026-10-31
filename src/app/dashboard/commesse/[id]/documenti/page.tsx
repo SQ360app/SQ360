@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { supabase } from '@/lib/supabase'
+import { scritturaVerificata } from '@/lib/scritture'
 const CATEGORIE = [
   { id: 'contratto', label: 'Contratto', icona: '📋' },
   { id: 'elaborati', label: 'Elaborati progettuali', icona: '📐' },
@@ -42,7 +43,7 @@ export default function DocumentiPage({ params: p }: { params: Promise<{ id: str
   const [newDoc, setNewDoc] = useState({ nome: '', categoria: 'contratto', note: '' })
   const [file, setFile] = useState<File | null>(null)
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), msg.startsWith('⚠') ? 7000 : 3000) }
 
   const carica = useCallback(async () => {
     setLoading(true)
@@ -73,7 +74,7 @@ export default function DocumentiPage({ params: p }: { params: Promise<{ id: str
       const { error: upErr } = await supabase.storage.from('documenti').upload(path, file)
       if (upErr) throw upErr
       const { data: urlData } = supabase.storage.from('documenti').getPublicUrl(path)
-      await supabase.from('documenti_commessa').insert({
+      { const esito = await scritturaVerificata(supabase.from('documenti_commessa').insert({
         commessa_id: id,
         nome: newDoc.nome.trim(),
         categoria: newDoc.categoria,
@@ -81,7 +82,7 @@ export default function DocumentiPage({ params: p }: { params: Promise<{ id: str
         tipo_mime: file.type,
         file_size: file.size,
         note: newDoc.note,
-      })
+      }).select('id')); if (!esito.ok) { showToast('⚠ Documento non caricato: ' + esito.errore); return } }
       showToast('Documento caricato')
       setForm(false)
       setFile(null)
@@ -97,7 +98,7 @@ export default function DocumentiPage({ params: p }: { params: Promise<{ id: str
   const elimina = async (doc: Documento) => {
     if (!window.confirm(`Eliminare il documento "${doc.nome}"?`)) return
     if (!window.confirm('Conferma definitiva: il documento verrà eliminato permanentemente.')) return
-    await supabase.from('documenti_commessa').delete().eq('id', doc.id)
+    { const esito = await scritturaVerificata(supabase.from('documenti_commessa').delete().eq('id', doc.id).select('id')); if (!esito.ok) { showToast('⚠ Documento non eliminato: ' + esito.errore); return } }
     showToast('Documento eliminato')
     carica()
   }

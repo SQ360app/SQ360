@@ -62,7 +62,7 @@ export default function OrdiniServizioPage({ params: pp }: { params: Promise<{ i
   async function load() {
     setLoading(true)
     const [{ data: os }, { data: v }, { data: comm }] = await Promise.all([
-      supabase.from('ordini_servizio').select('*').eq('commessa_id', id).order('numero'),
+      supabase.from('ordini_servizio').select('*, descrizione_estesa:descrizione').eq('commessa_id', id).order('numero'),
       supabase.from('varianti').select('id,numero,descrizione').eq('commessa_id', id).order('numero'),
       supabase.from('commesse').select('codice,nome,cig,cup').eq('id', id).single(),
     ])
@@ -110,7 +110,7 @@ export default function OrdiniServizioPage({ params: pp }: { params: Promise<{ i
     const { error } = await supabase.from('ordini_servizio').insert({
       commessa_id: id, azienda_id: aziendaId || null,
       numero, data_emissione: fData, oggetto: fOggetto.trim(),
-      tipo: fTipo, descrizione_estesa: fDesc || null,
+      tipo: fTipo, descrizione: fDesc || null,
       variante_id: fVarianteId || null, stato: 'emesso', riserva: false, note: fNote || null,
     })
     if (error) { setErr(error.message); setSaving(false); return }

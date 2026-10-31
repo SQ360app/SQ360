@@ -146,7 +146,7 @@ export default function ContrattiPage({ params: pp }: { params: Promise<{ id: st
       const ids = c.map((x: any) => x.id)
       const [{ data: docs }, { data: lavs }, { data: pags }] = await Promise.all([
         supabase.from('documenti_contratto_sub').select('*').in('contratto_sub_id', ids),
-        supabase.from('lavoratori_sub').select('*').in('contratto_sub_id', ids),
+        supabase.from('lavoratori_sub').select('*, cf:codice_fiscale, patente_punti:patente_crediti').in('contratto_sub_id', ids),
         supabase.from('pagamenti_sub').select('*').in('contratto_sub_id', ids).order('data_pagamento'),
       ])
       const dMap: Record<string, DocumentoSub[]> = {}
@@ -224,9 +224,9 @@ export default function ContrattiPage({ params: pp }: { params: Promise<{ id: st
     if (!fLNome.trim() || !fLCognome.trim()) return
     const aziendaId = await getAziendaId()
     await supabase.from('lavoratori_sub').insert({
-      contratto_sub_id: contrattoId, commessa_id: id, azienda_id: aziendaId || null,
-      nome: fLNome.trim(), cognome: fLCognome.trim(), cf: fLCF.trim(),
-      patente_punti: parseInt(fLPatente) || null,
+      contratto_sub_id: contrattoId, azienda_id: aziendaId || null,
+      nome: fLNome.trim(), cognome: fLCognome.trim(), codice_fiscale: fLCF.trim(),
+      patente_crediti: parseInt(fLPatente) || null,
     })
     setLavFormId(null); setFLNome(''); setFLCognome(''); setFLCF(''); setFLPatente('')
     await load()

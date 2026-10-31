@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { supabase, getAziendaId } from '@/lib/supabase'
 import { fetchConToken } from '@/lib/authFetch'
+import { scritturaVerificata } from '@/lib/scritture'
 
 // ─── Tipi documento ──────────────────────────────────────────────────────────
 
@@ -79,7 +80,8 @@ export default function SicurezzaPage({ params: p }: { params: Promise<{ id: str
   const [aiLoading, setAiLoading] = useState(false)
   const [toast, setToast] = useState('')
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
+  // Gli avvisi di errore restano visibili più a lungo
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), msg.startsWith('⚠') ? 7000 : 3000) }
 
   const inviaAlertEmail = async () => {
     const durcInScadenza = alertDocs.filter(d => d.tipo === 'DURC')
@@ -160,20 +162,20 @@ export default function SicurezzaPage({ params: p }: { params: Promise<{ id: str
         data_scadenza: editDoc.data_scadenza || null,
         note: editDoc.note || null,
       }
-      if (editDoc.id) {
-        await supabase.from('documenti_sicurezza').update(payload).eq('id', editDoc.id)
-        showToast('✓ Documento aggiornato')
-      } else {
-        await supabase.from('documenti_sicurezza').insert(payload)
-        showToast('✓ Documento salvato')
-      }
+      // Scrittura verificata: "salvato" solo se la riga è stata davvero scritta
+      const esito = editDoc.id
+        ? await scritturaVerificata(supabase.from('documenti_sicurezza').update(payload).eq('id', editDoc.id).select('id'))
+        : await scritturaVerificata(supabase.from('documenti_sicurezza').insert(payload).select('id'))
+      if (!esito.ok) { showToast('⚠ Documento non salvato: ' + esito.errore); return }
+      showToast(editDoc.id ? '✓ Documento aggiornato' : '✓ Documento salvato')
       setForm(false); setEditDoc(null); carica()
     } finally { setSaving(false) }
   }
 
   const elimina = async (doc: DocSicurezza) => {
     if (!window.confirm(`Eliminare "${doc.tipo}" di ${doc.soggetto || 'N/D'}?`)) return
-    await supabase.from('documenti_sicurezza').delete().eq('id', doc.id)
+    const esito = await scritturaVerificata(supabase.from('documenti_sicurezza').delete().eq('id', doc.id).select('id'))
+    if (!esito.ok) { showToast('⚠ Documento non eliminato: ' + esito.errore); return }
     showToast('Documento eliminato'); carica()
   }
 

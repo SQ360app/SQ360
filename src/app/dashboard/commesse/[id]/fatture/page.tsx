@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { supabase, getAziendaId } from '@/lib/supabase'
 import { fetchConToken } from '@/lib/authFetch'
+import { scritturaVerificata } from '@/lib/scritture'
 
 const fi = (n: number, d = 2) => n?.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? '—'
 
@@ -47,7 +48,8 @@ export default function FatturePage({ params: p }: { params: Promise<{ id: strin
   const [fSearch, setFSearch] = useState('')
   const [fResults, setFResults] = useState<Fornitore[]>([])
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
+  // Gli avvisi di errore restano visibili più a lungo
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), msg.startsWith('⚠') ? 7000 : 3000) }
 
   const carica = useCallback(async () => {
     setLoading(true)
@@ -138,19 +140,19 @@ export default function FatturePage({ params: p }: { params: Promise<{ id: strin
         stato: editFattura.stato || 'ricevuta',
         note: editFattura.note || '',
       }
-      if (editFattura.id) {
-        await supabase.from('fatture_passive').update(payload).eq('id', editFattura.id)
-        showToast('Fattura aggiornata')
-      } else {
-        await supabase.from('fatture_passive').insert(payload)
-        showToast('✓ Fattura registrata')
-      }
+      // Scrittura verificata: "registrata" solo se la riga è stata davvero scritta
+      const esito = editFattura.id
+        ? await scritturaVerificata(supabase.from('fatture_passive').update(payload).eq('id', editFattura.id).select('id'))
+        : await scritturaVerificata(supabase.from('fatture_passive').insert(payload).select('id'))
+      if (!esito.ok) { showToast('⚠ Fattura non salvata: ' + esito.errore); return }
+      showToast(editFattura.id ? '✓ Fattura aggiornata' : '✓ Fattura registrata')
       setForm(false); setEditFattura(null); setFSearch(''); carica()
     } finally { setSaving(false) }
   }
 
   const cambiaStato = async (f: Fattura, stato: string) => {
-    await supabase.from('fatture_passive').update({ stato }).eq('id', f.id)
+    const esito = await scritturaVerificata(supabase.from('fatture_passive').update({ stato }).eq('id', f.id).select('id'))
+    if (!esito.ok) { showToast('⚠ Stato non aggiornato: ' + esito.errore); return }
     showToast(`Fattura → ${stato}`); carica()
   }
 

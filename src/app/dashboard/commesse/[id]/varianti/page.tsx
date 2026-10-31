@@ -1,6 +1,7 @@
 'use client'
 import React, { useState, useEffect, use } from 'react'
 import { supabase, getAziendaId } from '@/lib/supabase'
+import { scritturaVerificata } from '@/lib/scritture'
 import { Plus, ChevronDown, ChevronRight, Loader2, AlertTriangle } from 'lucide-react'
 
 const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -128,7 +129,7 @@ export default function VariantiPage({ params: pp }: { params: Promise<{ id: str
       setImportoContratto(nuovoImporto)
       await supabase.from('voci_computo').update({ visibile_in_computo: true }).eq('variante_id', varianteId)
     }
-    await supabase.from('varianti').update(updates).eq('id', varianteId)
+    { const esito = await scritturaVerificata(supabase.from('varianti').update(updates).eq('id', varianteId).select('id')); if (!esito.ok) { alert('⚠ Variante non aggiornata: ' + esito.errore); return } }
     await load()
   }
 
@@ -136,20 +137,20 @@ export default function VariantiPage({ params: pp }: { params: Promise<{ id: str
     if (!fvDesc.trim()) return
     const qta = parseFloat(fvQta) || 0
     const pu  = parseFloat(fvPu)  || 0
-    await supabase.from('voci_variante').insert({
+    { const esito = await scritturaVerificata(supabase.from('voci_variante').insert({
       variante_id: varianteId, commessa_id: id,
       codice: fvCodice || null, descrizione: fvDesc.trim(),
       um: fvUm || null, quantita_variante: qta, prezzo_unitario: pu,
       importo: Math.round(qta * pu * 100) / 100,
       tipo_modifica: fvTipo,
-    })
+    }).select('id')); if (!esito.ok) { alert('⚠ Voce variante non salvata: ' + esito.errore); return } }
     setVoceFormId(null)
     setFvCodice(''); setFvDesc(''); setFvUm(''); setFvQta(''); setFvPu('')
     await load()
   }
 
   async function eliminaVoce(voceId: string) {
-    await supabase.from('voci_variante').delete().eq('id', voceId)
+    { const esito = await scritturaVerificata(supabase.from('voci_variante').delete().eq('id', voceId).select('id')); if (!esito.ok) { alert('⚠ Voce variante non eliminata: ' + esito.errore); return } }
     await load()
   }
 
