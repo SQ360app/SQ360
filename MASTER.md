@@ -4,7 +4,6 @@
 > Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: `79e24bc` (contatti AI import + alert scadenze)
 >
 > Fonti: `CLAUDE.md` (storico sessioni), `DEPLOY.md`, struttura `src/app`.
-> ⚠️ `sq360-prompts.md` e `TEST_CHECKLIST.md` **non presenti nel repo** al momento della creazione — le sezioni che ne dipendono sono da completare.
 
 Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 🚧 parziale · 📋 non iniziato
 
@@ -299,3 +298,4 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 | Data | Commit | Modifica |
 |---|---|---|
 | 2026-10-31 | — | Creazione iniziale da CLAUDE.md + DEPLOY.md + struttura codice |
+| 2026-10-31 | `ebc47e1` | Completate sezione 5 (stato 16 prompt da `sq360-prompts.md`) e sezione 6 (test checklist da `TEST_CHECKLIST.md`); aggiunti i due file al repo |
