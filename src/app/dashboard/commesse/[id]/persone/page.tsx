@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, getAziendaId } from '@/lib/supabase'
+import { scritturaVerificata } from '@/lib/scritture'
 
 // ─── Tipi ────────────────────────────────────────────────────────────────────
 
@@ -247,7 +248,8 @@ export default function PersonePage({ params: p }: { params: Promise<{ id: strin
   const [toast, setToast] = useState('')
   const [formPresenza, setFormPresenza] = useState<{ lavoratoreId: string; ora_entrata: string; ora_uscita: string; note: string } | null>(null)
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
+  // Gli avvisi di errore restano visibili 7 secondi
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), msg.startsWith('⚠') ? 7000 : 3000) }
 
   const carica = useCallback(async () => {
     setLoading(true)
@@ -284,13 +286,12 @@ export default function PersonePage({ params: p }: { params: Promise<{ id: strin
         patente_crediti_punti: editLav.patente_crediti_punti ?? 30,
         attivo: editLav.attivo !== false,
       }
-      if (editLav.id) {
-        await supabase.from('lavoratori_commessa').update(payload).eq('id', editLav.id)
-        showToast('✓ Lavoratore aggiornato')
-      } else {
-        await supabase.from('lavoratori_commessa').insert(payload)
-        showToast('✓ Lavoratore aggiunto')
-      }
+      // Scrittura verificata: in caso di errore il modulo resta aperto con il motivo
+      const esito = editLav.id
+        ? await scritturaVerificata(supabase.from('lavoratori_commessa').update(payload).eq('id', editLav.id).select('id'))
+        : await scritturaVerificata(supabase.from('lavoratori_commessa').insert(payload).select('id'))
+      if (!esito.ok) { showToast('⚠ Lavoratore non salvato: ' + esito.errore); return }
+      showToast(editLav.id ? '✓ Lavoratore aggiornato' : '✓ Lavoratore aggiunto')
       setForm(false); setEditLav(null); carica()
     } finally { setSaving(false) }
   }
@@ -299,7 +300,7 @@ export default function PersonePage({ params: p }: { params: Promise<{ id: strin
 
   const salvaPresenza = async () => {
     if (!formPresenza?.lavoratoreId) return
-    await supabase.from('presenze_cantiere').insert({
+    const esito = await scritturaVerificata(supabase.from('presenze_cantiere').insert({
       lavoratore_id: formPresenza.lavoratoreId,
       commessa_id: id,
       data: dataPresenze,
@@ -307,13 +308,16 @@ export default function PersonePage({ params: p }: { params: Promise<{ id: strin
       ora_uscita: formPresenza.ora_uscita || null,
       tipo: 'manuale',
       note: formPresenza.note || null,
-    })
+    }).select('id'))
+    // In caso di errore il modulo presenza resta aperto con il motivo
+    if (!esito.ok) { showToast('⚠ Presenza non registrata: ' + esito.errore); return }
     setFormPresenza(null); showToast('✓ Presenza registrata'); carica()
   }
 
   const eliminaLavoratore = async (l: Lavoratore) => {
     if (!window.confirm(`Rimuovere ${l.nome} ${l.cognome} dalla commessa?`)) return
-    await supabase.from('lavoratori_commessa').update({ attivo: false }).eq('id', l.id)
+    const esito = await scritturaVerificata(supabase.from('lavoratori_commessa').update({ attivo: false }).eq('id', l.id).select('id'))
+    if (!esito.ok) { showToast('⚠ Lavoratore non disattivato: ' + esito.errore); return }
     showToast('Lavoratore disattivato'); carica()
   }
 

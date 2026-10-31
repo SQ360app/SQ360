@@ -1,7 +1,7 @@
 # SQ360 — MASTER
 
 > Documento di stato unico del progetto. **Va aggiornato ad ogni commit.**
-> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: archiviazione commesse (successivo a `db5a284`)
+> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: persone con scritture verificate (successivo a `f007deb`)
 >
 > Fonti: `CLAUDE.md` (storico sessioni), `DEPLOY.md`, struttura `src/app`.
 
@@ -55,7 +55,7 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 | | contratti (sub) | ⚠️ | Checklist 7 doc / lavoratori / pagamenti — **tabelle Sprint 6 da creare** |
 | | assegnazione | ✅ | Fix `professionisti_fornitori` |
 | Cantiere 🏗️ | cantiere (giornale) | ✅ | |
-| | persone | ✅ | QR badge, scanner PWA, presenze, coda offline |
+| | persone | ⚠️ | QR badge, scanner PWA, presenze, coda offline. Scritture verificate (lavoratore, presenza, disattivazione, scanner e coda offline). **Inserimento lavoratore rifiutato dal DB** (colonne corrette, tabella vuota): probabile regola RLS (`mia_azienda_id()` = NULL) → in attesa della diagnosi |
 | | sicurezza | ✅ | 24 tipologie AI Gemini |
 | | ddt | ✅ | AI Gemini Vision, paginazione |
 | Economico 💰 | sal-attivi (+ SalGrid) | ⚠️ | Completo; righe di misura reali (read-only) al posto del nome categoria; **SQL `sal.pdf_*_url` da eseguire** |
@@ -148,6 +148,7 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 - [x] Archiviazione commesse: `ALTER TABLE commesse ADD archiviata_at, archiviata_da` + indice parziale — eseguita il 31/10/2026
 - [ ] Valutare `REVOKE DELETE ON commesse FROM authenticated` (cancellazione fisica solo da server) — rimandato
 - [ ] Pagine globali ancora senza filtro archiviate: scadenzario, report, marginalità, SAL, contratti, SAM globale (mostrano dati anche di commesse archiviate)
+- [ ] Diagnosi Persone: regole RLS e vincoli CHECK di `lavoratori_commessa` / `presenze_cantiere` + definizione `mia_azienda_id()` (query di sola lettura fornita il 31/10/2026) → poi SQL di correzione delle regole
 - [ ] Sicurezza passo 0: fotografia RLS/regole/funzioni/permessi (query di sola lettura) — necessaria per i passi 4–8 (regole per azienda con `get_azienda_id()`, tabelle figlie, `aziende`/`mia_azienda_id`, bucket `documenti` privato)
 - [x] `supabase/migrations/20261031_allineamento_schema.sql` — **eseguita il 31/10/2026** (colonne mancanti su fatture_passive/oda/documenti_commessa/gare/varianti/voci_variante/sal_passivi/contratti_sub/azienda/wbs_nodes, enum `stato_gara`, FK verso `professionisti_fornitori`)
 - [ ] Regola RLS **UPDATE su `azienda`** limitata alla propria azienda (oggi solo SELECT → Impostazioni non può salvare dati azienda, email, logo/carta intestata; la pagina ora lo segnala)
@@ -196,6 +197,7 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 - **Sicurezza RLS da verificare tabella per tabella**: con la sola chiave anon (pubblica, senza login) è stato possibile leggere righe di `computo_metrico` → alcune policy sono aperte al ruolo anon. Contraddice "multi-tenant completamente sicura".
 - Reimport XPWE: le voci vengono ricreate con nuovi UUID → i riferimenti esterni alle voci vecchie (`rda.voci_ids`, `sal_voci`, `analisi_extra_voce`) non vengono riallineati.
 - `/api/xpwe-parse-sal` non è chiamata da nessuna pagina (codice non usato).
+- **Limite di `check-scritture.mjs`**: controlla lo schema (colonne, obbligatori, enum), non regole RLS, vincoli CHECK o permessi (non visibili via API) → questi errori emergono solo a runtime, ora sempre mostrati da `scritturaVerificata`; per intercettarli prima serve un test di scrittura su un progetto di prova.
 - `voci_computo_misurazioni.is_parziale`: colonna non valorizzata dall'import (nessun flag corrispondente individuato nel file di esempio).
 - Riferimento "vedi voce" salvato come testo in `formula` (non esiste colonna con l'ID XPWE della voce): se la voce collegata cambia, il testo non si aggiorna.
 - Roadmap 43–46 (registro contabilità, export ZIP strutturato, KB AI edile, billing Stripe).
@@ -364,4 +366,5 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 | 2026-10-31 | `4e66fbd` | Gemini: `gemini-2.0-flash` (spento) e `gemini-1.5-flash` sostituiti da `src/lib/gemini.ts` (GEMINI_MODEL, predefinito `gemini-3.8-flash`, riserva `gemini-3.6-flash`, timeout, messaggi chiari) in ai-ddt, ai-fattura, ai-sicurezza, ai-estrai, rdo-extract-offerta; pagine mostrano `errore`/`error` leggibili; DEPLOY.md con le nuove variabili |
 | 2026-10-31 | `4fc31c2` | Scritture verificate: helper `src/lib/scritture.ts`, script `scripts/check-scritture.mjs`; DDT salva davvero (errore mostrato, modulo aperto); helper su fatture passive, sicurezza, SAM, documenti, RDA, RDO, SAL, varianti, ODA, gare; correzioni colonne ovvie (rdo senza `wbs_id`, `lavoratori_sub.codice_fiscale/patente_crediti`, `ordini_servizio.descrizione`, `computo_metrico.note`) |
 | 2026-10-31 | `db5a284` | Migrazione `20261031b_allineamento_salvataggi.sql` (eseguita); SAM su stati testo canonici (`statiSam.ts`, pagina globale e commessa allineate); giornale lavori, documenti/pagamenti subappalto, fatture attive adeguati alle colonne reali senza perdere funzioni; scritture verificate su queste pagine; check-scritture a 0 problemi |
-| 2026-10-31 | (questo commit) | Commesse archiviate al posto dell'eliminazione: layout "Archivia commessa" (conferma esplicativa, errore visibile, badge se archiviata), lista con filtro "Archiviate" + "Ripristina", dashboard e mappa filtrate (KPI, ODA, fatture, DDT, documenti, contratti sub, scadenze, v_commesse_kpi) con `src/lib/commesse.ts` |
+| 2026-10-31 | `f007deb` | Commesse archiviate al posto dell'eliminazione: layout "Archivia commessa" (conferma esplicativa, errore visibile, badge se archiviata), lista con filtro "Archiviate" + "Ripristina", dashboard e mappa filtrate (KPI, ODA, fatture, DDT, documenti, contratti sub, scadenze, v_commesse_kpi) con `src/lib/commesse.ts` |
+| 2026-10-31 | (questo commit) | Persone: salvataggio lavoratore, presenza manuale e disattivazione verificati (modulo aperto, "⚠ … non salvato/registrata: motivo", avvisi 7 s); scanner presenze: entrata/uscita verificate e coda offline che non perde più le presenze rifiutate dal DB |

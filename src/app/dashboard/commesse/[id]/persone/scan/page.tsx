@@ -1,6 +1,7 @@
 'use client'
 
 import { supabase } from '@/lib/supabase'
+import { scritturaVerificata } from '@/lib/scritture'
 
 import React, { useState, useEffect, useRef, useCallback, use } from 'react'
 import { useRouter } from 'next/navigation'
@@ -116,6 +117,9 @@ export default function ScanPage({ params: p }: { params: Promise<{ id: string }
   const [presenzaOggi, setPresenza] = useState<Presenza | null>(null)
   const [done, setDone]           = useState<'entrata' | 'uscita' | null>(null)
   const [saving, setSaving]       = useState(false)
+  const [errore, setErrore]       = useState('')
+  // Errori visibili 7 secondi
+  const mostraErrore = (m: string) => { setErrore(m); setTimeout(() => setErrore(''), 7000) }
   const [queueLen, setQueueLen]   = useState(0)
   const [online, setOnline]       = useState(true)
   const [torchOn, setTorchOn]     = useState(false)
@@ -127,29 +131,26 @@ export default function ScanPage({ params: p }: { params: Promise<{ id: string }
     const q = loadQueue()
     if (q.length === 0) return
     const remaining: OfflineJob[] = []
+    let ultimoErrore = ''
     for (const job of q) {
-      try {
-        if (job.action === 'entrata') {
-          await supabase.from('presenze_cantiere').insert({
+      // Supabase non lancia eccezioni: il job resta in coda finché la scrittura
+      // non è verificata (prima un rifiuto del DB faceva perdere la presenza)
+      const esito = job.action === 'entrata'
+        ? await scritturaVerificata(supabase.from('presenze_cantiere').insert({
             lavoratore_id: job.lavoratore_id, commessa_id: job.commessa_id,
             data: job.data, ora_entrata: job.ora_entrata, tipo: 'qr_scan_offline',
-          })
-        } else {
-          if (job.presenza_id) {
-            await supabase.from('presenze_cantiere').update({ ora_uscita: job.ora_uscita }).eq('id', job.presenza_id)
-          } else {
-            await supabase.from('presenze_cantiere').insert({
+          }).select('id'))
+        : job.presenza_id
+          ? await scritturaVerificata(supabase.from('presenze_cantiere').update({ ora_uscita: job.ora_uscita }).eq('id', job.presenza_id).select('id'))
+          : await scritturaVerificata(supabase.from('presenze_cantiere').insert({
               lavoratore_id: job.lavoratore_id, commessa_id: job.commessa_id,
               data: job.data, ora_uscita: job.ora_uscita, tipo: 'qr_scan_offline',
-            })
-          }
-        }
-      } catch {
-        remaining.push(job)
-      }
+            }).select('id'))
+      if (!esito.ok) { remaining.push(job); ultimoErrore = esito.errore || '' }
     }
     saveQueue(remaining)
     setQueueLen(remaining.length)
+    if (ultimoErrore) mostraErrore(`⚠ ${remaining.length} presenze offline non sincronizzate: ${ultimoErrore}`)
   }, [])
 
   useEffect(() => {
@@ -259,10 +260,11 @@ export default function ScanPage({ params: p }: { params: Promise<{ id: string }
     setSaving(true)
     const oraStr = ora()
     if (navigator.onLine) {
-      await supabase.from('presenze_cantiere').insert({
+      const esito = await scritturaVerificata(supabase.from('presenze_cantiere').insert({
         lavoratore_id: lav.id, commessa_id: lav.commessa_id,
         data: oggi(), ora_entrata: oraStr, tipo: 'qr_scan',
-      })
+      }).select('id'))
+      if (!esito.ok) { setSaving(false); mostraErrore('⚠ Presenza non registrata: ' + esito.errore); return }
     } else {
       const q = loadQueue()
       q.push({ id: crypto.randomUUID(), lavoratore_id: lav.id, commessa_id: lav.commessa_id, data: oggi(), ora_entrata: oraStr, tipo: 'qr_scan', action: 'entrata', ts: Date.now() })
@@ -277,14 +279,13 @@ export default function ScanPage({ params: p }: { params: Promise<{ id: string }
     setSaving(true)
     const oraStr = ora()
     if (navigator.onLine) {
-      if (presenzaOggi?.id) {
-        await supabase.from('presenze_cantiere').update({ ora_uscita: oraStr }).eq('id', presenzaOggi.id)
-      } else {
-        await supabase.from('presenze_cantiere').insert({
-          lavoratore_id: lav.id, commessa_id: lav.commessa_id,
-          data: oggi(), ora_uscita: oraStr, tipo: 'qr_scan',
-        })
-      }
+      const esito = presenzaOggi?.id
+        ? await scritturaVerificata(supabase.from('presenze_cantiere').update({ ora_uscita: oraStr }).eq('id', presenzaOggi.id).select('id'))
+        : await scritturaVerificata(supabase.from('presenze_cantiere').insert({
+            lavoratore_id: lav.id, commessa_id: lav.commessa_id,
+            data: oggi(), ora_uscita: oraStr, tipo: 'qr_scan',
+          }).select('id'))
+      if (!esito.ok) { setSaving(false); mostraErrore('⚠ Presenza non registrata: ' + esito.errore); return }
     } else {
       const q = loadQueue()
       q.push({ id: crypto.randomUUID(), lavoratore_id: lav.id, commessa_id: lav.commessa_id, data: oggi(), ora_uscita: oraStr, tipo: 'qr_scan', action: 'uscita', presenza_id: presenzaOggi?.id, ts: Date.now() })
@@ -386,6 +387,11 @@ export default function ScanPage({ params: p }: { params: Promise<{ id: string }
       )}
 
       {/* ── Modalità: RESULT ── */}
+      {errore && mode !== 'result' && (
+        <div style={{ position: 'fixed', top: 12, left: 12, right: 12, zIndex: 50, background: '#7f1d1d', borderRadius: 12, padding: '12px 16px', textAlign: 'center' }}>
+          <p style={{ color: '#fecaca', fontWeight: 700, fontSize: 14, margin: 0 }}>{errore}</p>
+        </div>
+      )}
       {mode === 'result' && lav && (
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 0 20px' }}>
 
@@ -426,6 +432,11 @@ export default function ScanPage({ params: p }: { params: Promise<{ id: string }
             </div>
 
             {/* Feedback azione */}
+            {errore && (
+              <div style={{ background: '#7f1d1d', borderRadius: 12, padding: '12px 16px', textAlign: 'center', marginBottom: 8 }}>
+                <p style={{ color: '#fecaca', fontWeight: 700, fontSize: 14, margin: 0 }}>{errore}</p>
+              </div>
+            )}
             {done && (
               <div style={{ background: done === 'entrata' ? '#14532d' : '#1e3a5f', borderRadius: 12, padding: '12px 16px', textAlign: 'center' }}>
                 <p style={{ color: done === 'entrata' ? '#4ade80' : '#60a5fa', fontWeight: 800, fontSize: 16, margin: 0 }}>
