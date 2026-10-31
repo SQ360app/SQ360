@@ -46,3 +46,7 @@ public/worker-*.js
 public/worker-*.js.map
 public/fallback-*.js
 public/fallback-*.js.map
+
+# Smoke test (contengono dati reali)
+scripts/smoke-screenshots/
+scripts/report-smoke.md

@@ -1,7 +1,7 @@
 # SQ360 — MASTER
 
 > Documento di stato unico del progetto. **Va aggiornato ad ogni commit.**
-> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: route XPWE con token utente (successivo a `d3ece43`)
+> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: smoke test Playwright (successivo a `e03ee42`, solo locale)
 >
 > Fonti: `CLAUDE.md` (storico sessioni), `DEPLOY.md`, struttura `src/app`.
 
@@ -24,6 +24,7 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 | PDF @react-pdf (ODA, SAM, SAL, OS, Contratto Sub, RDO, Verbale consegna, NP) | ✅ | Carta intestata > logo > testo; bucket `aziende-assets` **da creare** |
 | PWA (sw.js, manifest, banner, icone edge) | ⚠️ | Da verificare in DevTools + Lighthouse |
 | Impostazioni azienda (logo, carta intestata, WBS template) | ⚠️ | Dipende da SQL `aziende` + `wbs_templates` |
+| Smoke test `scripts/smoke-test.mjs` (Playwright) | ✅ | Sola lettura (scritture bloccate a livello di rete), 44 pagine, report `scripts/report-smoke.md` + screenshot (esclusi da git); credenziali `SMOKE_EMAIL`/`SMOKE_PASSWORD` solo in `.env.local`. Uso: `node scripts/smoke-test.mjs` |
 
 ### 1.2 Area dashboard (`src/app/dashboard/*`)
 | Modulo | Stato | Note |
@@ -143,7 +144,17 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 - [ ] Verifica PWA (service worker attivo, Lighthouse)
 - [ ] Test end-to-end register → conferma email → primo login
 
-### 4.3 Debito tecnico / idee aperte
+### 4.3 Esito smoke test 31/10/2026 (produzione, utente di prova admin)
+1 pagina rotta, 22 con avvisi, 21 ok su 44. Dettaglio in `scripts/report-smoke.md` (locale).
+- ✗ **`/dashboard/sal` rotta**: crash client `Cannot read properties of undefined (reading 'color')`.
+- **Schema DB non allineato al codice** (errori 400/404 PostgREST, le pagine si aprono ma mostrano dati parziali):
+  - colonne mancanti: `fatture_passive.importo_totale/numero/totale`, `ddt.numero/fornitore_nome`, `oda.numero`, `documenti_commessa.categoria`, `gare.codice_gara`, `varianti.descrizione`, `voci_variante.commessa_id`, `sal_passivi.contratto_sub_id/ritenuta_importo`, `sal_attivi.stato`, `wbs_nodes.descrizione`, `wbs_commessa.etichetta`, `wbs_templates.template_id`, `wbs_template.parent_id`, `azienda.carta_intestata_header_url`, `utenti.moduli_abilitati`
+  - relazioni FK mancanti verso `professionisti_fornitori` da `oda`, `contratti_sub`, `fatture_passive`
+  - tabella `piano_costi_voce` non esiste più ma `conto-economico` la interroga
+  - `aziende … .single()` → 406 (0 o più righe visibili all'utente)
+- **Impostazioni scrive all'apertura**: POST su `wbs_templates` partito senza clic (bloccato dallo smoke test).
+
+### 4.4 Debito tecnico / idee aperte
 - Auth solo client-side: `middleware.ts` vuoto — valutare protezione server-side delle route.
 - Tabella `piano_costi_voce` e tabelle WBS legacy (`wbs_commessa`, `wbs_template`) ancora in DB: pianificare migrazione/rimozione.
 - Checklist offerta gare in `localStorage`: non condivisa tra utenti/dispositivi — valutare persistenza in DB.
@@ -309,4 +320,5 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 | 2026-10-31 | `7ee7dff` | Rimossa nota "file non presenti nel repo"; aggiunta riga changelog per `ebc47e1` |
 | 2026-10-31 | `18e1550` | Fix import misurazioni XPWE (parser `PweVCMisure/RGItem`, schema reale tabella, formule, deduzioni, vedi voce, errore bloccante su INSERT); computo e SAL Attivi mostrano la descrizione della riga invece della categoria |
 | 2026-10-31 | `d3ece43` | Fix build Vercel: committata `getCurrentUserModuli()` in `src/lib/supabase.ts` (usata da Sidebar e layout commessa, era rimasta fuori dai commit); rimosso il relativo debito tecnico |
-| 2026-10-31 | (questo commit) | `/api/xpwe-parse` e `/api/xpwe-parse-sal` con client Supabase sul token dell'utente (`getUserClient`, 401 se token mancante/scaduto) — risolve l'INSERT misurazioni bloccato dalle RLS e toglie la service role da xpwe-parse-sal; pagine Computo e SAL Attivi inviano il Bearer token; reimport con cancellazioni verificate prima degli insert (niente duplicati) |
+| 2026-10-31 | `e03ee42` | `/api/xpwe-parse` e `/api/xpwe-parse-sal` con client Supabase sul token dell'utente (`getUserClient`, 401 se token mancante/scaduto) — risolve l'INSERT misurazioni bloccato dalle RLS e toglie la service role da xpwe-parse-sal; pagine Computo e SAL Attivi inviano il Bearer token; reimport con cancellazioni verificate prima degli insert (niente duplicati) |
+| 2026-10-31 | (questo commit) | Smoke test Playwright in sola lettura (`scripts/smoke-test.mjs`, `playwright` devDependency, output esclusi da git); esito in §4.3 |
