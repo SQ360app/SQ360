@@ -196,13 +196,13 @@ export default function GarePage() {
       const testo = await file.text()
       setAiStatus('AI estrae i dati dal bando...')
       const res  = await fetchConToken('/api/ai-estrai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ testo: testo.slice(0,8000), tipo: 'gara' }) })
-      const json = await res.json() as { ok: boolean; dati?: Record<string,string> }
+      const json = await res.json() as { ok: boolean; dati?: Record<string,string>; errore?: string; error?: string }
       if (json.ok && json.dati) {
         const d = json.dati
         const codice = generaCodiceGara(new Date().getFullYear(), gare.length + 1)
         setForm(p => ({ ...p, codice_gara: codice, nome: d.nome||p.nome, committente: d.committente||p.committente, cig: d.cig||p.cig, cup: d.cup||p.cup, importo_base: parseFloat(d.importo_base||'0')||p.importo_base, categoria_prevalente: d.categoria_prevalente||p.categoria_prevalente, provincia: d.provincia||p.provincia, tipo_committente: d.tipo_committente||p.tipo_committente, data_scadenza: d.data_scadenza||p.data_scadenza, criterio_aggiudicazione: d.criterio_aggiudicazione||p.criterio_aggiudicazione, note: d.note||p.note }))
         setAiStatus('✅ Dati estratti — verifica e modifica il codice gara se necessario')
-      } else { setAiStatus('⚠️ Estrazione parziale — integra i dati mancanti') }
+      } else { setAiStatus('⚠️ ' + (json.errore || json.error || 'Estrazione parziale — integra i dati mancanti')) }
     } catch { setAiStatus('❌ Errore — inserisci i dati manualmente') }
     setStep('FORM')
   }

@@ -102,7 +102,7 @@ export default function DDTPage({ params: p }: { params: Promise<{ id: string }>
         setForm(true)
         showToast('✓ DDT estratto con AI — verifica i dati')
       } else {
-        showToast('⚠ ' + (json.errore || 'Errore estrazione AI'))
+        showToast('⚠ ' + (json.errore || json.error || 'Errore estrazione AI'))
       }
     } catch { showToast('⚠ Errore di rete') }
     finally { setAiLoading(false) }

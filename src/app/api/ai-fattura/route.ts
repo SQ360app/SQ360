@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserClient } from '@/lib/supabaseServer'
+import { chiamaGemini, estraiJson } from '@/lib/gemini'
+
+// Analisi AI: fino a 60 s (limite Vercel); i tempi dei tentativi sono in src/lib/gemini.ts
+export const maxDuration = 60
 
 export const runtime = 'nodejs'
 
@@ -12,9 +16,6 @@ export async function POST(req: NextRequest) {
     const fd = await req.formData()
     const file = fd.get('file') as File | null
     if (!file) return NextResponse.json({ ok: false, errore: 'Nessun file allegato' })
-
-    const geminiKey = process.env.GEMINI_API_KEY
-    if (!geminiKey) return NextResponse.json({ ok: false, errore: 'GEMINI_API_KEY mancante' })
 
     const buf = await file.arrayBuffer()
     const b64 = Buffer.from(buf).toString('base64')
@@ -32,22 +33,14 @@ Regole:
 - data_scadenza: calcola se non esplicita (es. 30gg da data fattura)
 - Se un campo non è leggibile: lascia il valore default`
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: b64 } }] }],
-        generationConfig: { temperature: 0.1, responseMimeType: 'application/json' },
-      }),
-    })
-    if (!res.ok) throw new Error(`Gemini ${res.status}: ${await res.text()}`)
-    const data = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-    const match = raw.match(/\{[\s\S]*\}/)
-    if (!match) throw new Error('JSON non trovato nella risposta AI')
-    return NextResponse.json({ ok: true, dati: JSON.parse(match[0]) })
+    // Modello e chiamata centralizzati in src/lib/gemini.ts (GEMINI_MODEL)
+    const esito = await chiamaGemini({ prompt, file: { mimeType, base64: b64 } })
+    if (!esito.ok) return NextResponse.json({ ok: false, errore: esito.errore })
+    const dati = estraiJson(esito.testo)
+    if (!dati) return NextResponse.json({ ok: false, errore: 'L’AI non ha restituito dati leggibili: riprova con un file più nitido.' })
+    return NextResponse.json({ ok: true, dati })
   } catch (err) {
-    return NextResponse.json({ ok: false, errore: String(err) })
+    console.error('Errore analisi AI:', err)
+    return NextResponse.json({ ok: false, errore: 'Errore durante l’analisi AI: riprova.' })
   }
 }

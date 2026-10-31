@@ -17,6 +17,9 @@ se l'indirizzo non è nella lista, Supabase rimanda al Site URL.
 
 ## AI
 GEMINI_API_KEY=                   (Google AI Studio)
+GEMINI_MODEL=gemini-3.8-flash     (opzionale: modello Gemini; predefinito gemini-3.8-flash)
+GEMINI_MODEL_RISERVA=gemini-3.6-flash  (opzionale: riserva se il principale è sovraccarico/non disponibile; vuota = nessuna riserva)
+                                  I modelli disponibili: https://ai.google.dev/gemini-api/docs/models
 
 ## Email (Resend)
 RESEND_API_KEY=                   (Resend → API Keys)

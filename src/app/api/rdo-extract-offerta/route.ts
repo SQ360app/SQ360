@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserClient } from '@/lib/supabaseServer'
+import { chiamaGemini, estraiJson } from '@/lib/gemini'
+
+// Analisi AI: fino a 60 s (limite Vercel); i tempi dei tentativi sono in src/lib/gemini.ts
+export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
   // Solo utenti collegati: evita uso anonimo (e costi AI) della route
@@ -54,44 +58,14 @@ Restituisci SOLO JSON valido senza markdown, senza \`\`\`, con questa struttura 
   "note": "..."
 }`
 
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: prompt },
-              { inline_data: { mime_type: 'application/pdf', data: base64 } }
-            ]
-          }],
-          generationConfig: { temperature: 0.1 }
-        })
-      }
-    )
-
-    if (!geminiRes.ok) {
-      const err = await geminiRes.text()
-      return NextResponse.json({ ok: false, error: 'Gemini error: ' + err }, { status: 500 })
-    }
-
-    const geminiJson = await geminiRes.json()
-    const rawText: string = geminiJson.candidates?.[0]?.content?.parts?.[0]?.text || '{}'
-
-    let data: any
-    try {
-      const clean = rawText
-        .replace(/```json\s*/gi, '')
-        .replace(/```\s*/gi, '')
-        .trim()
-      data = JSON.parse(clean)
-    } catch {
-      data = { error: 'Parsing fallito', raw: rawText.slice(0, 500) }
-    }
+    // Modello e chiamata centralizzati in src/lib/gemini.ts (GEMINI_MODEL)
+    const esito = await chiamaGemini({ prompt, file: { mimeType: 'application/pdf', base64 } })
+    if (!esito.ok) return NextResponse.json({ ok: false, error: esito.errore }, { status: esito.status === 404 ? 503 : 502 })
+    const data: any = estraiJson(esito.testo) ?? { error: 'Parsing fallito', raw: esito.testo.slice(0, 500) } // eslint-disable-line @typescript-eslint/no-explicit-any
 
     return NextResponse.json({ ok: true, rdo_id, data })
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e.message }, { status: 500 })
+    console.error('rdo-extract-offerta:', e)
+    return NextResponse.json({ ok: false, error: 'Errore durante l’analisi AI del preventivo: riprova.' }, { status: 500 })
   }
 }

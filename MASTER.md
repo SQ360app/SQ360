@@ -1,7 +1,7 @@
 # SQ360 — MASTER
 
 > Documento di stato unico del progetto. **Va aggiornato ad ogni commit.**
-> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: sicurezza passo 3 (successivo a `c958331`)
+> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: Gemini aggiornato (successivo a `676ffef`)
 >
 > Fonti: `CLAUDE.md` (storico sessioni), `DEPLOY.md`, struttura `src/app`.
 
@@ -81,7 +81,8 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 
 ## 2. Decisioni architetturali
 
-- **Stack**: Next.js 15 (App Router) + Supabase + Vercel. AI principale Gemini 2.0 Flash (server-side, `GEMINI_API_KEY`); eccezione: AI import fornitore su Claude Haiku.
+- **Stack**: Next.js 15 (App Router) + Supabase + Vercel. AI principale Gemini (server-side, `GEMINI_API_KEY`); eccezione: import contratto/fornitore/progettista su Claude.
+- **Gemini in un solo punto** (`src/lib/gemini.ts`): modello = `GEMINI_MODEL` (predefinito `gemini-3.8-flash`, il 2.0 Flash è stato spento da Google); riserva `GEMINI_MODEL_RISERVA` (predefinito `gemini-3.6-flash`) usata una volta se il principale risponde 503 (sovraccarico), 404 (non più disponibile) o va in timeout; timeout 22 s + 33 s, route AI con `maxDuration = 60`; messaggi d'errore leggibili (mai JSON grezzo); risposta letta escludendo le parti di "ragionamento". Formato `generateContent` (inline_data base64, `responseMimeType: application/json`, `?key=`) verificato sulla documentazione ufficiale il 31/10/2026.
 - **Supabase client tipato `any`** (`src/lib/supabase.ts`): nessun tipo generato; evita TS2769 su build Vercel. Nelle route API: `const db = client as any`.
 - **Pagine pubbliche (`/offerta/[token]`, `/scan/[token]`) senza accesso diretto al DB**: passano da `/api/offerta/[token]` e `/api/scan/[token]`, che con la service role (`getAdminClient`) usano solo la riga del token (UUID) e restituiscono solo i campi necessari; importi offerta ricalcolati dal server, data/ora presenze del server (Europe/Rome).
 - **Email**: unico invio server-side (`src/lib/emailServer.ts`), mittente fisso, reply-to dell'utente; `/api/email` richiede il token e accetta solo un *tipo* (`oda_creato`, `dam_approvato`, `durc_report`, `rdo_invito`) + dati: l'HTML lo genera il server dai modelli con testi escapati (`escHtml`). Niente HTML/from dal client.
@@ -350,4 +351,5 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 | 2026-10-31 | `51d26cd` | Smoke test: login robusto all'idratazione React; esito dopo le correzioni 44/44 ok (§4.3) |
 | 2026-10-31 | `ba5aa25` | Flusso inviti e password: nuova pagina `/auth/conferma` (invito + recupero, link scaduto), `/api/invite-user` con token del chiamante e azienda dal suo profilo + controllo upsert, "Password dimenticata?" nel login, stop a `NEXT_PUBLIC_APP_URL`; DEPLOY.md con le Redirect URLs Supabase |
 | 2026-10-31 | `c958331` | Sicurezza passo 1 eseguito (REVOKE su anon; restano leggibili senza login `utenti` e `voci_computo`); smoke test: lettura testo senza timeout sulle pagine grandi e senza falsi errori dai dati RSC, attesa della rete dopo il login; esito 44/44 ok dopo il passo 1 |
-| 2026-10-31 | (questo commit) | Sicurezza passo 3: `/offerta` e `/scan` su route server legate al token; `/api/email` con token, mittente fisso e solo modelli server (RDO: messaggio aggiuntivo in testo semplice, niente HTML/allegati dal client); 11 route AI con token + pagine aggiornate; cron DURC chiuso senza `CRON_SECRET`; REVOKE finale su anon in attesa (§4.1) |
+| 2026-10-31 | `676ffef` | Sicurezza passo 3: `/offerta` e `/scan` su route server legate al token; `/api/email` con token, mittente fisso e solo modelli server (RDO: messaggio aggiuntivo in testo semplice, niente HTML/allegati dal client); 11 route AI con token + pagine aggiornate; cron DURC chiuso senza `CRON_SECRET`; REVOKE finale su anon in attesa (§4.1) |
+| 2026-10-31 | (questo commit) | Gemini: `gemini-2.0-flash` (spento) e `gemini-1.5-flash` sostituiti da `src/lib/gemini.ts` (GEMINI_MODEL, predefinito `gemini-3.8-flash`, riserva `gemini-3.6-flash`, timeout, messaggi chiari) in ai-ddt, ai-fattura, ai-sicurezza, ai-estrai, rdo-extract-offerta; pagine mostrano `errore`/`error` leggibili; DEPLOY.md con le nuove variabili |

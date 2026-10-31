@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserClient } from '@/lib/supabaseServer'
+import { chiamaGemini, estraiJson } from '@/lib/gemini'
+
+// Analisi AI: fino a 60 s (limite Vercel); i tempi dei tentativi sono in src/lib/gemini.ts
+export const maxDuration = 60
 
 export const runtime = 'nodejs'
 
@@ -38,25 +42,23 @@ async function callClaude(prompt: string, apiKey: string): Promise<Record<string
   return JSON.parse(match[0]) as Record<string, unknown>
 }
 
-async function callGemini(prompt: string, apiKey: string, attempt = 0): Promise<Record<string, unknown>> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.1, responseMimeType: 'application/json' } }),
-  })
-  if (res.status === 429) {
-    if (attempt >= 3) throw new Error('Gemini 429 dopo 3 tentativi')
-    await new Promise(r => setTimeout(r, [5000, 15000, 30000][attempt]))
-    return callGemini(prompt, apiKey, attempt + 1)
+// Gemini: modello e chiamata centralizzati in src/lib/gemini.ts (GEMINI_MODEL)
+async function callGemini(prompt: string, attempt = 0): Promise<Record<string, unknown>> {
+  const esito = await chiamaGemini({ prompt })
+  if (!esito.ok) {
+    if (esito.status === 429 && attempt < 3) {
+      await new Promise(r => setTimeout(r, [5000, 15000, 30000][attempt]))
+      return callGemini(prompt, attempt + 1)
+    }
+    throw new ErroreAI(esito.errore)
   }
-  if (!res.ok) throw new Error(`Gemini API ${res.status}`)
-  const data = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
-  const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-  const match = raw.match(/\{[\s\S]*\}/)
-  if (!match) throw new Error('JSON non trovato in risposta Gemini')
-  return JSON.parse(match[0]) as Record<string, unknown>
+  const dati = estraiJson(esito.testo)
+  if (!dati) throw new ErroreAI('L’AI non ha restituito dati leggibili: riprova.')
+  return dati
 }
+
+/** Errore con messaggio già leggibile per la pagina */
+class ErroreAI extends Error {}
 
 export async function POST(req: NextRequest) {
   // Solo utenti collegati: evita uso anonimo (e costi AI) della route
@@ -75,15 +77,14 @@ export async function POST(req: NextRequest) {
     if (anthropicKey) {
       dati = await callClaude(prompt, anthropicKey)
     } else if (geminiKey) {
-      dati = await callGemini(prompt, geminiKey)
+      dati = await callGemini(prompt)
     } else {
       return NextResponse.json({ ok: false, errore: 'Nessuna chiave AI configurata' })
     }
     return NextResponse.json({ ok: true, dati })
   } catch (err) {
-    const msg = String(err)
-    console.error('ai-estrai error:', msg)
-    const errore = msg.includes('429') ? 'Limite Gemini raggiunto — aggiungi ANTHROPIC_API_KEY su Vercel per risolvere' : `Errore AI: ${msg}`
+    console.error('ai-estrai error:', err)
+    const errore = err instanceof ErroreAI ? err.message : 'Errore durante l’analisi AI: riprova.'
     return NextResponse.json({ ok: false, errore })
   }
 }

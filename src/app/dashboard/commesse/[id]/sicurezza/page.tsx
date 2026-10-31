@@ -136,7 +136,7 @@ export default function SicurezzaPage({ params: p }: { params: Promise<{ id: str
         setForm(true)
         showToast('✓ Documento riconosciuto con AI — verifica i dati')
       } else {
-        showToast('⚠ ' + (json.errore || 'Errore estrazione AI'))
+        showToast('⚠ ' + (json.errore || json.error || 'Errore estrazione AI'))
       }
     } catch { showToast('⚠ Errore di rete') }
     finally { setAiLoading(false) }
