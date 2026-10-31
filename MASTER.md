@@ -1,7 +1,7 @@
 # SQ360 — MASTER
 
 > Documento di stato unico del progetto. **Va aggiornato ad ogni commit.**
-> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: smoke test 44/44 ok (successivo a `0bd18e8`)
+> Ultimo aggiornamento: 2026-10-31 · ultimo commit di riferimento: flusso inviti e password (successivo a `51d26cd`)
 >
 > Fonti: `CLAUDE.md` (storico sessioni), `DEPLOY.md`, struttura `src/app`.
 
@@ -14,11 +14,12 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 ### 1.1 Piattaforma / trasversali
 | Modulo | Stato | Note |
 |---|---|---|
-| Auth login | ✅ | Protezione solo client-side (`dashboard/layout.tsx`); `middleware.ts` vuoto |
+| Auth login | ✅ | Protezione solo client-side (`dashboard/layout.tsx`); `middleware.ts` vuoto. Link "Password dimenticata?" → `resetPasswordForEmail` verso `/auth/conferma` |
+| Scelta password `/auth/conferma` | ⚠️ | Unica pagina per invito (`type=invite`) e recupero (`type=recovery`): legge la sessione dal link, nuova password + conferma (min 10 caratteri), `updateUser` → `/dashboard`; link scaduto (`otp_expired`) → messaggio + richiesta nuovo link. **Da provare end-to-end** (richiede Redirect URL in Supabase) |
 | Registrazione multi-azienda `/register` | ⚠️ | Wizard 2 step + recovery orfano; azienda+utente creati dalla route server `/api/register` (service role, validazione, righe in `azienda` **e** `aziende` con lo stesso id); **test end-to-end register→email→login da fare** |
 | Multi-tenant (`azienda_id` + RLS) | ✅ | Tutti gli INSERT con `azienda_id`; RLS su tutte le tabelle figlie |
 | Permessi sotto-moduli (`moduli_abilitati`) | ✅ | Filtro tab/gruppi + redirect ad `/anagrafica`; admin vede tutto |
-| Inviti utente `/api/invite-user` | ✅ | Richiede `SUPABASE_SERVICE_ROLE_KEY` |
+| Inviti utente `/api/invite-user` | ⚠️ | Chiamante identificato dal Bearer token (401), deve essere admin con azienda (403); `azienda_id` sempre del chiamante, mai dal body (diverso → 403); link verso `<dominio richiesta>/auth/conferma`; se l'upsert su `utenti` fallisce l'utente appena invitato viene annullato. Richiede `SUPABASE_SERVICE_ROLE_KEY`. **Da provare end-to-end** |
 | Email Resend + template + log | ⚠️ | Dominio `sq360.app` da verificare su Resend; `CRON_SECRET` da impostare |
 | Cron DURC settimanale | ⚠️ | `vercel.json` lunedì 8:00 — richiede Vercel Pro+ |
 | PDF @react-pdf (ODA, SAM, SAL, OS, Contratto Sub, RDO, Verbale consegna, NP) | ✅ | Carta intestata > logo > testo; bucket `aziende-assets` **da creare** |
@@ -82,6 +83,7 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 
 - **Stack**: Next.js 15 (App Router) + Supabase + Vercel. AI principale Gemini 2.0 Flash (server-side, `GEMINI_API_KEY`); eccezione: AI import fornitore su Claude Haiku.
 - **Supabase client tipato `any`** (`src/lib/supabase.ts`): nessun tipo generato; evita TS2769 su build Vercel. Nelle route API: `const db = client as any`.
+- **Link nelle email Supabase** (invito, recupero password) = `<dominio della richiesta>/auth/conferma`: niente URL fissi, `NEXT_PUBLIC_APP_URL` non è più usata. Ogni dominio va aggiunto in Supabase → Authentication → URL Configuration → Redirect URLs (vedi DEPLOY.md).
 - **Client Supabase/Resend istanziati dentro gli handler**, mai a livello modulo (evita errori di build "supabaseKey is required").
 - **Route API che scrivono/leggono dati utente usano il token dell'utente**: il client invia `Authorization: Bearer <access_token>`, la route crea il client con `getUserClient(req)` (`src/lib/supabaseServer.ts`) → le RLS si applicano come nel browser; 401 con messaggio se token mancante/scaduto. Vietati il client anon senza sessione (utente anonimo per il DB) e la service role nelle route chiamate dagli utenti. Applicato a `/api/xpwe-parse` e `/api/xpwe-parse-sal`.
 - **Multi-tenant**: `getAziendaId()` (`auth.uid → utenti.azienda_id`) in ogni INSERT + RLS con `get_azienda_id()` su DB. Doppia protezione: codice + DB.
@@ -150,6 +152,9 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 - [ ] `NEXT_PUBLIC_MAPBOX_TOKEN` + colonne geo su `commesse` (mappa)
 - [ ] Verifica PWA (service worker attivo, Lighthouse)
 - [ ] Test end-to-end register → conferma email → primo login
+- [ ] Supabase → Authentication → URL Configuration: Site URL + Redirect URL `https://sq-360-8ek9.vercel.app/auth/conferma` (senza, i link di invito/recupero tornano al Site URL)
+- [ ] Test end-to-end invito → `/auth/conferma` → scelta password → login
+- [ ] Togliere `NEXT_PUBLIC_APP_URL` dalle variabili Vercel (non più usata)
 
 ### 4.3 Esito smoke test 31/10/2026 (produzione, utente di prova admin)
 **Dopo le correzioni** (deploy `0bd18e8`): ✅ **44/44 pagine ok** — 0 rotte, 0 avvisi (nessun errore console/JS, nessuna richiesta 4xx/5xx), 0 scritture automatiche all'apertura.
@@ -334,4 +339,5 @@ Legenda: ✅ completo · ⚠️ implementato ma da verificare / richiede SQL · 
 | 2026-10-31 | `e03ee42` | `/api/xpwe-parse` e `/api/xpwe-parse-sal` con client Supabase sul token dell'utente (`getUserClient`, 401 se token mancante/scaduto) — risolve l'INSERT misurazioni bloccato dalle RLS e toglie la service role da xpwe-parse-sal; pagine Computo e SAL Attivi inviano il Bearer token; reimport con cancellazioni verificate prima degli insert (niente duplicati) |
 | 2026-10-31 | `aba8858` | Smoke test Playwright in sola lettura (`scripts/smoke-test.mjs`, `playwright` devDependency, output esclusi da git); esito in §4.3 |
 | 2026-10-31 | `0bd18e8` | Migrazione `20261031_allineamento_schema.sql` (eseguita) + allineamento codice: crash `/dashboard/sal` (stati minuscoli), `/register` su route server `/api/register`, carta intestata da `azienda`, WBS senza fallback legacy e senza scrittura automatica in Impostazioni, CE da `sal`, alias colonne (ODA/DDT/fatture/gare/varianti/SAL passivi/documenti), verifica righe aggiornate su `azienda` |
-| 2026-10-31 | (questo commit) | Smoke test: login robusto all'idratazione React; esito dopo le correzioni 44/44 ok (§4.3) |
+| 2026-10-31 | `51d26cd` | Smoke test: login robusto all'idratazione React; esito dopo le correzioni 44/44 ok (§4.3) |
+| 2026-10-31 | (questo commit) | Flusso inviti e password: nuova pagina `/auth/conferma` (invito + recupero, link scaduto), `/api/invite-user` con token del chiamante e azienda dal suo profilo + controllo upsert, "Password dimenticata?" nel login, stop a `NEXT_PUBLIC_APP_URL`; DEPLOY.md con le Redirect URLs Supabase |

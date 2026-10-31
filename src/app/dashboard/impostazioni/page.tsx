@@ -364,10 +364,13 @@ export default function ImpostazioniPage() {
       ? template.moduli
       : Object.fromEntries(MODULI_LISTA.map(m => [m.key, true]))
     try {
+      // L'azienda dell'invitato la decide il server dal token di chi invita
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) { alert('Sessione scaduta: effettua di nuovo il login'); setInviteSending(false); return }
       const res = await fetch('/api/invite-user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: inviteEmail, ruolo: inviteRuolo, moduli_abilitati: moduliInvite, azienda_id: aziendaId }),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ email: inviteEmail, ruolo: inviteRuolo, moduli_abilitati: moduliInvite }),
       })
       if (!res.ok) { const e = await res.json(); alert(e.error || 'Errore durante l\'invito'); }
       else {

@@ -7,11 +7,27 @@ import { Building2, Eye, EyeOff, AlertCircle } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter()
-  const [email, setEmail] = useState('admin@sq360.it')
+  // Campo email vuoto: con un valore precompilato "Password dimenticata?"
+  // rischierebbe di inviare il link di recupero all'account sbagliato.
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errore, setErrore] = useState('')
+  const [recupero, setRecupero] = useState<'idle' | 'invio' | 'inviato'>('idle')
+
+  async function passwordDimenticata() {
+    if (!email.trim() || !email.includes('@')) {
+      setErrore('Scrivi la tua email nel campo qui sopra, poi clicca "Password dimenticata?"')
+      return
+    }
+    setErrore(''); setRecupero('invio')
+    await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/auth/conferma`,
+    })
+    // Messaggio volutamente generico: non rivela se l'email è registrata
+    setRecupero('inviato')
+  }
 
   async function login(e: React.FormEvent) {
     e.preventDefault()
@@ -78,6 +94,14 @@ export default function LoginPage() {
               <span style={{ fontSize: 13, color: '#ef4444' }}>{errore}</span>
             </div>
           )}
+          {recupero === 'inviato' && (
+            <div style={{
+              background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10,
+              padding: '10px 14px', marginBottom: 18, fontSize: 13, color: '#166534'
+            }}>
+              Se l&apos;indirizzo è registrato riceverai una email con il link per scegliere una nuova password. Controlla anche la cartella spam.
+            </div>
+          )}
 
           <form onSubmit={login}>
             <div style={{ marginBottom: 16 }}>
@@ -87,7 +111,13 @@ export default function LoginPage() {
             </div>
 
             <div style={{ marginBottom: 24 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Password</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Password</label>
+                <button type="button" onClick={passwordDimenticata} disabled={recupero === 'invio'}
+                  style={{ background: 'none', border: 'none', padding: 0, fontSize: 12, fontWeight: 600, color: '#3b82f6', cursor: 'pointer' }}>
+                  {recupero === 'invio' ? 'Invio…' : 'Password dimenticata?'}
+                </button>
+              </div>
               <div style={{ position: 'relative' }}>
                 <input type={showPass ? 'text' : 'password'}
                   value={password} onChange={e => setPassword(e.target.value)}
