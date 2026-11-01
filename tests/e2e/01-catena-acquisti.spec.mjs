@@ -130,7 +130,7 @@ test.describe('Catena acquisti', () => {
   test('1.7 ODA dall\'aggiudicazione (importo, fornitore)', async ({ page }, ti) => {
     const t0 = new Date().toISOString()
     const rdo = await fallback(ti, 'vincitrice', `SELECT * FROM public.rdo WHERE commessa_id = $1 AND codice = 'ALFA-RDO-001'`, [A.commessa], 'la RDO')
-    const params = new URLSearchParams({ rdo_id: rdo.id, importo: String(rdo.importo_offerta || 0), fornitore: rdo.fornitore || '', richiede_sam: '0', wbs_ref: e2e.wbs.codice })
+    const params = new URLSearchParams({ rdo_id: rdo.id, importo: String(rdo.importo_offerta || 0), fornitore: rdo.fornitore || '', richiede_sam: '0', wbs_ref: rdo.wbs_ref || '' })   // come buildOdaUrl in rdo/page.tsx
     await apri(page, `${BASE}/oda?${params}`, campo(page, 'Oggetto *'))    // stesso URL costruito da "Genera ODA direttamente"
     verificaUguale(ti, Number(await campo(page, 'Importo netto €').inputValue()), Number(rdo.importo_offerta), 'importo precompilato dall\'offerta')
     const fornSel = await campo(page, 'Fornitore *').inputValue()
@@ -201,18 +201,27 @@ test.describe('Catena acquisti', () => {
     if (ctx.oda) verifica(ti, s >= Number(ctx.oda.importo_netto), 'l\'ODA del test è compreso nel conto economico')
   })
 
-  test('1.11 WBS propagata lungo la catena RDA → RDO → ODA', async ({}, ti) => {
+  test('1.11 WBS propagata lungo la catena RDA → RDO → ODA → conto economico', async ({ page }, ti) => {
     verifica(ti, ctx.rda && ctx.rdo1, 'RDA e RDO del test disponibili', 'passi 1.1–1.3 non riusciti')
     const rda = await q1(`SELECT wbs_id, wbs_ref FROM public.rda WHERE id = $1`, [ctx.rda.id])
     const rdo = await q1(`SELECT wbs_ref FROM public.rdo WHERE id = $1`, [ctx.rdo1.id])
     const oda = ctx.oda ? await q1(`SELECT wbs_ref FROM public.oda WHERE id = $1`, [ctx.oda.id]) : null
-    const wbs = rda.wbs_id || rda.wbs_ref
-    verificaUguale(ti, wbs, e2e.wbs.codice, 'WBS sulla RDA')
+    const wbs = e2e.wbs.codice
+    // convenzione: chi scrive valorizza entrambe le colonne; si controlla il valore salvato nel DB
     const errori = []
-    if (rdo.wbs_ref !== wbs) errori.push(`RDO: wbs_ref = ${JSON.stringify(rdo.wbs_ref)} (la RDO copia solo rda.wbs_ref; la RDA generata dal computo ha la WBS in rda.wbs_id)`)
+    if (rda.wbs_id !== wbs || rda.wbs_ref !== wbs) errori.push(`RDA: wbs_id = ${JSON.stringify(rda.wbs_id)}, wbs_ref = ${JSON.stringify(rda.wbs_ref)} (la RDA generata dal computo deve avere il codice in entrambe le colonne)`)
+    if (rdo.wbs_ref !== wbs) errori.push(`RDO: wbs_ref = ${JSON.stringify(rdo.wbs_ref)} (la gara multi-fornitore deve copiare rda.wbs_ref ?? rda.wbs_id)`)
     if (!oda) errori.push('ODA del test non creato (passo 1.7)')
-    else if ((oda.wbs_ref || ctx.wbsOdaModulo || null) !== wbs) errori.push(`ODA: wbs_ref = ${JSON.stringify(oda.wbs_ref)} (la pagina ODA non legge wbs_ref dall'URL: legge solo rdo_id, importo, fornitore, dam_id, richiede_sam)`)
-    verifica(ti, !errori.length, `WBS "${wbs}" propagata a RDO e ODA`, errori.join(' · '))
+    else if (oda.wbs_ref !== wbs) errori.push(`ODA: wbs_ref = ${JSON.stringify(oda.wbs_ref)} (la pagina ODA deve leggere wbs_ref dall'URL o ricavarlo dalla RDO)`)
+    verifica(ti, !errori.length, `WBS "${wbs}" salvata su RDA, RDO e ODA`, errori.join(' · '))
+    // conto economico: costi effettivi per WBS con lo stesso criterio (oda.wbs_ref, altrimenti RDA collegata)
+    const { s } = await q1(`SELECT coalesce(sum(o.importo_netto), 0)::float8 s FROM public.oda o
+      LEFT JOIN public.rdo r ON r.id = o.rdo_id LEFT JOIN public.rda a ON a.id = r.rda_id
+      WHERE o.commessa_id = $1 AND o.stato <> 'annullato' AND coalesce(nullif(o.wbs_ref, ''), nullif(a.wbs_ref, ''), nullif(a.wbs_id, '')) = $2`, [A.commessa, wbs])
+    await apri(page, `${BASE}/conto-economico`, '[data-sezione="costi-effettivi-wbs"]')
+    const cella = page.locator(`[data-sezione="costi-effettivi-wbs"] tr[data-wbs="${wbs}"] [data-campo="impegnato"]`)
+    verifica(ti, await cella.count() === 1, `riga WBS ${wbs} nei costi effettivi del conto economico`, 'sezione "Costi effettivi per WBS" assente o senza la riga del codice')
+    verificaUguale(ti, numIt(await cella.innerText()), r2(s), `CE: ODA impegnati sulla WBS ${wbs} = somma dal DB`)
   })
 
   test('1.12 Stati ODA: firmato → in esecuzione → completato → annullato (escluso da CE e DDT)', async ({ page }, ti) => {

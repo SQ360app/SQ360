@@ -564,6 +564,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
         oggetto: `RDA da computo (${voceIds.length} voci)`,
         voci_ids: voceIds,
         wbs_id: wbsId !== 'nessun_wbs' ? wbsId : null,
+        wbs_ref: wbsId !== 'nessun_wbs' ? wbsId : null,   // convenzione WBS: codice in wbs_id e wbs_ref
         wbs_label: wbsId !== 'nessun_wbs' ? WBS_MAP[wbsId] : null,
       })
       created++
@@ -584,6 +585,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
         tipo: tipoRda, oggetto: `${row.label} — WBS ${row.wbs_id}`,
         voci_ids: row.voceIds,
         wbs_id: row.wbs_id !== 'nessun_wbs' ? row.wbs_id : null,
+        wbs_ref: row.wbs_id !== 'nessun_wbs' ? row.wbs_id : null,   // convenzione WBS: codice in wbs_id e wbs_ref
         wbs_label: row.wbs_id !== 'nessun_wbs' ? WBS_MAP[row.wbs_id] : null,
       })
       created++
@@ -592,7 +594,7 @@ export default function ComputoPage({ params: paramsPromise }: { params: Promise
       const fallbackGroups: Record<string, string[]> = {}
       rdaModal.senzaAnalisi.forEach(vid => { const v = voci.find(x => x.id === vid); const key = v?.wbs_id || 'nessun_wbs'; if (!fallbackGroups[key]) fallbackGroups[key] = []; fallbackGroups[key].push(vid) })
       for (const [wbsId, voceIds] of Object.entries(fallbackGroups)) {
-        await supabase.from('rda').insert({ commessa_id: id, azienda_id: aziendaId || null, codice: 'RDA-' + Date.now().toString(36).toUpperCase() + '-FB' + created, stato: 'bozza', tipo: 'MAT', oggetto: `RDA da computo (${voceIds.length} voci)`, voci_ids: voceIds, wbs_id: wbsId !== 'nessun_wbs' ? wbsId : null, wbs_label: wbsId !== 'nessun_wbs' ? WBS_MAP[wbsId] : null })
+        await supabase.from('rda').insert({ commessa_id: id, azienda_id: aziendaId || null, codice: 'RDA-' + Date.now().toString(36).toUpperCase() + '-FB' + created, stato: 'bozza', tipo: 'MAT', oggetto: `RDA da computo (${voceIds.length} voci)`, voci_ids: voceIds, wbs_id: wbsId !== 'nessun_wbs' ? wbsId : null, wbs_ref: wbsId !== 'nessun_wbs' ? wbsId : null, wbs_label: wbsId !== 'nessun_wbs' ? WBS_MAP[wbsId] : null })
         created++
       }
     }

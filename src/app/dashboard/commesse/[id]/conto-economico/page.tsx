@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { costiOdaPerWbs } from '@/lib/wbsCosti'
 import { TrendingUp, TrendingDown, Minus, AlertTriangle, Loader2, RefreshCw } from 'lucide-react'
 
 const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -74,6 +75,10 @@ export default function ContoEconomicoPage() {
       odaPerTipo[k] = (odaPerTipo[k] || 0) + (o.importo_netto || 0)
     }
 
+    // 4b. Costi effettivi per WBS — stesso criterio della marginalità (src/lib/wbsCosti.ts):
+    //     oda.wbs_ref, altrimenti RDA collegata (rda.wbs_ref ?? rda.wbs_id)
+    const odaWbs = await costiOdaPerWbs(supabase, id)
+
     // 5b. Piano costi voce: tabella `piano_costi_voce` eliminata (sostituita
     // dall'analisi prezzi BASE+EXTRA, vedi wbsAnalisiMap). Valori vuoti per
     // compatibilità con la UI esistente.
@@ -115,7 +120,7 @@ export default function ContoEconomicoPage() {
     const { data: contSub } = await supabase.from('contratti_sub').select('importo_netto, stato').eq('commessa_id', id)
     const costiContrattiSub = (contSub || []).filter((c: any) => c.stato !== 'ANNULLATO').reduce((s: number, x: any) => s + (x.importo_netto || 0), 0)
 
-    setCe({ ricavoContratto, budgetComputo, hasComputo, ricaviEmessi, ricaviIncassati, costiOda, odaPerTipo, pianoPerTipo, totalePiano, wbsAnalisiMap, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub })
+    setCe({ ricavoContratto, budgetComputo, hasComputo, ricaviEmessi, ricaviIncassati, costiOda, odaPerTipo, pianoPerTipo, totalePiano, wbsAnalisiMap, odaWbs, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub })
     setLoading(false)
   }
 
@@ -127,7 +132,7 @@ export default function ContoEconomicoPage() {
     </div>
   )
 
-  const { ricavoContratto, budgetComputo, hasComputo, ricaviEmessi, ricaviIncassati, costiOda, odaPerTipo, pianoPerTipo, totalePiano, wbsAnalisiMap, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub } = ce
+  const { ricavoContratto, budgetComputo, hasComputo, ricaviEmessi, ricaviIncassati, costiOda, odaPerTipo, pianoPerTipo, totalePiano, wbsAnalisiMap, odaWbs, costiPagati, costiDaPagare, costiSpese, ritenute, costiContrattiSub } = ce
   const totCostiImpegnati = costiOda + costiSpese + costiContrattiSub
   const margineAtteso  = ricavoContratto - totCostiImpegnati
   const margineAttuale = ricavoContratto - costiPagati
@@ -337,6 +342,43 @@ export default function ContoEconomicoPage() {
                 </div>
               )
             })}
+          </div>
+        )
+      })()}
+
+      {/* Costi effettivi per WBS: ODA impegnati (criterio unico con la marginalità) */}
+      {odaWbs && odaWbs.totale > 0 && (() => {
+        const codici = Array.from(new Set([...Object.keys(odaWbs.perWbs), ...Object.keys(wbsAnalisiMap || {})])).sort((a, b) => a.localeCompare(b))
+        const previsto = (c: string): number => Object.values(((wbsAnalisiMap || {}) as Record<string, Record<string, number>>)[c] || {}).reduce((s: number, v: number) => s + (Number(v) || 0), 0)
+        return (
+          <div data-sezione="costi-effettivi-wbs" style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '16px 20px' }}>
+            <h3 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 4px', color: '#374151', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Costi effettivi per WBS (ODA impegnati)</h3>
+            <p style={{ fontSize: 11, color: '#9ca3af', margin: '0 0 12px' }}>WBS dell'ODA, altrimenti quella della RDA collegata. Esclusi gli ODA annullati.</p>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ color: '#6b7280', textAlign: 'left' }}>
+                  <th style={{ padding: '4px 6px', fontWeight: 600 }}>WBS</th>
+                  <th style={{ padding: '4px 6px', fontWeight: 600, textAlign: 'right' }}>Previsto (analisi)</th>
+                  <th style={{ padding: '4px 6px', fontWeight: 600, textAlign: 'right' }}>ODA impegnati</th>
+                </tr>
+              </thead>
+              <tbody>
+                {codici.map(c => (
+                  <tr key={c} data-wbs={c} style={{ borderTop: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '5px 6px', fontFamily: 'monospace', color: '#7c3aed', fontWeight: 700 }}>{c}</td>
+                    <td style={{ padding: '5px 6px', textAlign: 'right', color: '#6b7280' }}>{previsto(c) > 0 ? `€ ${fmt(previsto(c))}` : '—'}</td>
+                    <td data-campo="impegnato" style={{ padding: '5px 6px', textAlign: 'right', fontWeight: 700, color: '#dc2626' }}>€ {fmt(odaWbs.perWbs[c] || 0)}</td>
+                  </tr>
+                ))}
+                {odaWbs.senzaWbs > 0 && (
+                  <tr data-wbs="" style={{ borderTop: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '5px 6px', color: '#c2410c', fontWeight: 600 }}>Senza WBS</td>
+                    <td style={{ padding: '5px 6px', textAlign: 'right', color: '#9ca3af' }}>—</td>
+                    <td data-campo="impegnato" style={{ padding: '5px 6px', textAlign: 'right', fontWeight: 700, color: '#c2410c' }}>€ {fmt(odaWbs.senzaWbs)}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         )
       })()}

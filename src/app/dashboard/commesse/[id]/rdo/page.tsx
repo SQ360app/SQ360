@@ -8,6 +8,8 @@ import { EmailPreviewModal } from '@/components/EmailPreviewModal'
 import { saveEmailLog } from '@/lib/emailLog'
 import { emailRdoInvito } from '@/lib/emailTemplates'
 import { fetchConToken } from '@/lib/authFetch'
+import { loadWbs } from '@/lib/wbsLoader'
+import type { WbsVoce } from '@/lib/wbs'
 
 const fi = (n: number, d = 2) => n?.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? '—'
 
@@ -294,6 +296,9 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(false)
   const [editRdo, setEditRdo] = useState<Partial<RDO> | null>(null)
+  // codici WBS della commessa (convenzione: codice testuale) per l'elenco a scelta della RDO manuale
+  const [wbsFlat, setWbsFlat] = useState<WbsVoce[]>([])
+  useEffect(() => { getAziendaId().then(az => { if (az) loadWbs(supabase, id, az).then(setWbsFlat) }) }, [id])
   const [filtroStato, setFiltroStato] = useState('tutti')
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState('')
@@ -962,7 +967,12 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
               </div>
               <div>
                 <label style={styleLbl}>WBS / Area di riferimento</label>
-                <input style={styleInp} value={editRdo.wbs_ref || ''} onChange={e => setEditRdo({ ...editRdo, wbs_ref: e.target.value })} placeholder="es. 01.02 — Struttura" />
+                <select style={styleInp} value={editRdo.wbs_ref || ''} onChange={e => setEditRdo({ ...editRdo, wbs_ref: e.target.value })}>
+                  <option value="">— Nessuna WBS —</option>
+                  {/* valore storico non più presente tra i codici della commessa: resta visibile e selezionato */}
+                  {editRdo.wbs_ref && !wbsFlat.some(([c]) => c === editRdo.wbs_ref) && <option value={editRdo.wbs_ref}>{editRdo.wbs_ref} (non più nella WBS della commessa)</option>}
+                  {wbsFlat.map(([code, label]) => <option key={code} value={code}>{code} — {label}</option>)}
+                </select>
               </div>
               <div>
                 <label style={styleLbl}>Note</label>

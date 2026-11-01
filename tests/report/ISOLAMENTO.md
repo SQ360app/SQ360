@@ -4,7 +4,7 @@
 
 ## PRIMA della correzione
 
-Data: 2026-11-01T10:28:19.830Z
+Data: 2026-11-01T11:03:29.371Z
 
 - Tabelle di azienda provate: **90** · con dati di B raggiungibili da A: **39**
   - lette: 39 · modificate: 39 · inserite come B: 38 · eliminate: 39
@@ -134,7 +134,7 @@ Legenda "A sulle proprie righe": ✓ riuscito · ✗ bloccato · · non provato 
 
 ## DOPO la correzione (migrazione 20261101_isolamento_aziende.sql)
 
-Data: 2026-11-01T10:32:00.886Z
+Data: 2026-11-01T11:07:16.328Z
 
 - Tabelle di azienda provate: **90** · con dati di B raggiungibili da A: **0**
   - lette: 0 · modificate: 0 · inserite come B: 0 · eliminate: 0
@@ -246,11 +246,11 @@ Data: 2026-11-01T10:32:00.886Z
 |---|---|---|---|---|
 | `v_commesse_kpi` | no | 1 | 1/1 ✓ | security_invoker=true |
 | `v_sal_delta` | no | 1 | 1/1 ✓ | security_invoker=true |
-| `v_scadenze_prossime` | — | — | — | security_invoker=true |
 | `v_sal_totale` | no | 1 | 1/1 ✓ | security_invoker=true |
 | `v_voce_avanzamento` | no | 1 | 1/1 ✓ | security_invoker=true |
 | `v_voci_importo` | no | 1 | 1/1 ✓ | security_invoker=true |
 | `v_voci_importo_3strati` | no | 3 | 815/815 ✓ | security_invoker=true |
+| `v_scadenze_prossime` | — | — | — | security_invoker=true |
 | `v_wbs_budget` | no | 1 | 1/1 ✓ | security_invoker=true |
 
 Legenda "A sulle proprie righe": ✓ riuscito · ✗ bloccato · · non provato · ⚠ diverso da quanto previsto per quel tipo di tabella.

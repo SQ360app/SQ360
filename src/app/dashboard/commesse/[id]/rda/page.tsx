@@ -9,6 +9,10 @@ import { loadWbs } from '@/lib/wbsLoader'
 const fi = (n: number, d = 2) => n?.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? '—'
 
 const STATI = ['bozza','approvata','inviata','chiusa','annullata']
+
+// Convenzione WBS: codice testuale (es. 1.1). Chi scrive valorizza wbs_id e wbs_ref,
+// chi legge usa wbs_ref, altrimenti wbs_id (le RDA generate dal computo avevano solo wbs_id).
+const wbsDi = (r?: { wbs_ref?: string | null; wbs_id?: string | null } | null) => r?.wbs_ref || r?.wbs_id || ''
 const TIPI  = ['MAT','MAN','NOL','SUB','MIX']
 
 const STATO_COLOR: Record<string,string> = {
@@ -209,8 +213,8 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
         stato: editRda.stato || 'bozza',
         fornitore_sugg: editRda.fornitore_sugg || '',
         note: editRda.note || '',
-        wbs_id: editRda.wbs_id || null,
-        wbs_ref: editRda.wbs_ref || null,
+        wbs_id: wbsDi(editRda) || null,
+        wbs_ref: wbsDi(editRda) || null,
         rda_origine_id: origineId !== undefined ? origineId : null,
       }
       if (editRda.id) {
@@ -287,7 +291,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
         data_scadenza: wizardScadenza || null,
         note: wizardNote,
         importo_offerta: 0,
-        wbs_ref: wizardRda.wbs_ref || null,
+        wbs_ref: wbsDi(wizardRda) || null,
         codice: `RDO-${gruppoId.slice(0, 8).toUpperCase()}-${f.id.slice(0, 4).toUpperCase()}`,
       }))
       const { error } = await supabase.from('rdo').insert(records)
@@ -387,7 +391,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
       {/* Alert WBS */}
       {(() => {
         const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-        const senza = rdaList.filter(r => !r.wbs_ref && r.created_at < sevenDaysAgo && !['annullata','chiusa'].includes(r.stato))
+        const senza = rdaList.filter(r => !wbsDi(r) && r.created_at < sevenDaysAgo && !['annullata','chiusa'].includes(r.stato))
         if (senza.length === 0) return null
         return (
           <div style={{ padding:'10px 16px', background:'#fef9c3', border:'1px solid #fde68a', borderRadius:10, fontSize:12, color:'#92400e', display:'flex', alignItems:'center', gap:8 }}>
@@ -442,8 +446,8 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
                     onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
                     <td style={{ ...(styleObj as any).td, fontFamily:'monospace', fontSize:11, color:'var(--accent)' }}>
                       {displayCodice(r)}
-                      {!r.wbs_ref && <span style={{ display:'inline-block', fontSize:9, fontWeight:700, padding:'1px 5px', borderRadius:4, background:'#fff7ed', color:'#c2410c', border:'1px solid #fed7aa', marginLeft:4 }}>⚠ WBS mancante</span>}
-                      {r.wbs_ref && <span style={{ display:'block', fontSize:9, color:'var(--t3)', marginTop:1 }}>WBS: {r.wbs_ref}</span>}
+                      {!wbsDi(r) && <span style={{ display:'inline-block', fontSize:9, fontWeight:700, padding:'1px 5px', borderRadius:4, background:'#fff7ed', color:'#c2410c', border:'1px solid #fed7aa', marginLeft:4 }}>⚠ WBS mancante</span>}
+                      {wbsDi(r) && <span style={{ display:'block', fontSize:9, color:'var(--t3)', marginTop:1 }}>WBS: {wbsDi(r)}</span>}
                       {r.rda_origine_id && (() => {
                         const parent = allRda.find(x => x.id === r.rda_origine_id)
                         return parent ? (
@@ -629,7 +633,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
              </div>}
               <div>
                 <label style={(styleObj as any).lbl as React.CSSProperties}>WBS di riferimento</label>
-                <select style={(styleObj as any).inp as React.CSSProperties} value={editRda.wbs_ref||''} onChange={e=>setEditRda({...editRda, wbs_ref:e.target.value})}>
+                <select style={(styleObj as any).inp as React.CSSProperties} value={wbsDi(editRda)} onChange={e=>setEditRda({...editRda, wbs_ref:e.target.value, wbs_id:e.target.value})}>
                   <option value="">— Nessuna WBS —</option>
                   {wbsFlat.map(([code, label]) => <option key={code} value={code}>{code} — {label}</option>)}
                 </select>
@@ -654,7 +658,7 @@ export default function RDAPage({ params: p }: { params: Promise<{ id: string }>
             <div style={{ padding:'14px 16px', borderBottom:'1px solid var(--border)', display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--bg)' }}>
               <div>
                 <h3 style={{ fontSize:14, fontWeight:700, margin:0 }}>{detailRda.codice}</h3>
-                <p style={{ fontSize:11, color:'var(--t3)', margin:0 }}>{detailRda.tipo} · {detailRda.wbs_id || 'WBS non specificato'}</p>
+                <p style={{ fontSize:11, color:'var(--t3)', margin:0 }}>{detailRda.tipo} · {wbsDi(detailRda) || 'WBS non specificato'}</p>
               </div>
               <button onClick={() => setDetailRda(null)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'var(--t3)' }}>✕</button>
             </div>

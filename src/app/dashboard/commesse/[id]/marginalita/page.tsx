@@ -5,6 +5,7 @@ import { supabase, getAziendaId } from '@/lib/supabase'
 import { Loader2, RefreshCw } from 'lucide-react'
 import { DEFAULT_WBS_FLAT, WbsVoce } from '@/lib/wbs'
 import { loadWbs } from '@/lib/wbsLoader'
+import { costiOdaPerWbs } from '@/lib/wbsCosti'
 
 const fmt = (n: number) => Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -51,28 +52,9 @@ export default function MarginalitaPage() {
       }
     }
 
-    // 3. Costi ODA per WBS: ODA → rdo_id → RDO.rda_id → RDA.wbs_id
-    const [{ data: odaData }, { data: rdoData }, { data: rdaData }] = await Promise.all([
-      supabase.from('oda').select('importo_netto, rdo_id, stato').eq('commessa_id', id),
-      supabase.from('rdo').select('id, rda_id').eq('commessa_id', id),
-      supabase.from('rda').select('id, wbs_id').eq('commessa_id', id),
-    ])
-
-    // Build lookup maps
-    const rdoToRda: Record<string, string> = {}
-    for (const r of rdoData || []) { if (r.rda_id) rdoToRda[r.id] = r.rda_id }
-    const rdaToWbs: Record<string, string> = {}
-    for (const r of rdaData || []) { if (r.wbs_id) rdaToWbs[r.id] = r.wbs_id }
-
-    const odaByWbs: Record<string, number> = {}
-    let totalOda = 0
-    for (const o of odaData || []) {
-      if (o.stato === 'annullato') continue
-      totalOda += Number(o.importo_netto) || 0
-      const rdaId = o.rdo_id ? rdoToRda[o.rdo_id] : null
-      const wbsId = rdaId ? rdaToWbs[rdaId] : null
-      if (wbsId) odaByWbs[wbsId] = (odaByWbs[wbsId] || 0) + (Number(o.importo_netto) || 0)
-    }
+    // 3. Costi ODA per WBS — criterio unico (src/lib/wbsCosti.ts):
+    //    oda.wbs_ref, altrimenti RDA collegata (rda.wbs_ref ?? rda.wbs_id) tramite la RDO
+    const { perWbs: odaByWbs, totale: totalOda } = await costiOdaPerWbs(supabase, id)
 
     // 4. Build WBS rows — solo nodi con dati
     const activeCodes = new Set([...Object.keys(budgetByWbs), ...Object.keys(odaByWbs)])

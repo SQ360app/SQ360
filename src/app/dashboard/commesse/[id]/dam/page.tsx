@@ -59,6 +59,9 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
   const { id } = use(p)
   const searchParams = useSearchParams()
   const [damList, setDamList] = useState<DAM[]>([])
+  // WBS (codice testuale) ricevuta dalla RDO nell'URL: la SAM non la salva, la ripassa all'ODA.
+  // Senza parametro l'ODA la ricava comunque dalla RDO (rdo_id).
+  const [wbsRefParam, setWbsRefParam] = useState('')
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(false)
   const [editDam, setEditDam] = useState<Partial<DAM> | null>(null)
@@ -139,6 +142,8 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
     const fornitore = searchParams.get('fornitore')
     const importo = searchParams.get('importo')
     const rdaId = searchParams.get('rda_id')
+    const wbsRef = searchParams.get('wbs_ref')
+    if (wbsRef) setWbsRefParam(wbsRef)
     if (!rdoId) return
     const prefill = async () => {
       const dam: Partial<DAM> = {
@@ -420,6 +425,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
                             params.set('dam_id', d.id)
                             if (d.rdo_id) params.set('rdo_id', d.rdo_id)
                             if (d.fornitore_id) params.set('fornitore_id', d.fornitore_id)
+                            if (wbsRefParam) params.set('wbs_ref', wbsRefParam)
                             window.location.href = base + '?' + params.toString()
                           }}>✅ → ODA</button>
                       )}
@@ -654,6 +660,7 @@ export default function DAMPage({ params: p }: { params: Promise<{ id: string }>
                       params.set('dam_id', editDam.id!)
                       if (editDam.rdo_id) params.set('rdo_id', editDam.rdo_id)
                       if (editDam.fornitore_id) params.set('fornitore_id', editDam.fornitore_id)
+                      if (wbsRefParam) params.set('wbs_ref', wbsRefParam)
                       setForm(false); setEditDam(null)
                       window.location.href = base + '?' + params.toString()
                     }}>✅ Emetti ODA →</button>

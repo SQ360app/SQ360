@@ -163,11 +163,21 @@ export default function ODAPage() {
     const fornId = searchParams.get('fornitore_id')
     const damIdParam = searchParams.get('dam_id')
     const richiedeSamParam = searchParams.get('richiede_sam')
+    const wbsParam = searchParams.get('wbs_ref')
     if (!rdo && !damIdParam) return
     if (rdo) setRdoId(rdo)
     if (imp) setImportoNetto(imp)
     if (damIdParam) setDamId(damIdParam)
     if (richiedeSamParam === '1') setRichiedeSam(true)
+    // WBS (codice testuale): dall'URL; se manca, dalla RDO e poi dalla sua RDA (wbs_ref, altrimenti wbs_id)
+    if (wbsParam) setWbsRef(wbsParam)
+    else if (rdo) {
+      supabase.from('rdo').select('wbs_ref, rda:rda_id(wbs_ref, wbs_id)').eq('id', rdo).maybeSingle().then(({ data }: any) => {
+        const rda = Array.isArray(data?.rda) ? data.rda[0] : data?.rda
+        const w = data?.wbs_ref || rda?.wbs_ref || rda?.wbs_id
+        if (w) setWbsRef(w)
+      })
+    }
     if (fornId) {
       setFornitoreId(fornId)
     } else if (forn && fornitori.length > 0) {
