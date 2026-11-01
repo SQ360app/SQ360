@@ -51,3 +51,8 @@ public/fallback-*.js.map
 scripts/smoke-screenshots/
 scripts/report-smoke.md
 scripts/report-scritture.md
+
+# Test ambiente di prova (stato locale con credenziali di prova)
+tests/.state/
+tests/report/*.json
+tests/report/smoke-prova.md

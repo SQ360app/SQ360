@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test:isolamento": "node tests/isolamento/ciclo.mjs"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
@@ -30,6 +31,7 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "pg": "^8.23.1",
     "playwright": "^1.48.2",
     "typescript": "^5"
   }
