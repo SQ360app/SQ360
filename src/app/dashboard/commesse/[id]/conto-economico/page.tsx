@@ -66,7 +66,7 @@ export default function ContoEconomicoPage() {
 
     // 4. Costi da ODA impegnati
     const { data: odaList } = await supabase.from('oda').select('importo_netto, stato, tipo_oda').eq('commessa_id', id)
-    const odaAttivi = (odaList || []).filter((o: any) => o.stato !== 'ANNULLATO')
+    const odaAttivi = (odaList || []).filter((o: any) => o.stato !== 'annullato')   // oda_stato_check
     const costiOda = odaAttivi.reduce((s: number, x: any) => s + (x.importo_netto || 0), 0)
     const odaPerTipo: Record<string, number> = {}
     for (const o of odaAttivi) {

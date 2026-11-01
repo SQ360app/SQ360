@@ -117,13 +117,13 @@ test.describe('Catena acquisti', () => {
     const best = tabella.locator('td', { hasText: '▼ BEST' })
     verificaUguale(ti, await best.count(), 1, 'un solo "BEST" nella comparativa')
     await tabella.locator('tr', { hasText: 'Azione' }).locator('td').nth(col).getByRole('button', { name: /Aggiudica/ }).click()
-    const ok = await attendi(() => q1(`SELECT 1 FROM public.rdo WHERE id = $1 AND stato = 'aggiudicata'`, [vinc.id]))
+    // decisione passo 6: vincente → 'accettata', altre offerte del gruppo → 'rifiutata' (rdo_stato_check)
+    const ok = await attendi(() => q1(`SELECT 1 FROM public.rdo WHERE id = $1 AND stato = 'accettata'`, [vinc.id]))
     const vincolo = (await q1(`SELECT pg_get_constraintdef(oid) d FROM pg_constraint WHERE conname = 'rdo_stato_check'`))?.d || ''
-    verifica(ti, ok, 'RDO vincitrice aggiudicata nel DB', `aggiudicazione non salvata — a schermo: ${await messaggioAschermo(page)}` +
-      (vincolo && !vincolo.includes("'aggiudicata'") ? ` · la pagina scrive stato 'aggiudicata' (e 'annullata' sulle altre), non ammessi da rdo_stato_check: ${(vincolo.match(/'[a-z_]+'/g) || []).join(', ')}` : ''))
+    verifica(ti, ok, 'RDO vincitrice aggiudicata nel DB (stato accettata)', `aggiudicazione non salvata — a schermo: ${await messaggioAschermo(page)} · valori ammessi da rdo_stato_check: ${(vincolo.match(/'[a-z_]+'/g) || []).join(', ')}`)
     ctx.vincitrice = await q1(`SELECT * FROM public.rdo WHERE id = $1`, [vinc.id])
     const altre = await q(`SELECT stato FROM public.rdo WHERE rdo_gruppo_id = $1 AND id <> $2`, [vinc.rdo_gruppo_id, vinc.id])
-    verifica(ti, altre.every(a => a.stato === 'annullata'), 'le altre RDO del gruppo annullate', `stati: ${altre.map(a => a.stato).join(', ')}`)
+    verifica(ti, altre.every(a => a.stato === 'rifiutata'), 'le altre RDO del gruppo segnate come non aggiudicate (stato rifiutata)', `stati: ${altre.map(a => a.stato).join(', ')}`)
     await page.getByRole('button', { name: /Genera ODA direttamente/ }).waitFor()
   })
 
@@ -213,5 +213,44 @@ test.describe('Catena acquisti', () => {
     if (!oda) errori.push('ODA del test non creato (passo 1.7)')
     else if ((oda.wbs_ref || ctx.wbsOdaModulo || null) !== wbs) errori.push(`ODA: wbs_ref = ${JSON.stringify(oda.wbs_ref)} (la pagina ODA non legge wbs_ref dall'URL: legge solo rdo_id, importo, fornitore, dam_id, richiede_sam)`)
     verifica(ti, !errori.length, `WBS "${wbs}" propagata a RDO e ODA`, errori.join(' · '))
+  })
+
+  test('1.12 Stati ODA: firmato → in esecuzione → completato → annullato (escluso da CE e DDT)', async ({ page }, ti) => {
+    const oda = await fallback(ti, 'oda', `SELECT * FROM public.oda WHERE commessa_id = $1 AND codice = 'ALFA-ODA-001'`, [A.commessa], 'l\'ODA')
+    await apri(page, `${BASE}/oda`, page.getByText(oda.codice).first())
+    await page.getByText(oda.codice).first().click()                     // apre il dettaglio dell'ODA
+    const vincolo = (await q1(`SELECT pg_get_constraintdef(oid) d FROM pg_constraint WHERE conname = 'oda_stato_check'`))?.d || ''
+    const passaggi = [['Confermato (firmato)', 'firmato'], ['Parz. evaso', 'in_esecuzione'], ['Evaso', 'completato']]
+    for (const [pulsante, atteso] of passaggi) {
+      await page.getByRole('button', { name: pulsante, exact: true }).first().click()
+      const ok = await attendi(() => q1(`SELECT 1 FROM public.oda WHERE id = $1 AND stato = $2`, [oda.id, atteso]))
+      verifica(ti, ok, `pulsante "${pulsante}" → stato ${atteso} nel DB`, `stato non salvato — a schermo: ${await messaggioAschermo(page)} · ammessi da oda_stato_check: ${(vincolo.match(/'[a-z_]+'/g) || []).join(', ')}`)
+    }
+    await page.getByRole('button', { name: 'Annulla', exact: true }).first().click()   // conferma accettata da seguiDialoghi
+    const ann = await attendi(() => q1(`SELECT 1 FROM public.oda WHERE id = $1 AND stato = 'annullato'`, [oda.id]))
+    verifica(ti, ann, 'pulsante "Annulla" → stato annullato nel DB', `annullamento non salvato — a schermo: ${await messaggioAschermo(page)} · ammessi da oda_stato_check: ${(vincolo.match(/'[a-z_]+'/g) || []).join(', ')}`)
+    // l'ODA annullato non deve più contare né essere proposto
+    await apri(page, `${BASE}/conto-economico`, page.locator('span', { hasText: /^Totale ODA impegnati$/ }))
+    const riga = page.locator('div', { has: page.locator('span', { hasText: /^Totale ODA impegnati$/ }) }).last()
+    const mostrato = numIt(await riga.locator('span').nth(1).innerText())
+    const { s } = await q1(`SELECT coalesce(sum(importo_netto), 0)::float8 s FROM public.oda WHERE commessa_id = $1 AND stato <> 'annullato'`, [A.commessa])
+    verificaUguale(ti, mostrato, r2(s), 'CE "Totale ODA impegnati" esclude l\'ODA annullato')
+    await apri(page, `${BASE}/ddt`, 'input[type=file]')
+    await page.getByRole('button', { name: '+ Nuovo DDT' }).click()
+    await campo(page, 'ODA collegata').waitFor()
+    const opzioniDdt = await campo(page, 'ODA collegata').locator('option').evaluateAll(o => o.map(x => x.value))
+    verifica(ti, !opzioniDdt.includes(oda.id), 'l\'ODA annullato non è proposto nei DDT', 'il filtro sugli ODA del modulo DDT non esclude lo stato annullato')
+  })
+
+  test('1.13 RDO annullata dal pulsante "✕ Annulla"', async ({ page }, ti) => {
+    // RDO di prova in stato "inviata" (copia della RDO del seed, preparata nel DB per questo test)
+    const base = await q1(`SELECT * FROM public.rdo WHERE commessa_id = $1 AND codice = 'ALFA-RDO-001'`, [A.commessa])
+    const { id } = await q1(`INSERT INTO public.rdo (rda_id, commessa_id, azienda_id, codice, fornitore, fornitore_id, stato, oggetto)
+      VALUES ($1, $2, $3, 'E2E-RDO-ANN', $4, $5, 'inviata', 'E2E RDO da annullare') RETURNING id`, [base.rda_id, A.commessa, A.id, base.fornitore, base.fornitore_id])
+    await apri(page, `${BASE}/rdo`, 'tr:has-text("E2E-RDO-ANN")')
+    await page.locator('tr:has-text("E2E-RDO-ANN")').getByRole('button', { name: /Annulla/ }).click()   // due conferme, accettate
+    const ok = await attendi(() => q1(`SELECT 1 FROM public.rdo WHERE id = $1 AND stato = 'annullata'`, [id]))
+    const vincolo = (await q1(`SELECT pg_get_constraintdef(oid) d FROM pg_constraint WHERE conname = 'rdo_stato_check'`))?.d || ''
+    verifica(ti, ok, 'RDO annullata nel DB (stato annullata)', `annullamento non salvato — a schermo: ${await messaggioAschermo(page)} · ammessi da rdo_stato_check: ${(vincolo.match(/'[a-z_]+'/g) || []).join(', ')}`)
   })
 })

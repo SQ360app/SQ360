@@ -55,7 +55,7 @@ export default function FatturePage({ params: p }: { params: Promise<{ id: strin
     setLoading(true)
     const [{ data: fp }, { data: oda }, { data: ddt }] = await Promise.all([
       supabase.from('fatture_passive').select('*').eq('commessa_id', id).order('data_fattura', { ascending: false }),
-      supabase.from('oda').select('id,numero:codice,oggetto').eq('commessa_id', id).neq('stato', 'ANNULLATO'),
+      supabase.from('oda').select('id,numero:codice,oggetto').eq('commessa_id', id).neq('stato', 'annullato'),
       // ddt non ha fornitore_nome: il nome arriva dal join sul fornitore (FK ddt.fornitore_id)
       supabase.from('ddt').select('id,numero_ddt,data_ddt,fornitore:professionisti_fornitori(ragione_sociale,nome,cognome)').eq('commessa_id', id).order('data_ddt', { ascending: false }),
     ])

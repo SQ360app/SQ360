@@ -21,11 +21,15 @@ const TIPI_ODA = [
   { value: 'servizio',    label: 'Servizio/Consulenza', color: '#6b7280', bg: '#f3f4f6', ritenuta: 0 },
 ]
 
-// Valori ammessi dal DB (oda_stato_check): bozza, firmato, in_esecuzione, completato, contestato.
-// Le chiavi MAIUSCOLE restano solo per mostrare righe storiche e i pulsanti di cambio stato
-// (da riallineare in un passo successivo: oggi il DB li rifiuta).
+// Valori ammessi dal DB (oda_stato_check): bozza, firmato, in_esecuzione, completato, contestato,
+// annullato (migrazione 20261101_3). Le chiavi MAIUSCOLE restano solo per mostrare righe storiche.
 const STATI: Record<string, { label: string; color: string }> = {
-  bozza:      { label: 'Emesso (da firmare)', color: '#3b82f6' },
+  bozza:         { label: 'Emesso (da firmare)', color: '#3b82f6' },
+  firmato:       { label: 'Confermato (firmato)', color: '#6366f1' },
+  in_esecuzione: { label: 'Parz. evaso',   color: '#f59e0b' },
+  completato:    { label: 'Evaso',         color: '#10b981' },
+  contestato:    { label: 'Contestato',    color: '#dc2626' },
+  annullato:     { label: 'Annullato',     color: '#ef4444' },
   EMESSO:     { label: 'Emesso',      color: '#3b82f6' },
   CONFERMATO: { label: 'Confermato',  color: '#6366f1' },
   PARZ_EVASO: { label: 'Parz. evaso', color: '#f59e0b' },
@@ -262,8 +266,8 @@ export default function ODAPage() {
   }
 
   const odaVigente = oda.filter((o: any) => o.is_vigente !== false)
-  const totImpegnato = odaVigente.filter((o: any) => o.stato !== 'ANNULLATO').reduce((s: number, o: any) => s + o.importo_netto, 0)
-  const totRitenute = odaVigente.filter((o: any) => o.stato !== 'ANNULLATO').reduce((s: number, o: any) => s + (o.ritenuta_importo || 0), 0)
+  const totImpegnato = odaVigente.filter((o: any) => o.stato !== 'annullato').reduce((s: number, o: any) => s + o.importo_netto, 0)
+  const totRitenute = odaVigente.filter((o: any) => o.stato !== 'annullato').reduce((s: number, o: any) => s + (o.ritenuta_importo || 0), 0)
 
   const displayCodiceOda = (o: any) => o.revisione ? `${o.numero} REV.${o.revisione}` : o.numero
   const creaRevisioneOda = async (o: any, motivo: string) => {
@@ -324,7 +328,7 @@ export default function ODAPage() {
       {/* KPI bar */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8 }}>
         {[
-          ['ODA emessi',          String(odaVigente.filter((o: any) => o.stato !== 'ANNULLATO').length), 'ordini vigenti'],
+          ['ODA emessi',          String(odaVigente.filter((o: any) => o.stato !== 'annullato').length), 'ordini vigenti'],
           ['Costi impegnati',     '€ ' + fmt(totImpegnato),             'totale netto'],
           ['Ritenute accumulate', '€ ' + fmt(totRitenute),              'da svincolare'],
           ['Da pagare netto',     '€ ' + fmt(totImpegnato - totRitenute), 'importo residuo'],
@@ -340,7 +344,7 @@ export default function ODAPage() {
       {/* Alert WBS */}
       {(() => {
         const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-        const senza = odaVigente.filter((o: any) => !o.wbs_ref && o.created_at < sevenDaysAgo && o.stato !== 'ANNULLATO')
+        const senza = odaVigente.filter((o: any) => !o.wbs_ref && o.created_at < sevenDaysAgo && o.stato !== 'annullato')
         if (senza.length === 0) return null
         return (
           <div style={{ padding:'10px 16px', background:'#fef9c3', border:'1px solid #fde68a', borderRadius:10, fontSize:12, color:'#92400e', display:'flex', alignItems:'center', gap:8 }}>
@@ -458,7 +462,7 @@ export default function ODAPage() {
                       {/* Cambio stato ODA */}
                       <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' as const, marginBottom:8 }}>
                         <span style={{ fontSize:11, color:'var(--t3)' }}>Stato →</span>
-                        {['CONFERMATO','PARZ_EVASO','EVASO'].filter(s => s !== o.stato).map(s => (
+                        {['firmato','in_esecuzione','completato'].filter(s => s !== o.stato).map(s => (
                           <button key={s} onClick={() => cambiaStato(o.id, s)}
                             style={{ padding:'3px 10px', borderRadius:6, border:'1px solid var(--border)', background:'var(--bg)', color:'var(--t2)', cursor:'pointer', fontSize:10, fontWeight:600 }}>
                             {STATI[s]?.label}
@@ -466,7 +470,7 @@ export default function ODAPage() {
                         ))}
                         <button onClick={() => {
                           if (!window.confirm(`Annullare l'ODA ${o.numero}? Operazione non reversibile.`)) return
-                          cambiaStato(o.id, 'ANNULLATO')
+                          cambiaStato(o.id, 'annullato')
                         }} style={{ padding:'3px 10px', borderRadius:6, border:'1px solid #fca5a5', background:'#fef2f2', color:'#dc2626', cursor:'pointer', fontSize:10, fontWeight:600, marginLeft:'auto' }}>
                           Annulla
                         </button>
@@ -487,7 +491,7 @@ export default function ODAPage() {
 
                       {/* Revisioni */}
                       <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:10, paddingTop:10, borderTop:'1px solid var(--border)' }}>
-                        {o.stato !== 'ANNULLATO' && (
+                        {o.stato !== 'annullato' && (
                           <button onClick={() => setRevModal({doc: o, motivo: ''})}
                             style={{ ...(styleObj as any).btn('#6d28d9'), padding:'3px 10px', fontSize:10 }}>
                             📝 Revisiona

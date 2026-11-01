@@ -24,6 +24,8 @@ passo('2b. Divisione in 0_verifica / 1_applica / 2_ritorno_indietro', ['tests/is
 passo('3a. Seed', ['tests/seed/seed.mjs'])
 passo('3b. Test isolamento PRIMA', ['tests/isolamento/isolamento.mjs', 'prima'])
 passo('4a. Migrazione sulla PROVA', ['tests/ambiente-prova/applica-migrazione.mjs', 'supabase/migrations/20261101_1_applica.sql'])
+// migrazioni successive ancora da eseguire in produzione: la prova resta allineata allo stato atteso
+passo('4a-bis. Migrazione stati annullati sulla PROVA', ['tests/ambiente-prova/applica-migrazione.mjs', 'supabase/migrations/20261101_3_stati_annullati.sql'])
 passo('4b. Seed con le nuove regole', ['tests/seed/seed.mjs'])
 passo('4c. Test isolamento DOPO', ['tests/isolamento/isolamento.mjs', 'dopo'])
 

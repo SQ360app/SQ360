@@ -67,7 +67,7 @@ export default function MarginalitaPage() {
     const odaByWbs: Record<string, number> = {}
     let totalOda = 0
     for (const o of odaData || []) {
-      if (o.stato === 'ANNULLATO') continue
+      if (o.stato === 'annullato') continue
       totalOda += Number(o.importo_netto) || 0
       const rdaId = o.rdo_id ? rdoToRda[o.rdo_id] : null
       const wbsId = rdaId ? rdaToWbs[rdaId] : null

@@ -58,7 +58,7 @@ export default function DDTPage({ params: p }: { params: Promise<{ id: string }>
       supabase.from('ddt').select('*').eq('commessa_id', id)
         .order('created_at', { ascending: false })
         .range(pagina * DDT_LIMIT, (pagina + 1) * DDT_LIMIT - 1),
-      supabase.from('oda').select('id,numero:codice,oggetto').eq('commessa_id', id).neq('stato', 'ANNULLATO'),
+      supabase.from('oda').select('id,numero:codice,oggetto').eq('commessa_id', id).neq('stato', 'annullato'),
     ])
     const lista = (ddt as DDT[]) || []
     setDdtList(prev => pagina === 0 ? lista : [...prev, ...lista])

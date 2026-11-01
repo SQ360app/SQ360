@@ -11,11 +11,18 @@ import { fetchConToken } from '@/lib/authFetch'
 
 const fi = (n: number, d = 2) => n?.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? '—'
 
-const STATI_RDO = ['bozza','inviata','ricevuta','comparativa','aggiudicata','annullata']
-const STATO_COLOR: Record<string,string> = {
-  bozza:'#f59e0b', inviata:'#3b82f6', ricevuta:'#8b5cf6', risposta_ricevuta:'#8b5cf6',
-  comparativa:'#f97316', aggiudicata:'#10b981', annullata:'#6b7280'
+// Valori ammessi da rdo_stato_check: bozza, inviata, ricevuta, accettata (aggiudicata),
+// rifiutata (offerta non aggiudicata), annullata (migrazione 20261101_3).
+// Chiavi storiche (risposta_ricevuta, comparativa, aggiudicata) lasciate solo per i colori.
+const STATI_RDO = ['bozza','inviata','ricevuta','accettata','rifiutata','annullata']
+const ETICHETTA_RDO: Record<string,string> = {
+  bozza:'bozza', inviata:'inviata', ricevuta:'offerta ricevuta', accettata:'aggiudicata', rifiutata:'non aggiudicata', annullata:'annullata',
 }
+const STATO_COLOR: Record<string,string> = {
+  bozza:'#f59e0b', inviata:'#3b82f6', ricevuta:'#8b5cf6', accettata:'#10b981', rifiutata:'#9ca3af', annullata:'#6b7280',
+  risposta_ricevuta:'#8b5cf6', comparativa:'#f97316', aggiudicata:'#10b981',
+}
+const RDO_CHIUSA = (s: string) => ['accettata','rifiutata','annullata'].includes(s)
 
 const TIPI_AFFIDAMENTO = [
   { value: 'fornitore_materiali', label: 'Fornitura materiali', emoji: '🏭' },
@@ -80,7 +87,7 @@ function FlowThreadRDO({ rdoId, rdaId, supabase: sb }: { rdoId: string; rdaId?: 
     sb.from('oda').select('numero:codice,stato').eq('rdo_id', rdoId).limit(1).then(({ data }: any) => data?.[0] && setOda(data[0]))
   }, [rdoId, rdaId])
   if (!rda && !oda) return null
-  const C: Record<string,string> = { bozza:'#f59e0b',approvata:'#3b82f6',inviata:'#8b5cf6',aggiudicata:'#10b981',EVASO:'#10b981',EMESSO:'#3b82f6',BOZZA:'#f59e0b' }
+  const C: Record<string,string> = { bozza:'#f59e0b',approvata:'#3b82f6',inviata:'#8b5cf6',aggiudicata:'#10b981',accettata:'#10b981',firmato:'#6366f1',in_esecuzione:'#f59e0b',completato:'#10b981',annullato:'#ef4444',EVASO:'#10b981',EMESSO:'#3b82f6',BOZZA:'#f59e0b' }
   return (
     <div style={{ display:'flex',alignItems:'center',gap:4,marginTop:3,flexWrap:'wrap' as const }}>
       {rda&&<span style={{ fontSize:10,padding:'1px 5px',borderRadius:4,background:(C[rda.stato]||'#6b7280')+'20',color:C[rda.stato]||'#6b7280',fontWeight:600 }}>📋 {rda.codice?.slice(0,12)}</span>}
@@ -487,9 +494,13 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
 
   const aggiudicaGruppo = async (vincitrice: RDO, gruppoId: string) => {
     const gruppo = rdoList.filter(r => r.rdo_gruppo_id === gruppoId)
-    { const esito = await scritturaVerificata(supabase.from('rdo').update({ stato: 'aggiudicata' }).eq('id', vincitrice.id).select('id')); if (!esito.ok) { showToast('⚠ Aggiudicazione non salvata: ' + esito.errore); return } }
+    // rdo_stato_check: vincente → 'accettata', altre offerte del gruppo → 'rifiutata'
+    { const esito = await scritturaVerificata(supabase.from('rdo').update({ stato: 'accettata' }).eq('id', vincitrice.id).select('id')); if (!esito.ok) { showToast('⚠ Aggiudicazione non salvata: ' + esito.errore); return } }
     const altriIds = gruppo.filter(r => r.id !== vincitrice.id).map(r => r.id)
-    if (altriIds.length) await supabase.from('rdo').update({ stato: 'annullata' }).in('id', altriIds)
+    if (altriIds.length) {
+      const esito = await scritturaVerificata(supabase.from('rdo').update({ stato: 'rifiutata' }).in('id', altriIds).select('id'), altriIds.length)
+      if (!esito.ok) showToast('⚠ Aggiudicata, ma le altre offerte non sono state segnate come non aggiudicate: ' + esito.errore)
+    }
     showToast(`✓ Aggiudicata a ${vincitrice.fornitore}`)
     await carica()
     setProssimoPasso(vincitrice)
@@ -564,7 +575,7 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
             onClick={() => setFiltroStato(filtroStato === s ? 'tutti' : s)}>
             <div style={{ width:7, height:7, borderRadius:'50%', background: STATO_COLOR[s] || '#ccc', marginBottom:6 }} />
             <p style={{ fontSize:17, fontWeight:800, color:'var(--t1)' }}>{rdoList.filter(r => r.stato === s).length}</p>
-            <p style={{ fontSize:9, color:'var(--t3)', marginTop:2, textTransform:'uppercase', letterSpacing:'0.03em' }}>{s}</p>
+            <p style={{ fontSize:9, color:'var(--t3)', marginTop:2, textTransform:'uppercase', letterSpacing:'0.03em' }}>{ETICHETTA_RDO[s] || s}</p>
           </div>
         ))}
       </div>
@@ -688,10 +699,10 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
                           <td style={{ ...styleTd, fontWeight:600, fontSize:11, color:'var(--t3)' }}>Azione</td>
                           {gruppo.map(r => (
                             <td key={r.id} style={{ ...styleTd, textAlign:'center' }}>
-                              {r.stato === 'aggiudicata' ? (
+                              {r.stato === 'accettata' ? (
                                 <span style={{ fontSize:10, fontWeight:700, color:'#10b981' }}>✓ Aggiudicata</span>
-                              ) : r.stato === 'annullata' ? (
-                                <span style={{ fontSize:10, color:'var(--t4)' }}>Annullata</span>
+                              ) : RDO_CHIUSA(r.stato) ? (
+                                <span style={{ fontSize:10, color:'var(--t4)' }}>{r.stato === 'annullata' ? 'Annullata' : 'Non aggiudicata'}</span>
                               ) : (
                                 <button
                                   onClick={() => aggiudicaGruppo(r, gruppoId)}
@@ -766,16 +777,16 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
                       </td>
                       <td style={styleTd}>
                         <span style={{ padding:'2px 8px', borderRadius:6, background:(STATO_COLOR[r.stato] || '#ccc') + '22', color: STATO_COLOR[r.stato] || '#666', fontSize:11, fontWeight:700, display:'inline-block' }}>
-                          {r.stato}
+                          {ETICHETTA_RDO[r.stato] || r.stato}
                         </span>
                       </td>
                       <td style={{ ...styleTd, whiteSpace:'nowrap' }}>
-                        {!['aggiudicata','annullata'].includes(r.stato) && (
+                        {!RDO_CHIUSA(r.stato) && (
                           <button style={styleBtn('#3b82f6')} onClick={() => { setEditRdo(r); setFSearch(r.fornitore || ''); setForm(true) }}>
                             Modifica
                           </button>
                         )}
-                        {!['aggiudicata','annullata'].includes(r.stato) && (
+                        {!RDO_CHIUSA(r.stato) && (
                           <button style={{...styleBtn('#dc2626'),fontSize:11,marginLeft:4}} onClick={() => {
                             if (!window.confirm(`Annullare la RDO ${r.codice}?`)) return
                             if (!window.confirm('Conferma: la RDO verrà marcata come ANNULLATA.')) return
@@ -795,10 +806,10 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
                             📄 PDF offerta
                           </a>
                         )}
-                        {r.stato === 'aggiudicata' && (
+                        {r.stato === 'accettata' && (
                           <button style={{...styleBtn('#0d9488'),fontSize:11,marginLeft:4}} onClick={() => window.location.href = buildSamUrl(r)}>📋 SAM</button>
                         )}
-                        {r.stato === 'aggiudicata' && !r.richiede_sam && (
+                        {r.stato === 'accettata' && !r.richiede_sam && (
                           <button style={{...styleBtn('#10b981'),fontSize:11,marginLeft:4}} onClick={() => setProssimoPasso(r)}>✅ ODA →</button>
                         )}
                         {!['annullata'].includes(r.stato) && (
@@ -817,7 +828,7 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
                             {storico.map(h => (
                               <div key={h.id} style={{ display:'flex', gap:10, alignItems:'center', padding:'5px 0', borderBottom:'1px solid #ede9fe', fontSize:11 }}>
                                 <span style={{ fontFamily:'monospace', color:'#7c3aed', minWidth:160 }}>{displayCodice(h)}</span>
-                                <span style={{ padding:'2px 7px', borderRadius:4, background:(STATO_COLOR[h.stato]||'#ccc')+'22', color:STATO_COLOR[h.stato]||'#666', fontSize:10, fontWeight:700 }}>{h.stato}</span>
+                                <span style={{ padding:'2px 7px', borderRadius:4, background:(STATO_COLOR[h.stato]||'#ccc')+'22', color:STATO_COLOR[h.stato]||'#666', fontSize:10, fontWeight:700 }}>{ETICHETTA_RDO[h.stato] || h.stato}</span>
                                 {h.motivo_rev && <span style={{ color:'var(--t3)', fontStyle:'italic' }}>"{h.motivo_rev}"</span>}
                                 <span style={{ color:'var(--t4)', marginLeft:'auto', fontSize:10 }}>
                                   {h.revised_at ? new Date(h.revised_at).toLocaleDateString('it-IT') : '—'}

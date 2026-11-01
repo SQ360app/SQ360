@@ -85,7 +85,7 @@ function FlowThreadInline({ rdaId, supabase, commessaId }: { rdaId: string; supa
 
   const COLORI: Record<string,string> = {
     bozza:'#f59e0b', inviata:'#8b5cf6', ricevuta:'#6366f1', risposta_ricevuta:'#6366f1',
-    comparativa:'#f97316', aggiudicata:'#10b981', annullata:'#ef4444'
+    comparativa:'#f97316', aggiudicata:'#10b981', accettata:'#10b981', rifiutata:'#9ca3af', annullata:'#ef4444'
   }
 
   return (

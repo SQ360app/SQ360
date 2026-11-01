@@ -186,7 +186,7 @@ export default function DashboardPage() {
       supabase.from('oda')
         .select('commessa_id,importo_netto')
         .in('commessa_id', ids)
-        .neq('stato', 'ANNULLATO'),
+        .neq('stato', 'annullato'),
 
       supabase.from('oda')
         .select('id,numero:codice,commessa_id,importo_netto,created_at')
