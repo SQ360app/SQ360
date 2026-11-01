@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test:isolamento": "node tests/isolamento/ciclo.mjs"
+    "test:isolamento": "node tests/isolamento/ciclo.mjs",
+    "test:piattaforma": "node tests/e2e/esegui.mjs"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
@@ -27,12 +28,13 @@
     "resend": "^6.12.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@types/adm-zip": "^0.5.5",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "pg": "^8.23.1",
-    "playwright": "^1.48.2",
+    "playwright": "^1.64.1",
     "typescript": "^5"
   }
 }

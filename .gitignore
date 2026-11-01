@@ -56,3 +56,4 @@ scripts/report-scritture.md
 tests/.state/
 tests/report/*.json
 tests/report/smoke-prova.md
+tests/report/e2e-artefatti/
