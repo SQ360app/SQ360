@@ -15,7 +15,7 @@
 - Pricing: un piano per numero utenti, commesse ILLIMITATE in tutti i piani
 
 ## Bug aperti / pendenti
-- ⛔ **Isolamento tra aziende non garantito in produzione** (test A/B 01/11/2026, `tests/report/ISOLAMENTO.md`): correzione in `supabase/migrations/20261101_isolamento_aziende.sql`, provata solo sulla prova, da rivedere ed eseguire — dettagli in MASTER.md §4.1/§4.4
+- ✅ **Isolamento tra aziende attivo in produzione dal 01/11/2026** (migrazione `supabase/migrations/20261101_1_applica.sql`, eseguita a mano dopo verifica e backup) — residui e dettagli in MASTER.md §4.1/§4.4
 - Bug `varianti`: ogni UPDATE fallisce (trigger `set_updated_at` senza colonna `updated_at`) — MASTER.md §4.4
 
 ## Fix e feature completati
