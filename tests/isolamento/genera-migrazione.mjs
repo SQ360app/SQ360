@@ -85,7 +85,6 @@ const verifiche = toccate.filter(t => ['azienda', 'commessa', 'commessa_o_aziend
 // ritorno indietro: ricrea le regole di oggi esattamente come sono
 const rb = ['BEGIN;']
 rb.push(fn.d.trim().replace(/\r/g, '') + ';')
-rb.push('DROP FUNCTION IF EXISTS public.sono_admin();')
 for (const t of toccate) {
   const T = tabelle[t], c = cls[t]
   const nuove = ['azienda', 'commessa', 'commessa_o_azienda', 'figlia'].includes(c.tipo) ? [t + '_azienda']
@@ -98,6 +97,8 @@ for (const t of toccate) {
   if (!T.rls) rb.push(`ALTER TABLE public.${qi(t)} DISABLE ROW LEVEL SECURITY;`)
 }
 for (const v of vistePerFix) rb.push(`ALTER VIEW public.${qi(v)} SET (security_invoker = false);`)
+// la funzione si elimina per ultima: prima vanno tolte le regole che la usano (utenti_modifica_admin)
+rb.push('DROP FUNCTION IF EXISTS public.sono_admin();')
 rb.push('COMMIT;')
 
 const nToccateSpente = toccate.filter(t => !tabelle[t].rls).length

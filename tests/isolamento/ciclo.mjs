@@ -3,6 +3,7 @@
 // Uso: npm run test:isolamento
 //   1. riporta la prova alla struttura di produzione (schema salvato, nessun accesso alla produzione)
 //   2. rigenera supabase/migrations/20261101_isolamento_aziende.sql dalle regole di oggi
+//      e i 3 file separati 20261101_0_verifica_preliminare / _1_applica / _2_ritorno_indietro
 //   3. seed → test "prima"
 //   4. applica la migrazione alla PROVA → seed (import XPWE con le nuove regole) → test "dopo"
 // Report: tests/report/ISOLAMENTO.md · exit 1 se "dopo" non è tutto bloccato o una funzione legittima non va.
@@ -19,9 +20,10 @@ const passo = (titolo, args) => {
 }
 passo('1. Prova = struttura di produzione (reset)', ['tests/ambiente-prova/applica-schema.mjs', '--reset'])
 passo('2. Generazione migrazione', ['tests/isolamento/genera-migrazione.mjs'])
+passo('2b. Divisione in 0_verifica / 1_applica / 2_ritorno_indietro', ['tests/isolamento/dividi-migrazione.mjs'])
 passo('3a. Seed', ['tests/seed/seed.mjs'])
 passo('3b. Test isolamento PRIMA', ['tests/isolamento/isolamento.mjs', 'prima'])
-passo('4a. Migrazione sulla PROVA', ['tests/ambiente-prova/applica-migrazione.mjs', 'supabase/migrations/20261101_isolamento_aziende.sql'])
+passo('4a. Migrazione sulla PROVA', ['tests/ambiente-prova/applica-migrazione.mjs', 'supabase/migrations/20261101_1_applica.sql'])
 passo('4b. Seed con le nuove regole', ['tests/seed/seed.mjs'])
 passo('4c. Test isolamento DOPO', ['tests/isolamento/isolamento.mjs', 'dopo'])
 

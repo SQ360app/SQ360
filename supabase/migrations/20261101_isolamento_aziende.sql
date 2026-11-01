@@ -1125,7 +1125,6 @@ CREATE OR REPLACE FUNCTION public.get_azienda_id()
 AS $function$
   SELECT azienda_id FROM utenti WHERE id = auth.uid()
 $function$;
-DROP FUNCTION IF EXISTS public.sono_admin();
 DROP POLICY IF EXISTS "accessi_cantiere_azienda" ON public."accessi_cantiere";
 CREATE POLICY "accessi_cantiere_azienda" ON public."accessi_cantiere" FOR ALL TO "authenticated" USING ((EXISTS ( SELECT 1 FROM commesse c WHERE ((c.id = accessi_cantiere.commessa_id) AND (c.azienda_id = ( SELECT get_azienda_id() AS get_azienda_id)))))) WITH CHECK ((EXISTS ( SELECT 1 FROM commesse c WHERE ((c.id = accessi_cantiere.commessa_id) AND (c.azienda_id = ( SELECT get_azienda_id() AS get_azienda_id))))));
 DROP POLICY IF EXISTS "analisi_extra_voce_azienda" ON public."analisi_extra_voce";
@@ -1337,5 +1336,6 @@ ALTER VIEW public."v_voce_avanzamento" SET (security_invoker = false);
 ALTER VIEW public."v_voci_importo" SET (security_invoker = false);
 ALTER VIEW public."v_voci_importo_3strati" SET (security_invoker = false);
 ALTER VIEW public."v_wbs_budget" SET (security_invoker = false);
+DROP FUNCTION IF EXISTS public.sono_admin();
 COMMIT;
 */
