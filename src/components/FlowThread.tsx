@@ -14,7 +14,7 @@ const COLORI: Record<string, string> = {
   // RDA / RDO
   bozza: '#f59e0b', approvata: '#3b82f6', inviata: '#8b5cf6',
   chiusa: '#10b981', annullata: '#6b7280',
-  risposta_ricevuta: '#8b5cf6', comparativa: '#f97316', aggiudicata: '#10b981',
+  ricevuta: '#8b5cf6', risposta_ricevuta: '#8b5cf6', comparativa: '#f97316', aggiudicata: '#10b981',
   // DAM/SAM
   inviata_dl: '#3b82f6', rifiutata: '#ef4444', integrazione: '#8b5cf6',
   // ODA

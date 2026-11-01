@@ -1,7 +1,7 @@
 // ─── 3. Persone e presenze con QR, giornale lavori, invito utente (solo DB),
 //        archiviazione e ripristino della commessa (per ultima) ───────────────
 import { test } from '@playwright/test'
-import { A, BASE, stato, q, q1, attendi, accedi, supabaseAdmin, campo, annota, verifica, verificaUguale, messaggioAschermo, seguiDialoghi, apri, contesto, oggi } from './helpers.mjs'
+import { A, BASE, stato, q, q1, attendi, accedi, supabaseAdmin, campo, annota, verifica, verificaUguale, messaggioAschermo, seguiDialoghi, dialoghiDi, apri, contesto, oggi } from './helpers.mjs'
 
 const ctx = contesto('cantiere')
 
@@ -72,6 +72,8 @@ test.describe('Cantiere, utenti, archivio', () => {
     const corpo = await r.json().catch(() => ({}))
     const motivo = corpo.error || corpo.errore || ''
     const u = await attendi(() => q1(`SELECT * FROM public.utenti WHERE email = $1`, [email]), { timeout: 8000 })
+    const esitoMostrato = await attendi(() => dialoghiDi(page).find(d => d.includes('Invito') && d.includes(email)), { timeout: 5000 })
+    verifica(ti, esitoMostrato, 'messaggio di esito dell\'invito mostrato all\'utente', 'nessun messaggio dopo l\'invio: la pagina non comunica l\'esito')
     if (!r.ok() && /invalid|not authorized|smtp|rate limit/i.test(motivo)) {
       // nessuna email vera: Supabase rifiuta i domini finti → si verifica solo che non restino utenti orfani
       const { data: lista } = await supabaseAdmin().auth.admin.listUsers({ perPage: 200 })

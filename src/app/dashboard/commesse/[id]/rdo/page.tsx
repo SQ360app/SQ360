@@ -11,9 +11,9 @@ import { fetchConToken } from '@/lib/authFetch'
 
 const fi = (n: number, d = 2) => n?.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }) ?? '—'
 
-const STATI_RDO = ['bozza','inviata','risposta_ricevuta','comparativa','aggiudicata','annullata']
+const STATI_RDO = ['bozza','inviata','ricevuta','comparativa','aggiudicata','annullata']
 const STATO_COLOR: Record<string,string> = {
-  bozza:'#f59e0b', inviata:'#3b82f6', risposta_ricevuta:'#8b5cf6',
+  bozza:'#f59e0b', inviata:'#3b82f6', ricevuta:'#8b5cf6', risposta_ricevuta:'#8b5cf6',
   comparativa:'#f97316', aggiudicata:'#10b981', annullata:'#6b7280'
 }
 
@@ -174,13 +174,17 @@ function PdfUploadModal({ rdo, onClose, onSaved }: { rdo: RDO; onClose: () => vo
   const conferma = async () => {
     if (!result) return
     setSaving(true)
-    await supabase.from('rdo').update({
+    // Scrittura verificata: "importata" solo se la riga è stata davvero aggiornata.
+    // stato: valori ammessi da rdo_stato_check → bozza, inviata, ricevuta, accettata, rifiutata
+    const esito = await scritturaVerificata(supabase.from('rdo').update({
       offerta_voci: result.voci || [],
       importo_offerta: result.importo_totale || 0,
-      stato: 'risposta_ricevuta',
+      stato: 'ricevuta',
       data_risposta: new Date().toISOString().slice(0, 10),
-    }).eq('id', rdo.id)
+    }).eq('id', rdo.id).select('id'))
     setSaving(false)
+    if (!esito.ok) { alert('⚠ Offerta non salvata: ' + esito.errore); return }
+    alert(`✓ Offerta di ${rdo.fornitore} importata: EUR ${Number(result.importo_totale || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })}`)
     onSaved()
     onClose()
   }
@@ -334,7 +338,7 @@ export default function RDOPage({ params: p }: { params: Promise<{ id: string }>
         (payload: any) => {
           const rec = payload.new
           const old = payload.old || {}
-          if (rec.stato === 'risposta_ricevuta' && old.stato !== 'risposta_ricevuta') {
+          if (rec.stato === 'ricevuta' && old.stato !== 'ricevuta') {
             setToast(`📬 Offerta ricevuta da ${rec.fornitore}`)
             setTimeout(() => setToast(''), 4000)
             if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {

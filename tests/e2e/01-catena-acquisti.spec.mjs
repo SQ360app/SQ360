@@ -64,8 +64,7 @@ test.describe('Catena acquisti', () => {
     verifica(ti, rdo.every(r => r.token_offerta), 'token per la pagina pubblica dell\'offerta')
     const st = await q1(`SELECT stato FROM public.rda WHERE id = $1`, [rda.id])
     verificaUguale(ti, st.stato, 'inviata', 'stato RDA dopo l\'invio')
-    verificaUguale(ti, rdo[0].wbs_ref, rda.wbs_id || rda.wbs_ref, 'WBS propagata dalla RDA alla RDO',
-      'la RDO copia solo rda.wbs_ref; la RDA generata dal computo ha la WBS in rda.wbs_id → WBS persa')
+    // la WBS lungo la catena è verificata a parte nel test 1.11
   })
 
   test('1.4 Offerta fornitore 1 dalla pagina pubblica /offerta (senza login)', async ({ browser }, ti) => {
@@ -112,20 +111,23 @@ test.describe('Catena acquisti', () => {
     await apri(page, `${BASE}/rdo`, page.locator('td', { hasText: /^TOTALE$/ }))
     const tabella = page.locator('table', { has: page.locator('td', { hasText: /^TOTALE$/ }) }).filter({ hasText: vinc.fornitore.slice(0, 18) }).first()
     const intest = (await tabella.locator('tr').first().locator('th, td').allInnerTexts()).map(t => t.trim())
-    const col = intest.findIndex(t => t.includes(vinc.fornitore.split(' ')[1] || vinc.fornitore))
+    const parola = (vinc.fornitore.split(' ')[1] || vinc.fornitore).toLowerCase()   // l'intestazione è in maiuscolo via CSS
+    const col = intest.findIndex(t => t.toLowerCase().includes(parola))
     verifica(ti, col > 0, 'colonna del fornitore nella comparativa', `intestazioni trovate: ${intest.join(' | ')}`)
     const best = tabella.locator('td', { hasText: '▼ BEST' })
     verificaUguale(ti, await best.count(), 1, 'un solo "BEST" nella comparativa')
     await tabella.locator('tr', { hasText: 'Azione' }).locator('td').nth(col).getByRole('button', { name: /Aggiudica/ }).click()
     const ok = await attendi(() => q1(`SELECT 1 FROM public.rdo WHERE id = $1 AND stato = 'aggiudicata'`, [vinc.id]))
-    verifica(ti, ok, 'RDO vincitrice aggiudicata nel DB', `aggiudicazione non salvata — a schermo: ${await messaggioAschermo(page)}`)
+    const vincolo = (await q1(`SELECT pg_get_constraintdef(oid) d FROM pg_constraint WHERE conname = 'rdo_stato_check'`))?.d || ''
+    verifica(ti, ok, 'RDO vincitrice aggiudicata nel DB', `aggiudicazione non salvata — a schermo: ${await messaggioAschermo(page)}` +
+      (vincolo && !vincolo.includes("'aggiudicata'") ? ` · la pagina scrive stato 'aggiudicata' (e 'annullata' sulle altre), non ammessi da rdo_stato_check: ${(vincolo.match(/'[a-z_]+'/g) || []).join(', ')}` : ''))
     ctx.vincitrice = await q1(`SELECT * FROM public.rdo WHERE id = $1`, [vinc.id])
     const altre = await q(`SELECT stato FROM public.rdo WHERE rdo_gruppo_id = $1 AND id <> $2`, [vinc.rdo_gruppo_id, vinc.id])
     verifica(ti, altre.every(a => a.stato === 'annullata'), 'le altre RDO del gruppo annullate', `stati: ${altre.map(a => a.stato).join(', ')}`)
     await page.getByRole('button', { name: /Genera ODA direttamente/ }).waitFor()
   })
 
-  test('1.7 ODA dall\'aggiudicazione (importo, fornitore, WBS)', async ({ page }, ti) => {
+  test('1.7 ODA dall\'aggiudicazione (importo, fornitore)', async ({ page }, ti) => {
     const t0 = new Date().toISOString()
     const rdo = await fallback(ti, 'vincitrice', `SELECT * FROM public.rdo WHERE commessa_id = $1 AND codice = 'ALFA-RDO-001'`, [A.commessa], 'la RDO')
     const params = new URLSearchParams({ rdo_id: rdo.id, importo: String(rdo.importo_offerta || 0), fornitore: rdo.fornitore || '', richiede_sam: '0', wbs_ref: e2e.wbs.codice })
@@ -133,7 +135,7 @@ test.describe('Catena acquisti', () => {
     verificaUguale(ti, Number(await campo(page, 'Importo netto €').inputValue()), Number(rdo.importo_offerta), 'importo precompilato dall\'offerta')
     const fornSel = await campo(page, 'Fornitore *').inputValue()
     if (fornSel !== rdo.fornitore_id) { annota(ti, 'bug', `ODA: fornitore non preselezionato dall'aggiudicazione (nome nell'URL "${rdo.fornitore}"); selezionato a mano`); await campo(page, 'Fornitore *').selectOption(rdo.fornitore_id) }
-    const wbsSel = await campo(page, 'WBS / Area di riferimento').inputValue()
+    ctx.wbsOdaModulo = await campo(page, 'WBS / Area di riferimento').inputValue()
     await campo(page, 'Oggetto *').fill('E2E fornitura da aggiudicazione')
     await page.getByRole('button', { name: 'Crea ODA' }).click()
     const oda = await attendi(() => q1(`SELECT * FROM public.oda WHERE rdo_id = $1 AND created_at >= $2 ORDER BY created_at DESC LIMIT 1`, [rdo.id, t0]), { timeout: 12000 })
@@ -143,8 +145,8 @@ test.describe('Catena acquisti', () => {
     verificaUguale(ti, Number(oda.importo_netto), Number(rdo.importo_offerta), 'importo ODA = offerta aggiudicata')
     verificaUguale(ti, oda.fornitore_id, rdo.fornitore_id, 'fornitore ODA = aggiudicatario')
     verificaUguale(ti, oda.azienda_id, A.id, 'azienda ODA')
-    verificaUguale(ti, oda.wbs_ref || wbsSel || null, e2e.wbs.codice, 'WBS propagata fino all\'ODA',
-      'la pagina ODA non legge wbs_ref dall\'URL (legge solo rdo_id, importo, fornitore, dam_id, richiede_sam)')
+    verifica(ti, ['bozza', 'firmato', 'in_esecuzione', 'completato', 'contestato'].includes(oda.stato), `stato ODA ammesso da oda_stato_check (${oda.stato})`)
+    // la WBS lungo la catena è verificata a parte nel test 1.11
   })
 
   test('1.8 DDT da documento (AI simulata) e verifica', async ({ page }, ti) => {
@@ -197,5 +199,19 @@ test.describe('Catena acquisti', () => {
     const { s } = await q1(`SELECT coalesce(sum(importo_netto), 0)::float8 s FROM public.oda WHERE commessa_id = $1 AND coalesce(stato, '') <> 'ANNULLATO'`, [A.commessa])
     verificaUguale(ti, mostrato, r2(s), 'CE "Totale ODA impegnati" = Σ importo_netto ODA della commessa')
     if (ctx.oda) verifica(ti, s >= Number(ctx.oda.importo_netto), 'l\'ODA del test è compreso nel conto economico')
+  })
+
+  test('1.11 WBS propagata lungo la catena RDA → RDO → ODA', async ({}, ti) => {
+    verifica(ti, ctx.rda && ctx.rdo1, 'RDA e RDO del test disponibili', 'passi 1.1–1.3 non riusciti')
+    const rda = await q1(`SELECT wbs_id, wbs_ref FROM public.rda WHERE id = $1`, [ctx.rda.id])
+    const rdo = await q1(`SELECT wbs_ref FROM public.rdo WHERE id = $1`, [ctx.rdo1.id])
+    const oda = ctx.oda ? await q1(`SELECT wbs_ref FROM public.oda WHERE id = $1`, [ctx.oda.id]) : null
+    const wbs = rda.wbs_id || rda.wbs_ref
+    verificaUguale(ti, wbs, e2e.wbs.codice, 'WBS sulla RDA')
+    const errori = []
+    if (rdo.wbs_ref !== wbs) errori.push(`RDO: wbs_ref = ${JSON.stringify(rdo.wbs_ref)} (la RDO copia solo rda.wbs_ref; la RDA generata dal computo ha la WBS in rda.wbs_id)`)
+    if (!oda) errori.push('ODA del test non creato (passo 1.7)')
+    else if ((oda.wbs_ref || ctx.wbsOdaModulo || null) !== wbs) errori.push(`ODA: wbs_ref = ${JSON.stringify(oda.wbs_ref)} (la pagina ODA non legge wbs_ref dall'URL: legge solo rdo_id, importo, fornitore, dam_id, richiede_sam)`)
+    verifica(ti, !errori.length, `WBS "${wbs}" propagata a RDO e ODA`, errori.join(' · '))
   })
 })

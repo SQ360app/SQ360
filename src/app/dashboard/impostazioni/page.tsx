@@ -357,7 +357,11 @@ export default function ImpostazioniPage() {
   }
 
   async function invitaUtente() {
-    if (!inviteEmail || !aziendaId) return
+    // Il pulsante è disabilitato finché i dati non sono pronti; il controllo resta per sicurezza,
+    // ma non esce più in silenzio: l'esito si mostra sempre.
+    if (!inviteEmail.trim()) { alert('Inserisci l\'email della persona da invitare'); return }
+    if (!aziendaId) { alert('Dati dell\'azienda non ancora caricati: attendi qualche secondo e riprova'); return }
+    const emailInvito = inviteEmail.trim()
     setInviteSending(true)
     const template = TEMPLATE_PERMESSI.find(t => t.nome === inviteTemplate)
     const moduliInvite = template
@@ -370,17 +374,20 @@ export default function ImpostazioniPage() {
       const res = await fetch('/api/invite-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ email: inviteEmail, ruolo: inviteRuolo, moduli_abilitati: moduliInvite }),
+        body: JSON.stringify({ email: emailInvito, ruolo: inviteRuolo, moduli_abilitati: moduliInvite }),
       })
-      if (!res.ok) { const e = await res.json(); alert(e.error || 'Errore durante l\'invito'); }
-      else {
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}))
+        alert(`⚠ Invito non inviato a ${emailInvito}: ${e.error || e.errore || `errore del server (HTTP ${res.status})`}`)
+      } else {
         setInviteModal(false)
         setInviteEmail('')
         setInviteTemplate('')
         const { data } = await (supabase as any).from('utenti').select('*').eq('azienda_id', aziendaId).order('created_at', { ascending: true })
         if (data) setUtenti(data.map((u: any) => ({ ...u, commesse_assegnate: [], ultimo_accesso: u.created_at?.split('T')[0] || '—' })))
+        alert(`✓ Invito inviato a ${emailInvito}: riceverà un'email per scegliere la password`)
       }
-    } catch { alert('Errore di rete') }
+    } catch { alert(`⚠ Invito non inviato a ${emailInvito}: errore di rete`) }
     setInviteSending(false)
   }
 
@@ -1348,10 +1355,10 @@ export default function ImpostazioniPage() {
               <button onClick={() => setInviteModal(false)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 18px', fontSize: 13, cursor: 'pointer', color: 'var(--t2)' }}>Annulla</button>
               <button
                 onClick={invitaUtente}
-                disabled={inviteSending || !inviteEmail}
-                style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 600, color: 'white', cursor: (inviteSending || !inviteEmail) ? 'not-allowed' : 'pointer', opacity: (inviteSending || !inviteEmail) ? 0.6 : 1 }}
+                disabled={inviteSending || !inviteEmail || !aziendaId}
+                style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 600, color: 'white', cursor: (inviteSending || !inviteEmail || !aziendaId) ? 'not-allowed' : 'pointer', opacity: (inviteSending || !inviteEmail || !aziendaId) ? 0.6 : 1 }}
               >
-                {inviteSending ? '⏳ Invio…' : '✉️ Invita'}
+                {inviteSending ? '⏳ Invio…' : !aziendaId ? '⏳ Caricamento…' : '✉️ Invita'}
               </button>
             </div>
           </div>

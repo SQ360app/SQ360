@@ -89,6 +89,8 @@ export function seguiDialoghi(page) {
   dialoghi.set(page, [])
   page.on('dialog', d => { dialoghi.get(page)?.push(`[${d.type()}] ${d.message()}`); d.accept().catch(() => {}) })
 }
+/** Messaggi alert/confirm mostrati dalla pagina finora */
+export const dialoghiDi = page => [...(dialoghi.get(page) || [])]
 export async function messaggioAschermo(page) {
   const t = await page.locator('[class*="toast"], [role="alert"], [style*="position: fixed"]').allInnerTexts().catch(() => [])
   const d = (dialoghi.get(page) || []).slice(-2)

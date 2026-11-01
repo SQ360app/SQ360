@@ -112,7 +112,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       validita_giorni: Math.trunc(num(b.validita_giorni, 1, 365)),
       luogo_consegna: scelta(b.luogo_consegna, ['franco_cantiere', 'franco_magazzino', 'concordare'] as const, 'franco_cantiere'),
       note_offerta: note + (oss ? '\n\nOsservazioni tecniche:\n' + oss : ''),
-      stato: 'risposta_ricevuta',
+      stato: 'ricevuta',   // valori ammessi da rdo_stato_check: bozza, inviata, ricevuta, accettata, rifiutata
     }).eq('id', rdo.id).eq('token_offerta', token)
       .or('stato_offerta.is.null,stato_offerta.neq.ricevuta')
       .select('id')

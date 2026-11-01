@@ -45,7 +45,7 @@ export default function FatturazionePage() {
   const load = useCallback(async (pagina = 0) => {
     setLoading(true)
     const [{ data: fa }, { data: fp }, { data: f }] = await Promise.all([
-      supabase.from('fatture').select('*').eq('commessa_id', id).eq('tipo', 'ATTIVA').order('created_at', { ascending: false }),
+      supabase.from('fatture').select('*').eq('commessa_id', id).eq('tipo', 'attiva').order('created_at', { ascending: false }),
       supabase.from('fatture_passive').select('*, fornitore:professionisti_fornitori(ragione_sociale)')
         .eq('commessa_id', id).order('created_at', { ascending: false })
         .range(pagina * FP_LIMIT, (pagina + 1) * FP_LIMIT - 1),
@@ -75,7 +75,7 @@ export default function FatturazionePage() {
     const { data: comm } = await supabase.from('commesse').select('committente').eq('id', id).maybeSingle()
     const esito = await scritturaVerificata(supabase.from('fatture').insert({
       commessa_id: id, azienda_id: await getAziendaId() || null,
-      tipo: 'ATTIVA', numero: formA.numero,
+      tipo: 'attiva', numero: formA.numero,   // fatture_tipo_check ammette solo 'attiva' / 'passiva'
       soggetto: (comm as any)?.committente || 'Committente',
       data_emissione: formA.data || new Date().toISOString().split('T')[0],
       importo_imponibile: netto, iva_pct: parseFloat(formA.iva_pct) || 0, importo_iva: iva,

@@ -58,12 +58,12 @@ test.describe('SAL', () => {
     await page.getByRole('button', { name: /Emetti fattura/ }).click()
     const f = await attendi(() => q1(`SELECT * FROM public.fatture WHERE commessa_id = $1 AND numero = 'E2E-FA-001'`, [A.commessa]))
     verifica(ti, f, 'fattura attiva salvata nel DB', `fattura non salvata — a schermo: ${await messaggioAschermo(page)} · la pagina scrive tipo 'ATTIVA', il vincolo fatture_tipo_check ammette solo 'attiva'/'passiva'`)
-    verificaUguale(ti, String(f.tipo).toUpperCase(), 'ATTIVA', 'tipo fattura')
+    verificaUguale(ti, f.tipo, 'attiva', 'tipo fattura (valore del vincolo fatture_tipo_check)')
     verificaUguale(ti, Number(f.importo_imponibile), netto, 'imponibile = netto del SAL')
     verificaUguale(ti, Number(f.importo_iva), r2(netto * 0.22), 'IVA 22%')
     verificaUguale(ti, f.azienda_id, A.id, 'azienda fattura')
-    verifica(ti, haSal && f.sal_id === sal.id, 'fattura collegata al SAL (fatture.sal_id)',
-      haSal ? 'il SAL scelto non viene salvato nella fattura' : 'il modulo "Nuova fattura attiva" non ha un campo SAL (formA.sal_id esiste ma non è mostrato né salvato)')
+    verifica(ti, ['attiva', 'passiva'].includes(f.tipo), `tipo ammesso da fatture_tipo_check (${f.tipo})`)
+    ctx.fatturaAttiva = { id: f.id, sal: sal.id, haCampoSal: haSal }   // collegamento al SAL verificato a parte nel test 2.5
   })
 
   test('2.4 SAL passivo con fornitore dal DURC scaduto: registrazione e blocco autorizzazione', async ({ page }, ti) => {
@@ -94,5 +94,12 @@ test.describe('SAL', () => {
       annota(ti, 'bug', 'SAL passivi: il blocco per DURC scaduto esiste solo nell\'interfaccia — con una chiamata API diretta lo stato passa ad "autorizzato" (nessun controllo nel DB)')
       await q(`UPDATE public.sal_passivi SET stato = 'in_verifica' WHERE id = $1`, [sp.id])
     }
+  })
+
+  test('2.5 Fattura attiva collegata al SAL (fatture.sal_id)', async ({}, ti) => {
+    verifica(ti, ctx.fatturaAttiva, 'fattura attiva del test disponibile', 'passo 2.3 non riuscito')
+    const f = await q1(`SELECT sal_id FROM public.fatture WHERE id = $1`, [ctx.fatturaAttiva.id])
+    verifica(ti, f.sal_id === ctx.fatturaAttiva.sal, 'fattura collegata al SAL',
+      ctx.fatturaAttiva.haCampoSal ? 'il SAL scelto non viene salvato nella fattura' : 'il modulo "Nuova fattura attiva" non ha un campo SAL (formA.sal_id esiste ma non è mostrato né salvato)')
   })
 })

@@ -4,7 +4,7 @@
 
 ## PRIMA della correzione
 
-Data: 2026-11-01T06:53:27.833Z
+Data: 2026-11-01T09:38:38.164Z
 
 - Tabelle di azienda provate: **90** · con dati di B raggiungibili da A: **39**
   - lette: 39 · modificate: 39 · inserite come B: 38 · eliminate: 39
@@ -25,7 +25,7 @@ Data: 2026-11-01T06:53:27.833Z
 | `categorie_sb` | globale_invariata | — | — | — | — | L✓ M✗ I✗ E· |  |
 | `categorie_sc` | globale_invariata | — | — | — | — | L✓ M✗ I✗ E· |  |
 | `certificazioni_dam` | figlia | no | no | no | no | L✓ M✓ I✓ E✓ | 42501 new row violates row-level security policy for table "certificazioni_dam" |
-| `commessa_figure` | commessa | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | regola "auth_all_commessa_figure" USING true; regola "auth_all_cf" USING true |
+| `commessa_figure` | commessa | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | regola "auth_all_cf" USING true; regola "auth_all_commessa_figure" USING true |
 | `commessa_riserve` | commessa | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | regola "ris_all": basta il login |
 | `commessa_sospensioni` | commessa | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | regola "sos_all": basta il login |
 | `commesse` | azienda | no | no | no | no | L✓ M✓ I✓ E✓ | 42501 new row violates row-level security policy for table "commesse" |
@@ -33,10 +33,10 @@ Data: 2026-11-01T06:53:27.833Z
 | `computo_wbs_link` | figlia | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | RLS spenta |
 | `config_soglie_approvazione` | bloccata | — | — | — | — | L✗ M✗ I✗ E· |  |
 | `contratti` | commessa_o_azienda | no | no | no | no | L✓ M✓ I✓ E✓ | 42501 new row violates row-level security policy for table "contratti" |
-| `contratti_sub` | commessa_o_azienda | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | RLS spenta; regola "cs_auth": basta il login; regola "allow_all_cs" USING true |
+| `contratti_sub` | commessa_o_azienda | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | RLS spenta; regola "allow_all_cs" USING true; regola "cs_auth": basta il login |
 | `contratto_voci` | bloccata | no | no | no | no | L✗ M✗ I✗ E✗ | 42501 new row violates row-level security policy for table "contratto_voci" |
 | `costi_diretti` | commessa | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | RLS spenta |
-| `dam` | commessa_o_azienda | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | regola "dam_auth": basta il login; regola "allow_all_dam" USING true |
+| `dam` | commessa_o_azienda | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | regola "allow_all_dam" USING true; regola "dam_auth": basta il login |
 | `ddt` | commessa_o_azienda | no | no | no | no | L✓ M✓ I✓ E✓ | 42501 new row violates row-level security policy for table "ddt" |
 | `documenti_commessa` | commessa_o_azienda | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | RLS spenta |
 | `documenti_contratto_sub` | azienda | no | no | no | no | L✓ M✓ I✓ E✓ | 42501 new row violates row-level security policy for table "documenti_contratto_sub" |
@@ -66,14 +66,14 @@ Data: 2026-11-01T06:53:27.833Z
 | `preventivi` | commessa | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | RLS spenta |
 | `preventivi_fornitori` | commessa | no | no | no | no | L✓ M✓ I✓ E✓ | 42501 new row violates row-level security policy for table "preventivi_fornitori" |
 | `preventivo_voci` | figlia | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | RLS spenta |
-| `professionisti_fornitori` | azienda | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | regola "auth_write_professionisti" USING true; regola "auth_read_professionisti" USING true; regola "auth_all_pf" USING true |
+| `professionisti_fornitori` | azienda | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | regola "auth_all_pf" USING true; regola "auth_read_professionisti" USING true; regola "auth_write_professionisti" USING true |
 | `progettisti` | azienda | no | no | no | no | L✓ M✓ I✓ E✓ | 42501 new row violates row-level security policy for table "progettisti" |
 | `rapportini` | commessa_o_azienda | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | RLS spenta |
 | `rda` | commessa_o_azienda | no | no | no | no | L✓ M✓ I✓ E✓ | 42501 new row violates row-level security policy for table "rda" |
 | `rda_voci` | figlia | no | — | — | no | L✓ M· I· E✓ | nessuna colonna modificabile |
 | `rdo` | commessa_o_azienda | no | no | no | no | L✓ M✓ I✓ E✓ | 42501 new row violates row-level security policy for table "rdo" |
 | `rdo_fornitori` | figlia | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | RLS spenta |
-| `rdo_offerte` | bloccata | **sì** | **sì** | **sì** | **sì** | L✓⚠ M✓⚠ I✓⚠ E✓⚠ | regola "rdooff_all": basta il login; regola "allow_all_ro" USING true |
+| `rdo_offerte` | bloccata | **sì** | **sì** | **sì** | **sì** | L✓⚠ M✓⚠ I✓⚠ E✓⚠ | regola "allow_all_ro" USING true; regola "rdooff_all": basta il login |
 | `rdo_voci` | figlia | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | RLS spenta |
 | `registro_contabilita` | commessa_o_azienda | no | no | no | no | L✓ M✓ I✓ E✓ | 42501 new row violates row-level security policy for table "registro_contabilita" |
 | `richieste_offerta` | commessa | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | RLS spenta |
@@ -88,7 +88,7 @@ Data: 2026-11-01T06:53:27.833Z
 | `sals` | commessa | no | no | no | no | L✓ M✓ I✓ E✓ | 42501 new row violates row-level security policy for table "sals" |
 | `scadenzario` | commessa_o_azienda | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | RLS spenta |
 | `soggetto_referenti` | figlia | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | RLS spenta |
-| `spese_cantiere` | commessa | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | RLS spenta; regola "spese_auth": basta il login; regola "allow_all_sc" USING true |
+| `spese_cantiere` | commessa | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | RLS spenta; regola "allow_all_sc" USING true; regola "spese_auth": basta il login |
 | `tariffa_componenti` | figlia | no | no | no | no | L✓ M✓ I✓ E✓ | 42501 new row violates row-level security policy for table "tariffa_componenti" |
 | `tariffe` | commessa | **sì** | **sì** | **sì** | **sì** | L✓ M✓ I✓ E✓ | RLS spenta |
 | `task_pianificazione` | commessa_o_azienda | no | no | no | no | L✓ M✓ I✓ E✓ | 42501 new row violates row-level security policy for table "task_pianificazione" |
@@ -134,7 +134,7 @@ Legenda "A sulle proprie righe": ✓ riuscito · ✗ bloccato · · non provato 
 
 ## DOPO la correzione (migrazione 20261101_isolamento_aziende.sql)
 
-Data: 2026-11-01T06:57:11.731Z
+Data: 2026-11-01T09:42:17.071Z
 
 - Tabelle di azienda provate: **90** · con dati di B raggiungibili da A: **0**
   - lette: 0 · modificate: 0 · inserite come B: 0 · eliminate: 0
@@ -244,14 +244,14 @@ Data: 2026-11-01T06:57:11.731Z
 
 | Vista | Mostra dati di B ad A | Righe di B nel DB | A vede le proprie righe (viste/nel DB) | Opzioni |
 |---|---|---|---|---|
-| `v_wbs_budget` | no | 1 | 1/1 ✓ | security_invoker=true |
-| `v_scadenze_prossime` | — | — | — | security_invoker=true |
 | `v_commesse_kpi` | no | 1 | 1/1 ✓ | security_invoker=true |
 | `v_sal_delta` | no | 1 | 1/1 ✓ | security_invoker=true |
 | `v_sal_totale` | no | 1 | 1/1 ✓ | security_invoker=true |
 | `v_voce_avanzamento` | no | 1 | 1/1 ✓ | security_invoker=true |
 | `v_voci_importo` | no | 1 | 1/1 ✓ | security_invoker=true |
 | `v_voci_importo_3strati` | no | 3 | 815/815 ✓ | security_invoker=true |
+| `v_scadenze_prossime` | — | — | — | security_invoker=true |
+| `v_wbs_budget` | no | 1 | 1/1 ✓ | security_invoker=true |
 
 Legenda "A sulle proprie righe": ✓ riuscito · ✗ bloccato · · non provato · ⚠ diverso da quanto previsto per quel tipo di tabella.
 

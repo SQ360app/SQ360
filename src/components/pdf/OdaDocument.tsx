@@ -32,6 +32,7 @@ const TIPO_LBL: Record<string, string> = {
 }
 
 const STATO_LBL: Record<string, string> = {
+  bozza: 'Emesso (da firmare)', firmato: 'Firmato', in_esecuzione: 'In esecuzione', completato: 'Completato', contestato: 'Contestato',
   EMESSO: 'Emesso', CONFERMATO: 'Confermato', PARZ_EVASO: 'Parzialmente evaso',
   EVASO: 'Evaso', ANNULLATO: 'Annullato',
 }

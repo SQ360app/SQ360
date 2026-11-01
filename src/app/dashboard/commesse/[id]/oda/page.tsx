@@ -21,7 +21,11 @@ const TIPI_ODA = [
   { value: 'servizio',    label: 'Servizio/Consulenza', color: '#6b7280', bg: '#f3f4f6', ritenuta: 0 },
 ]
 
+// Valori ammessi dal DB (oda_stato_check): bozza, firmato, in_esecuzione, completato, contestato.
+// Le chiavi MAIUSCOLE restano solo per mostrare righe storiche e i pulsanti di cambio stato
+// (da riallineare in un passo successivo: oggi il DB li rifiuta).
 const STATI: Record<string, { label: string; color: string }> = {
+  bozza:      { label: 'Emesso (da firmare)', color: '#3b82f6' },
   EMESSO:     { label: 'Emesso',      color: '#3b82f6' },
   CONFERMATO: { label: 'Confermato',  color: '#6366f1' },
   PARZ_EVASO: { label: 'Parz. evaso', color: '#f59e0b' },
@@ -189,7 +193,8 @@ export default function ODAPage() {
       tipo, tipo_oda: tipo, oggetto: oggetto.trim(),
       fornitore_id: fornitoreId, importo_netto: importoNum, iva_pct: parseFloat(ivaPct),
       ritenuta_pct: parseFloat(ritenuta), condizioni_pagamento: condPag || null,
-      data_consegna_prevista: dataConsegna || null, note: note || null, stato: 'EMESSO',
+      // stato: valori ammessi da oda_stato_check → bozza, firmato, in_esecuzione, completato, contestato
+      data_consegna_prevista: dataConsegna || null, note: note || null, stato: 'bozza',
       rdo_id: rdoId || null, cig_riferimento: cigCommessa || null,
       dam_id: damId || null,
       richiede_sam: richiedeSam || false,
@@ -275,7 +280,7 @@ export default function ODAPage() {
       ritenuta_pct: o.ritenuta_pct, condizioni_pagamento: o.condizioni_pagamento,
       data_consegna_prevista: o.data_consegna_prevista, note: o.note,
       rdo_id: o.rdo_id, dam_id: o.dam_id, cig_riferimento: o.cig_riferimento,
-      wbs_ref: o.wbs_ref, stato: 'EMESSO',
+      wbs_ref: o.wbs_ref, stato: 'bozza',   // nuova revisione: ammessi da oda_stato_check bozza/firmato/in_esecuzione/completato/contestato
       revisione: (o.revisione || 0) + 1,
       doc_padre_id: o.id, is_vigente: true,
       motivo_rev: motivo || null,
